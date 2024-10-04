@@ -1578,7 +1578,7 @@ def generate_colors(n):
     return colors
 
 
-import plotly.graph_objects as go
+# import plotly.graph_objects as go
 import numpy as np
 
  
@@ -2728,116 +2728,53 @@ import logging
 
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 
+# Simulate memory using a file
+CHAT_HISTORY_FILE = "chat_history.json"
+CHAT_ID_TRACKER_FILE = "chat_id_tracker.json"  # File to track chat_id
 
-# Included Additional KPI's except for ROCE and Order Booking
-# @app.route('/analyze_stock', methods=['POST'])
-# def analyze_stock():
-#     try:
-#         ticker = request.json.get('ticker')
-        
-#         if not ticker:
-#             return jsonify({"error": "Ticker is required"}), 400
+# Helper to save chat history to a file
+def save_chat_history(chat_id, history):
+    if os.path.exists(CHAT_HISTORY_FILE):
+        with open(CHAT_HISTORY_FILE, 'r') as f:
+            chat_data = json.load(f)
+    else:
+        chat_data = {}
 
-#         query = request.json.get('query')
-#         if not query:
-#             query = "Generate Stock Analysis and give some predictions on its price "
-        
-#         # Step 1: Fetch Stock Data
-#         stock = yf.Ticker(ticker)
-#         data = {}
+    chat_data[chat_id] = history
 
-#         company_details = stock.info.get('longBusinessSummary', 'No details available')
-#         data['Company Details'] = company_details
-#         sector = stock.info.get('sector', 'No sector information available')
-#         data['Sector'] = sector
-#         prev_close = stock.info.get('previousClose', 'No previous close price available')
-#         data['Previous Closing Price'] = prev_close
-#         open_price = stock.info.get('open', 'No opening price available')
-#         data['Today Opening Price'] = open_price
+    with open(CHAT_HISTORY_FILE, 'w') as f:
+        json.dump(chat_data, f, indent=4)
 
-#         # Additional KPIs
-#         data['EPS'] = stock.info.get('trailingEps', 'No EPS information available')
-#         data['Book_Value'] = stock.info.get('bookValue', 'No book value available')
-#         data['ROE'] = stock.info.get('returnOnEquity', 'No ROE information available')
-#         data['ROCE'] = stock.info.get('returnOnAssets', 'No ROCE information available')  # ROCE is not available directly
+# Helper to load chat history from a file
+def load_chat_history(chat_id):
+    if os.path.exists(CHAT_HISTORY_FILE):
+        with open(CHAT_HISTORY_FILE, 'r') as f:
+            chat_data = json.load(f)
+        return chat_data.get(str(chat_id), [])
+    return []
 
-        # # Revenue Growth (CAGR) and Earnings Growth would need to be calculated based on historical data
-        # earnings_growth = stock.info.get('earningsGrowth', 'No earnings growth available')
-        # revenue_growth = stock.info.get('revenueGrowth', 'No revenue growth available')
+# Helper to track chat_id and increment it
+def get_next_chat_id():
+    if os.path.exists(CHAT_ID_TRACKER_FILE):
+        with open(CHAT_ID_TRACKER_FILE, 'r') as f:
+            chat_id_data = json.load(f)
+        chat_id = chat_id_data.get("chat_id", 1)
+    else:
+        chat_id = 1
 
-        # data['Earnings Growth'] = earnings_growth
-        # data['Revenue Growth'] = revenue_growth
+    chat_id_data = {"chat_id": chat_id + 1}
+    with open(CHAT_ID_TRACKER_FILE, 'w') as f:
+        json.dump(chat_id_data, f, indent=4)
 
-#         # Fetch historical financials to calculate CAGR or additional metrics if required
-#         financials = stock.financials
-
-#         # Process news related to stock
-#         news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
-#         news_response = requests.get(news_url)
-#         if news_response.status_code == 200:
-#             news_data = news_response.json()
-#             articles = news_data.get('articles', [])
-#             if articles:
-#                 top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
-#                 data['Top News'] = top_news
-#             else:
-#                 data['Top News'] = "No news articles found."
-#         else:
-#             data['Top News'] = "Failed to fetch news articles."
-    
-#     except Exception as e:
-#         logging.error(f"Error occurred while collecting stock data: {e}")
-#         return jsonify({'message': 'Internal Server Error in Stock Data Collection'}), 500
-
-#     # Save Financial Data to Excel
-#     try:
-#         file_path = os.path.join('data', f'{ticker}_financial_data.xlsx')
-#         with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-#             stock.financials.to_excel(writer, sheet_name='Income Statement')
-#             stock.balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
-#             stock.cashflow.to_excel(writer, sheet_name='Cashflow')
-    
-#     except Exception as e:
-#         logging.error(f"Error occurred while saving financial data: {e}")
-#         return jsonify({'message': 'Internal Server Error in saving data to Excel'}), 500
-
-#     # Perform stock analysis using AI model
-#     try:
-#         task = f"""You are a Stock Market Expert. Analyze the stock's performance and predict its price for the next week. 
-#                    Consider the following stock data: {data}"""
-#         model = genai.GenerativeModel('gemini-1.5-flash')
-#         response = model.generate_content(task)
-#         html_suggestions = markdown.markdown(response.text)
-        
-#     except Exception as e:
-#         logging.error(f"Error performing analysis with AI model: {e}")
-#         return jsonify({"error": "Failed to analyze stock data"}), 500
-
-#     # Return response
-#     return jsonify({
-#         "data": data,
-#         "analysis": markdown_to_text(html_suggestions),
-#         "news": data['Top News'],
-#         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-#     })
+    return chat_id
 
 
-
-# # Best version 
-@app.route('/analyze_stock', methods=['POST'])
-def analyze_stock():
+# # Fetch Stock Data :
+def get_stock_data(ticker):
     try:
-        ticker = request.json.get('ticker')
-        
-        if not ticker:
-            print("Ticker is required")
-            # return jsonify({"error": "Ticker is required"}), 400
-
-        query = request.json.get('query')
-        if not query:
-            query = "Generate Stock Analysis and give some predictions on its price "
-        # Step 1: Fetch Stock Data
+        # Step 1: Fetch Stock Data :
         stock = yf.Ticker(ticker)
+        
         data = {}
 
         company_details = stock.info.get('longBusinessSummary', 'No details available')
@@ -2924,21 +2861,175 @@ def analyze_stock():
         # Step 4: Perform Analysis
         avg_close = hist['Close'].mean()
         formatted_data = extract_excel_data(file_path)
-    
+        return data,formatted_data,avg_close
     except Exception as e:
         logging.info(f"Error occurred while performing analysis: {e}")
         print(f"Error occurred while performing analysis :\n{e}")
         return jsonify({'message': 'Internal Server Error in Stock Analysis'}), 500
 
-    try:
+
+
+# Helper function to extract a ticker from the query
+
+# # Best Code answers the queries properly :)
+def extract_ticker(query):
+    # Mapping of popular company names to tickers for demonstration (you can expand this)
+    companies_to_tickers = {
+        "apple": "AAPL",
+        "microsoft": "MSFT",
+        "amazon": "AMZN",
+        "tesla": "TSLA",
+        "google": "GOOGL",
+        "nvidia": "NVDA"
+    }
+
+    # Split the query into words
+    words = query.lower().split()
+    
+    # Check for known company names or tickers
+    for word in words:
+        if word in companies_to_tickers:
+            # word[0] = word[0].upper()
+            # word[1:] = word[1:].lower()
+            return companies_to_tickers[word] ,word.capitalize() #word.upper() #word 
+    
+    # Try to find a valid stock ticker by querying Yahoo Finance
+    for word in words:
+        if word:  # Ensure the word is not None or empty
+            try:
+                ticker = yf.Ticker(word.upper())
+                if ticker.info.get('regularMarketPrice') is not None:
+                    return ticker ,word.upper()  # Return the valid ticker
+            except Exception as e:
+                continue
+    
+    # Default fallback if no ticker is found
+    print("No valid ticker found in the query.")
+    return None,None
+
+
+def format_chat_history_for_llm(chat_history, new_query):
+    # Format chat history as a readable conversation for the model
+    conversation = ""
+    for entry in chat_history:
+        user_query = entry.get('user_query', '')
+        message = entry.get('message', '')
         
-        task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+        # Append user query and model's response to the conversation
+        conversation += f"User Query: {user_query}\nResponse: {message}\n\n"
+    
+    # Append the new query
+    conversation += f"User Query: {new_query}\n"
+    
+    return conversation
+
+@app.route('/analyze_stock', methods=['POST'])
+def analyze_stock():
+    try:
+        ticker = request.json.get('ticker')
+        company = request.json.get('company',None)
+        query = request.json.get('query')
+        chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
+        # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
+        
+        # Load chat history
+        chat_history = load_chat_history(chat_id)
+
+        # If no ticker provided in the request, try to extract it from the query
+        if not ticker and query:
+            # ticker = extract_ticker(query)
+            
+            ticker,company = extract_ticker(query)
+        
+        # If a valid ticker is found, fetch stock data
+        if ticker:
+            try:
+                data, formatted_data, avg_close = get_stock_data(ticker)
+                user_query = ticker  # Save the ticker as the user query
+            except Exception as e:
+                print("Error getting the stock data")
+                return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+        else:
+            # No valid ticker found, generate generic suggestions
+            print("No valid ticker found in the query, generating general stock suggestions.")
+            data = {}  # No specific stock data need to check for news
+            formatted_data = ""  # No financial data
+            avg_close = 0
+            user_query = query  # Save the original user query if no ticker is found
+
+        # If query is empty, set a default query for stock analysis
+        # if not query:
+        #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
+        
+        
+
+        
+         # Save the user's query (ticker or original query) to chat history
+        if user_query:
+            chat_history.append({"user_query": user_query, "message": query})
+        
+        # Detect if this is a follow-up query based on previous history
+        if chat_history:
+            print("This is a follow-up query. Checking previous chat history.")
+            # The logic here could vary; you might compare the current query with past responses or check patterns
+            query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
+
+        # Save the user's query (ticker or original query) to chat history
+        chat_history.append({"user_query": user_query, "message": query})
+        
+      
+            
+        # Format the chat history for the LLM
+        try :
+            formatted_history = format_chat_history_for_llm(chat_history, query)
+        except Exception as e:
+            logging.error(f"Error while formatting chat history for LLM: {e}")
+            return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
+        
+        
+    except Exception as e :
+        logging.error(f"Error while fetching stock data: {e}")
+        return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
+    
+    try:
+        if ticker:
+            # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+            #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+            #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+            #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+            #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+            #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
+            #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
+            #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
+            #             Do not answer any questions unrelated to the stocks."""
+                        
+            task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-                    Predict the stock price range for the next week and provide reasons for your prediction.
+                    Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+                    Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+                    Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
                     Advise whether to buy this stock now or not, with reasons for your advice."""
+        
 
-        query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data
-
+            query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
+        
+        else:
+            task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
+                        You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
+                        with any queries they might have.
+                        If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+                        If the user has asked a follow up question then provide them a good response by also considering their previous queries
+                        Do not answer any questions unrelated to the stocks."""
+            
+            query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
+            print(f"The formatted chat history passed to llm is : {formatted_history}")
+            print(f"The query passed to llm is : {query}")
+         # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+        #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+        #             Predict the stock price range for the next week and provide reasons for your prediction.
+        #             Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+        
         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(query)
@@ -2966,14 +3057,28 @@ def analyze_stock():
         print(f"Error extracting text from response : {e}")
         return jsonify({"error": "Failed to analyze stock data"}), 500
 
+    # Save the assistant's response to chat history
+    chat_history.append({"user_query": user_query, "message": format_suggestions})
+    save_chat_history(chat_id, chat_history)
+
+    # Increment chat_id for the next follow-up question
+    new_chat_id = get_next_chat_id()
+    
+    if data == {}:
+        data['Top_News'] = None
+        
+    data['Company'] = company if company else None
+      
     # Return all collected and analyzed data
     return jsonify({
+        # "Company": company,
         "data": data,
         "average_closing_price": f"${avg_close:.2f}",
         "analysis": format_suggestions,
         "news": data['Top_News'],
         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-    })
+    }) # "chat_history" : chat_history
+    # "new_chat_id" : new_chat_id
 
 def extract_excel_data(file_path):
     financial_data = ""
@@ -2983,143 +3088,6 @@ def extract_excel_data(file_path):
         financial_data += f"\n\nSheet: {sheet_name}\n"
         financial_data += df.to_string()
     return financial_data
-
-
-# @app.route('/fetch_stock_data', methods=['GET'])
-# @app.route('/fetch_stock_data', methods=['POST'])
-# def fetch_stock_data():
-#     ticker = request.args.get('ticker')
-#     if not ticker:
-#         return jsonify({"error": "Ticker is required"}), 400
-
-#     stock = yf.Ticker(ticker)
-#     data = {}
-
-#     company_details = stock.info.get('longBusinessSummary', 'No details available')
-#     data['Company Details'] = company_details
-#     sector = stock.info.get('sector', 'No sector information available')
-#     data['Sector'] = sector
-#     prev_close = stock.info.get('previousClose', 'No previous close price available')
-#     data['Previous Closing Price'] = prev_close
-#     open_price = stock.info.get('open', 'No opening price available')
-#     data['Today Opening Price'] = open_price
-
-#     hist = stock.history(period="5d")
-#     if not hist.empty and 'Close' in hist.columns:
-#         if hist.index[-1].date() == yf.download(ticker, period="1d").index[-1].date():
-#             close_price = hist['Close'].iloc[-1]
-#             data['Todays Closing Price'] = close_price
-#         else:
-#             data['Todays Closing Price'] = "Market is open, there is no closing price available yet."
-#     else:
-#         data['Todays Closing Price'] = "No historical data available for closing price."
-
-#     day_high = stock.info.get('dayHigh', 'No high price available')
-#     data['Today High Price'] = day_high
-#     day_low = stock.info.get('dayLow', 'No low price available')
-#     data['Today Low Price'] = day_low
-#     volume = stock.info.get('volume', 'No volume information available')
-#     data['Today Volume'] = volume
-#     dividends = stock.info.get('dividendRate', 'No dividend information available')
-#     data['Today Dividends'] = dividends
-#     splits = stock.info.get('lastSplitFactor', 'No stock split information available')
-#     data['Today Stock Splits'] = splits
-#     pe_ratio = stock.info.get('trailingPE', 'No P/E ratio available')
-#     data['P/E Ratio'] = pe_ratio
-#     market_cap = stock.info.get('marketCap', 'No market cap available')
-#     data['Market Cap'] = market_cap
-
-#     income_statement = stock.financials
-#     balance_sheet = stock.balance_sheet
-#     cashflow = stock.cashflow
-
-#     news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
-#     news_response = requests.get(news_url)
-#     if news_response.status_code == 200:
-#         news_data = news_response.json()
-#         articles = news_data.get('articles', [])
-#         if articles:
-#             top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
-#             data['Top News'] = top_news
-#         else:
-#             data['Top News'] = "No news articles found."
-#     else:
-#         data['Top News'] = "Failed to fetch news articles."
-
-#     graph_url = f"https://finance.yahoo.com/chart/{ticker}"
-#     data['graph_url'] = graph_url
-
-#     file_path = os.path.join('data', f'{ticker}_financial_data.xlsx')
-#     with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-#         income_statement.to_excel(writer, sheet_name='Income Statement')
-#         balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
-#         cashflow.to_excel(writer, sheet_name='Cashflow')
-
-#     data_list = list(data.items())
-#     data_str = str(data_list)
-
-#     return jsonify({
-#         "data": data,
-#         "file_path": file_path,
-#         "data_str": data_str
-#     })
-
-# # @app.route('/analyze_stock_data', methods=['GET'])
-# @app.route('/analyze_stock_data', methods=['POST'])
-# def analyze_stock_data():
-#     ticker = request.args.get('ticker')
-#     if not ticker:
-#         return jsonify({"error": "Ticker is required"}), 400
-
-#     query = "Give Stock Analysis :"
-#     query1 = request.args.get('query')
-#     print(query1)
-#     print(type(query1))
-#     if query1:
-#         query = query + query1
-#     hist, data_str, file_path = fetch_stock_data(ticker)
-#     avg_close = hist['Close'].mean()
-#     formatted_data = extract_excel_data(file_path)
-
-#     task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
-#                 Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-#                 Predict the stock price range for the next week and provide reasons for your prediction.
-#                 Advise whether to buy this stock now or not, with reasons for your advice."""
-
-#     query = task + "\nStock Data: " + data_str + "\nFinancial Data: " + formatted_data
-#     model = genai.GenerativeModel('gemini-1.5-flash')
-#     response = model.generate_content(query)
-    
-#     # Log the response object to understand its structure
-#     logging.info(f"Model response: {response['answer']}")
-    
-#     # Extract the text content from the response
-#     try:
-#         # response_text = response.text
-#         # format_response = markdown_to_text(response_text)
-#         htmlSuggestions = markdown.markdown(response['answer'])
-#         logging.info(f"Suggestions for stock: \n{response['answer']}")
-        
-#         formatSuggestions = markdown_to_text(response)
-        
-#     except Exception as e:
-#         logging.error(f"Error extracting text from response: {e}")
-#         return jsonify({"error": "Failed to analyze stock data"}), 500
-
-#     return jsonify({
-#         "average_closing_price": f"${avg_close:.2f}",
-#         "analysis": formatSuggestions
-#     })
-
-# def extract_excel_data(file_path):
-#     financial_data = ""
-#     xls = pd.ExcelFile(file_path)
-#     for sheet_name in xls.sheet_names:
-#         df = pd.read_excel(xls, sheet_name=sheet_name)
-#         financial_data += f"\n\nSheet: {sheet_name}\n"
-#         financial_data += df.to_string()
-#     return financial_data
-
 
 
 
@@ -3237,150 +3205,6 @@ def generate_investment_suggestions():
     except Exception as e:
         logging.info(f"Error in generating investment suggestions: {e}")
         return jsonify({'message': f'Internal Server Error in Generating responses : {e}'}), 500
-
-
-# #Current error code
-# @app.route('/generate-investment-suggestions', methods=['POST'])
-# def generate_investment_suggestions():
-#     try:
-#         try :
-#             assessment_file = request.files['assessmentFile']
-#             financial_file = request.files['financialFile']
-#             logging.info(" Requested files")
-#         except Exception as e:
-#             logging.info(" Requested files not passed")
-#             return jsonify({'message': f'Error occurred while retrieving files12: {e}'}), 400
-                   
-#         try :
-#             try:
-#                 responses = extract_responses_from_docx(assessment_file)
-#             except Exception as e:
-#                 logging.info(f"Failed to extract responses from assessment file: {e}")
-#                 return jsonify({'message': 'Failed to extract responses from assessment file.'}), 400
-            
-#             try:
-#                 financial_data = asyncio.run(process_document(financial_file))
-#                 print(financial_data)
-#                 print(f"The Financial Data is of type : {type(financial_data)}")
-#                 print(financial_file)
-#                 destination_folder = 'data'
-#                 file_path = save_file_to_folder(financial_file, destination_folder)
-#                 print(file_path)
-#             except Exception as e:
-#                 logging.info(f"Failed to process financial file: {e}")
-#                 return jsonify({'message': 'Failed to process financial file.'}), 400
-
-#             logging.info(f"Received Responses from the file {responses}")
-#         except Exception as e:
-#             logging.info("Failed to process files")
-#             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
-
-#         try:
-#             # Determine investment personality
-#             # monthly_investment= 10000
-#             # investment_period= 3
-#             # personality,monthly_investment,investment_period = asyncio.run(determine_investment_personality(responses))
-            
-#             personality= asyncio.run(determine_investment_personality(responses))
-            
-#             logging.info(f"\nPersonality of the user is : {personality}")
-#             print(f"\nPersonality of the user is : {personality}")
-#             print(f"Type of Investment Personality is : {type(personality)}")
-            
-#         except Exception as e:
-#             logging.info("Failed to determine personality")
-#             return jsonify({'message': f'Error occurred while determining personality: {e}'}), 400
-        
-#         try:
-#             # Generate investment suggestions based on personality and financial data
-#             clientName = "Emilly Watts"
-#             print(f"{type(personality)} \n {type(financial_data)} \n {type(financial_file)} \n {type(file_path)}")
-#             try:
-#                 suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,file_path)) #monthly_investment,investment_period))
-#             except Exception as e:
-#                 logging.info(f"Failed to generate investment suggestions for investor: {e}")
-#                 print(f"Failed to generate investment suggestions for investor: {e}")
-#                 return jsonify({'message': f'Failed to generate investment suggestions for investor. : {e}'}), 400
-            
-#             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,monthly_investment,investment_period))
-#             htmlSuggestions = markdown.markdown(suggestions)
-#             logging.info(f"\Suggestions for investor : \n{suggestions}")
-            
-#         except Exception as e:
-#             logging.info("Failed to generate suggestions")
-#             return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 400
-
-
-#         logging.info("Successfully generated")
-#         formatSuggestions = markdown_to_text(suggestions)
-#         data_extracted = extract_numerical_data(suggestions)
-        
-#         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-#                         [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-#         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-#                         [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
-
-#         # Normalize allocations
-#         min_allocations = normalize_allocations(min_allocations)
-#         max_allocations = normalize_allocations(max_allocations)
-
-#         # Update Bar Chart Data
-#         bar_chart_data = {
-#             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-#             'datasets': [{
-#                 'label': 'Min Allocation',
-#                 'data': min_allocations,
-#                 'backgroundColor': 'skyblue'
-#             },
-#             {
-#                 'label': 'Max Allocation',
-#                 'data': max_allocations,
-#                 'backgroundColor': 'lightgreen'
-#             }]
-#         }
-
-#         # Similar changes can be made for the Pie Chart Data:
-#         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-#         num_labels = len(all_labels)
-#         max_allocations_for_pie = normalize_allocations(
-#             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-#             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-#         )
-        
-#         # Generate colors based on the number of labels
-#         dynamic_colors = generate_colors(num_labels)
-
-#         # Update Pie Chart Data
-#         pie_chart_data = {
-#             'labels': all_labels,
-#             'datasets': [{
-#                 'label': 'Investment Allocation',
-#                 'data': max_allocations_for_pie,
-#                 'backgroundColor': dynamic_colors,
-#                 'hoverOffset': 4
-#             }]
-#         }
-        
-        
-#         # Prepare the data for the line chart with inflation adjustment
-#         initial_investment = 10000
-#         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
-#         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-#         print(f"\nThe combined chart data is : {combined_chart_data}")
-        
-#         return jsonify({
-#             "status": 200,
-#             "message": "Success",
-#             "investmentSuggestions": htmlSuggestions,
-#             "pieChartData": pie_chart_data,
-#             "barChartData": bar_chart_data,
-#             "compoundedChartData":combined_chart_data
-#         }), 200
-
-#     except Exception as e:
-#         logging.info(f"Error in generating investment suggestions: {e}")
-#         return jsonify({'message': 'Internal Server Error in Generating responses'}), 500
-
 
 
 

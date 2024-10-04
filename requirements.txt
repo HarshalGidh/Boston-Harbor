@@ -1,5 +1,5 @@
 python-dotenv
-aiogram
+langchain
 langchain-google-genai
 google-generativeai
 IPython
@@ -24,7 +24,6 @@ yfinance
 db-dtypes
 faiss-cpu
 langchain-community-faiss-cpu
-streamlit
 flask
 flask-cors
 markdown
