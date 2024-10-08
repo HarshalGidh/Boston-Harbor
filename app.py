@@ -1,4 +1,4 @@
-import streamlit as st
+# import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -54,6 +54,7 @@ import markdown
 
 #     return html
 
+
 def markdown_table_to_html(md_table):
     # Split the markdown table by lines
     lines = md_table.strip().split("\n")
@@ -81,6 +82,58 @@ def markdown_table_to_html(md_table):
     html_table += "  </tbody>\n</table>"
 
     return html_table
+
+def process_client_info_and_analysis(content):
+    # Identify and extract the client's financial info markdown table part
+    client_info_section_start = content.find("| Category | Value |")
+    client_info_section_end = content.find("</p>", client_info_section_start) + 4
+    
+    if client_info_section_start != -1 and client_info_section_end != -1:
+        # Extract markdown table
+        md_table = content[client_info_section_start:client_info_section_end]
+        # Convert only the markdown table portion into an HTML table
+        html_table = markdown_table_to_html(md_table)
+        # Replace the markdown table part with the generated HTML table
+        content = content[:client_info_section_start] + html_table + content[client_info_section_end:]
+    
+    # Return the rest of the content unchanged
+    return content
+
+def generate_final_html(content):
+    # Process the content to convert financial info to HTML table while leaving other sections untouched
+    html_content = process_client_info_and_analysis(content)
+    
+    # Any other HTML processing can be done here if needed
+    return html_content
+
+
+# def markdown_table_to_html(md_table):
+#     # Split the markdown table by lines
+#     lines = md_table.strip().split("\n")
+    
+#     # Extract headers and rows
+#     headers = lines[0].strip('|').split('|')
+#     rows = [line.strip('|').split('|') for line in lines[2:]]  # Skip the separator line
+
+#     # Start creating the HTML table
+#     html_table = "<table>\n"
+    
+#     # Add headers
+#     html_table += "  <thead>\n    <tr>\n"
+#     for header in headers:
+#         html_table += f"      <th>{header.strip()}</th>\n"
+#     html_table += "    </tr>\n  </thead>\n"
+    
+#     # Add rows
+#     html_table += "  <tbody>\n"
+#     for row in rows:
+#         html_table += "    <tr>\n"
+#         for col in row:
+#             html_table += f"      <td>{col.strip()}</td>\n"
+#         html_table += "    </tr>\n"
+#     html_table += "  </tbody>\n</table>"
+
+#     return html_table
 
 
 
@@ -1193,43 +1246,15 @@ async def validate_document_content(text, tables):
     return client_name, errors
 
 
-# RUN Button :
-# async def generate_investment_suggestions(investment_personality, context): # # GET Method for py , for front end its Post API
-    
-#     # retriever = asyncio.run(load_vector_db("uploaded_file"))
-
-#     retriever = await load_vector_db("uploaded_file")
-#     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
-
-#     chain = await make_retrieval_chain(retriever)
-
-#     # chain = asyncio.run(make_retrieval_chain(retriever))
-    
-#     if chain is not None:
-#         # summary = context
-#         # query = summary + "\n" + investment_personality
-#         query = str(investment_personality)
-#         response = chain.invoke({"input": query})
-#         format_response = markdown_to_text(response['answer'])
-#         return format_response
-#         # st.write(format_response)
-
-#         # handle_graph(response['answer'])
-
-#     else:
-#         st.error("Failed to create the retrieval chain. Please upload a valid document.")
-
-
-
-# Generate Infographics : Best Code so far:
 
 import re
 from collections import defaultdict
 import numpy as np
+# Updated for Line Chart :
+import re
+from collections import defaultdict
 
-
-
-def extract_numerical_data(response): # curr version but cant capture annual return 
+def extract_numerical_data(response):
     # Define patterns to match different sections and their respective allocations
     patterns = {
         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
@@ -1295,7 +1320,96 @@ def extract_numerical_data(response): # curr version but cant capture annual ret
             'max': max_growth_match.group(2)
         }
 
+    # Extract inflation-adjusted returns
+    inflation_adjusted_pattern = re.compile(r'Inflation Adjusted Returns:.*?Before Inflation:.*?3 Years: \$(\d+,\d+).*?5 Years: \$(\d+,\d+).*?10 Years: \$(\d+,\d+).*?After Inflation.*?3 Years: \$(\d+,\d+).*?5 Years: \$(\d+,\d+).*?10 Years: \$(\d+,\d+)', re.DOTALL)
+    inflation_adjusted_match = inflation_adjusted_pattern.search(response)
+
+    if inflation_adjusted_match:
+        data['Inflation Adjusted Returns'] = {
+            'Before Inflation': {
+                '3 Years': inflation_adjusted_match.group(1),
+                '5 Years': inflation_adjusted_match.group(2),
+                '10 Years': inflation_adjusted_match.group(3)
+            },
+            'After Inflation': {
+                '3 Years': inflation_adjusted_match.group(4),
+                '5 Years': inflation_adjusted_match.group(5),
+                '10 Years': inflation_adjusted_match.group(6)
+            }
+        }
+
+    print(f"DATA extracted from Responses : {data}")
     return data
+
+
+
+# def extract_numerical_data(response): # curr version but cant capture annual return 
+#     # Define patterns to match different sections and their respective allocations
+#     patterns = {
+#         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+#         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+#         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+#     }
+
+#     data = defaultdict(dict)
+
+#     for section, pattern in patterns.items():
+#         match = pattern.search(response)
+#         if match:
+#             investments_text = match.group(1)
+#             # Extract individual investment types and their allocations
+#             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+#             for investment_match in investment_pattern.findall(investments_text):
+#                 investment_type, min_allocation, max_allocation = investment_match
+#                 data[section][investment_type.strip()] = {
+#                     'min': min_allocation,
+#                     'max': max_allocation
+#                 }
+
+#     # Extract time horizon and expected returns
+#     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+#     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+#     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+#     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+#     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+
+#     time_horizon_match = time_horizon_pattern.search(response)
+#     min_return_match = min_return_pattern.search(response)
+#     max_return_match = max_return_pattern.search(response)
+#     min_growth_match = min_growth_pattern.search(response)
+#     max_growth_match = max_growth_pattern.search(response)
+
+#     if time_horizon_match:
+#         data['Time Horizon'] = {
+#             'min_years': time_horizon_match.group(1),
+#             'max_years': time_horizon_match.group(2)
+#         }
+
+#     if min_return_match:
+#         data['Expected Annual Return'] = {
+#             'min': min_return_match.group(1),
+#             'max': min_return_match.group(2)
+#         }
+
+#     if max_return_match:
+#         data['Expected Annual Return'] = {
+#             'min': max_return_match.group(1),
+#             'max': max_return_match.group(2)
+#         }
+
+#     if min_growth_match:
+#         data['Expected Growth in Dollars'] = {
+#             'min': min_growth_match.group(1),
+#             'max': min_growth_match.group(2)
+#         }
+
+#     if max_growth_match:
+#         data['Expected Growth in Dollars'] = {
+#             'min': max_growth_match.group(1),
+#             'max': max_growth_match.group(2)
+#         }
+
+#     return data
 
 def normalize_allocations(allocations):
     total = sum(allocations)
@@ -1303,9 +1417,10 @@ def normalize_allocations(allocations):
         return allocations
     return [round((allocation / total) * 100, 2) for allocation in allocations]
 
-
+# # Updated Line Chart 
 import datetime  # Import the datetime module to get the current year
-# uodated to have current year
+import datetime  # Import the datetime module to get the current year
+
 def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
     try:
         # Get the current year
@@ -1317,10 +1432,9 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
         if 'Expected Annual Return' not in data_extracted:
             print("'Expected Annual Return' missing in data_extracted")
-            data_extracted['Expected Annual Return']['min'] = 6
-            data_extracted['Expected Annual Return']['max'] = 8
-            min_return = 6
-            max_return = 8
+            data_extracted['Expected Annual Return'] = {'min': '8%', 'max': '20%'}
+            min_return = 8 #6
+            max_return = 20 #8
         else:
             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
@@ -1396,16 +1510,33 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
         print(f"Error occurred while preparing data for combined line chart: {e}")
         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
 
+    print(combined_chart_data)
     return combined_chart_data
 
 
-
+# import datetime  # Import the datetime module to get the current year
+# # uodated to have current year
 # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
 #     try:
-#         min_return = float(data_extracted['Expected Annual Return']['min'].strip('%'))
-#         max_return = float(data_extracted['Expected Annual Return']['max'].strip('%'))
-#         min_years = int(data_extracted['Time Horizon']['min_years'])
-#         max_years = int(data_extracted['Time Horizon']['max_years'])
+#         # Get the current year
+#         curr_year = datetime.datetime.now().year
+
+#         # Print data_extracted to debug the structure
+#         print("Data extracted:", data_extracted)
+
+#         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
+#         if 'Expected Annual Return' not in data_extracted:
+#             print("'Expected Annual Return' missing in data_extracted")
+#             data_extracted['Expected Annual Return']['min'] = 6
+#             data_extracted['Expected Annual Return']['max'] = 8
+#             min_return = 6
+#             max_return = 8
+#         else:
+#             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
+#             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
+
+#         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
+#         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
 
 #         def calculate_compounded_return(principal, rate, years):
 #             return principal * (1 + rate / 100) ** years
@@ -1413,13 +1544,15 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
 #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
 #             return nominal_return / (1 + inflation_rate / 100) ** years
 
-#         labels = list(range(1, max_years + 1))  # Years for the x-axis
+#         # Create labels for the next 10 years starting from the current year
+#         labels = list(range(curr_year, curr_year + max_years))
+
 #         min_compounded = []
 #         max_compounded = []
 #         min_inflation_adjusted = []
 #         max_inflation_adjusted = []
 
-#         for year in labels:
+#         for year in range(1, max_years + 1):
 #             # Calculate nominal compounded returns
 #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
 #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
@@ -1436,7 +1569,7 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
 
 #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
 #         combined_chart_data = {
-#             'labels': labels,
+#             'labels': labels,  # Current year and the next 10 years
 #             'datasets': [
 #                 {
 #                     'label': 'Minimum Compounded Return',
@@ -1466,10 +1599,16 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
 #                 }
 #             ]
 #         }
+#     except KeyError as e:
+#         print(f"KeyError occurred: {e}")
+#         return jsonify({'message': f'Key Error: {e}'}), 400
 #     except Exception as e:
 #         print(f"Error occurred while preparing data for combined line chart: {e}")
 #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
+
 #     return combined_chart_data
+
+
 
 
 
@@ -2671,7 +2810,7 @@ def personality_selected():
             "message": "Success",
             "investmentSuggestions": answer, #formatSuggestions,
             "pieChartData": pie_chart_data,
-            "barChartData": bar_chart_data,
+            "barChartData": None,#bar_chart_data,
             "compoundedChartData":combined_chart_data
         }), 200
                     
@@ -3143,19 +3282,20 @@ def generate_investment_suggestions():
         max_allocations = normalize_allocations(max_allocations)
 
         # Update Bar Chart Data
-        bar_chart_data = {
-            'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-            'datasets': [{
-                'label': 'Min Allocation',
-                'data': min_allocations,
-                'backgroundColor': 'skyblue'
-            },
-            {
-                'label': 'Max Allocation',
-                'data': max_allocations,
-                'backgroundColor': 'lightgreen'
-            }]
-        }
+        
+        # bar_chart_data = {
+        #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+        #     'datasets': [{
+        #         'label': 'Min Allocation',
+        #         'data': min_allocations,
+        #         'backgroundColor': 'skyblue'
+        #     },
+        #     {
+        #         'label': 'Max Allocation',
+        #         'data': max_allocations,
+        #         'backgroundColor': 'lightgreen'
+        #     }]
+        # }
 
         # Similar changes can be made for the Pie Chart Data:
         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
@@ -3189,7 +3329,7 @@ def generate_investment_suggestions():
             "message": "Success",
             "investmentSuggestions":  answer, #formatSuggestions,
             "pieChartData": pie_chart_data,
-            "barChartData": bar_chart_data,
+            "barChartData": None, #bar_chart_data,
             "compoundedChartData": combined_chart_data
         }), 200
         
