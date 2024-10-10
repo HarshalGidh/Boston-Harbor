@@ -3217,16 +3217,21 @@ def extract_excel_data(file_path):
 
 @app.route('/current_stock_price', methods=['POST'])
 def current_stock_price():
-    ticker = request.json.get('ticker')
-    stock = yf.Ticker(ticker)
-    # Fetch the current stock price using the 'regularMarketPrice' field
-    current_price = stock.info.get('regularMarketPrice')
+    try:
+        ticker = request.json.get('ticker')
+        stock = yf.Ticker(ticker)
+        # Fetch the current stock price using the 'regularMarketPrice' field
+        current_price = stock.info.get('regularMarketPrice')
+        
+        if not current_price:
+            print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+            current_price = stock.history(period='1d')['Close'].iloc[-1]
+        
+        return jsonify({"current_price":current_price})
     
-    if not current_price:
-        print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
-        current_price = stock.history(period='1d')['Close'].iloc[-1]
-    
-    return current_price
+    except Exception as e:
+        print(f"Failed to retrieve the current price for {ticker} : {e}")
+        return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
 
 @app.route('/order_placed', methods=['POST'])
