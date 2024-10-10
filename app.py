@@ -3214,15 +3214,76 @@ def extract_excel_data(file_path):
     return financial_data
 
 #########------------------- Portfolio Analysis --------------------------------################
+
+@app.route('/current_stock_price', methods=['POST'])
+def current_stock_price():
+    ticker = request.json.get('ticker')
+    stock = yf.Ticker(ticker)
+    # Fetch the current stock price using the 'regularMarketPrice' field
+    current_price = stock.info.get('regularMarketPrice')
+    
+    if not current_price:
+        print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+        current_price = stock.history(period='1d')['Close'].iloc[-1]
+    
+    return current_price
+
+
+@app.route('/order_placed', methods=['POST'])
+def order_placed():
+    try:
+        # Extract form data from frontend
+        order_data = request.json.get('order_data')
+        client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
+        client_id = request.json.get('clientId','RS4603')  # Get client ID
+        funds = request.json.get('funds')  
+        
+        # Assign default values if necessary
+        if not order_data.get('date'):
+            order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        units = order_data.get('units')
+        unit_price = order_data.get('price')/units
+        buy_or_sell = order_data.get('buy_or_sell')
+
+        # Create a dataframe with the relevant data
+        data = {
+            "Market": [order_data.get('market')],
+            "Asset_Class": [order_data.get('assetClass')],
+            "Date": [order_data.get('date')],
+            "buy_or_sell": [order_data.get('buy_or_sell')],
+            "Name": [order_data.get('name')],
+            "Units": [order_data.get('units')],
+            "unit_price": [unit_price],
+            "price": [order_data.get('price')],
+        }
+        df = pd.DataFrame(data)
+        print(f"Order Data : {df}")
+        
+        # Save the table as an Excel file with client name and ID
+        file_path = f"data/{client_name}_{client_id}_order_data.xlsx"
+        df.to_excel(file_path, index=False)
+
+        # Convert DataFrame to HTML table
+        table_html = df.to_html(classes='table table-striped', index=False)
+
+        # Send the Excel file and return the HTML table
+        return jsonify({"table_html": table_html, "file_path": file_path})
+
+    except Exception as e:
+        print("Error occured : {e}")
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
 @app.route('/portfolio', methods=['POST'])
 def portfolio():
    
     try:
         # Extract form data from frontend
-        portfolio_data = request.json.get('formmmmdata')
+        portfolio_data = request.json.get('portfolio_data')
         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
         client_id = request.json.get('clientId','RS4603')  # Get client ID
-        current_price = request.json.get('currentPrice')  # Current stock price from frontend
+        funds = request.json.get('funds')  
         
         # Assign default values if necessary
         if not portfolio_data.get('date'):
