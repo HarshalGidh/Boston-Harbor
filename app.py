@@ -3234,10 +3234,17 @@ def current_stock_price():
         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
 
+# Global variable to store transaction data between API calls
+transaction_data = pd.DataFrame()
+
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
+    global transaction_data  # Make sure we're modifying the global transaction_data
     try:
         # Extract form data from frontend
+        # Extract Funds from Financial Form and also add funds over here whicis passed separately (loan_term search kar )
+        
+        # investmentAmount = request.json.get('investmentAmount')
         order_data = request.json.get('order_data')
         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
         client_id = request.json.get('clientId','RS4603')  # Get client ID
@@ -3254,30 +3261,50 @@ def order_placed():
         # Create a dataframe with the relevant data
         data = {
             "Market": [order_data.get('market')],
-            "Asset_Class": [order_data.get('assetClass')],
+            "AssetClass": [order_data.get('assetClass')],
             "Date": [order_data.get('date')],
-            "buy_or_sell": [order_data.get('buy_or_sell')],
+            "Action": [order_data.get('buy_or_sell')],
             "Name": [order_data.get('name')],
             "Units": [order_data.get('units')],
-            "unit_price": [unit_price],
-            "price": [order_data.get('price')],
+            "Unit_Price": [unit_price],
+            "TransactionAmount": [order_data.get('transactionAmount')],
         }
-        df = pd.DataFrame(data)
-        print(f"Order Data : {df}")
+        new_transaction = pd.DataFrame(data)
         
-        # Save the table as an Excel file with client name and ID
-        file_path = f"data/{client_name}_{client_id}_order_data.xlsx"
-        df.to_excel(file_path, index=False)
+        # Append the new transaction to the global transaction_data
+        transaction_data = pd.concat([transaction_data, new_transaction], ignore_index=True)
+        print(f"Order Data: {new_transaction}")
 
-        # Convert DataFrame to HTML table
-        table_html = df.to_html(classes='table table-striped', index=False)
+        return jsonify({"message": "Order placed successfully", "status": 200})
+    
+        
+    
+        # # Save the table as an Excel file with client name and ID
+        # file_path = f"data/{client_name}_{client_id}_order_data.xlsx"
+        # df.to_excel(file_path, index=False)
 
-        # Send the Excel file and return the HTML table
-        return jsonify({"table_html": table_html, "file_path": file_path})
+        # # Convert DataFrame to HTML table
+        # table_html = df.to_html(classes='table table-striped', index=False)
+
+        # # Send the Excel file and return the HTML table
+        # return jsonify({"table_html": table_html, "file_path": file_path})
 
     except Exception as e:
-        print("Error occured : {e}")
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+        print(f"Error occured while placing order : {e}")
+        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+@app.route('/show_order_list', methods=['POST'])
+def show_order_list():
+    global transaction_data  # Access the global transaction_data
+
+    try:
+        # Convert the transaction_data DataFrame to a JSON object and return it
+        transactions_json = transaction_data.to_dict(orient='records')
+        return jsonify({"transaction_data": transactions_json, "status": 200})
+
+    except Exception as e:
+        print(f"Error occurred while passing the order transaction data: {e}")
+        return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
 
 @app.route('/portfolio', methods=['POST'])
