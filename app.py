@@ -3255,7 +3255,7 @@ def order_placed():
             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         units = order_data.get('units')
-        unit_price = order_data.get('price')/units
+        # unit_price = order_data.get('price')/units
         buy_or_sell = order_data.get('buy_or_sell')
 
         # Create a dataframe with the relevant data
@@ -3266,7 +3266,7 @@ def order_placed():
             "Action": [order_data.get('buy_or_sell')],
             "Name": [order_data.get('name')],
             "Units": [order_data.get('units')],
-            "Unit_Price": [unit_price],
+            "Unit_Price": [order_data.get('unit_price')],
             "TransactionAmount": [order_data.get('transactionAmount')],
         }
         new_transaction = pd.DataFrame(data)
