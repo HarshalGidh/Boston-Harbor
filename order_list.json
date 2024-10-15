@@ -1,0 +1,24 @@
+{
+    "RS4603": [
+        {
+            "Market": "Dow Jones",
+            "AssetClass": "Dow Jones",
+            "Date": "2024-10-15",
+            "Action": "buy",
+            "Name": "NVDA",
+            "Units": 2,
+            "Unit_Price": 138.07000732421875,
+            "TransactionAmount": 276.1400146484375
+        },
+        {
+            "Market": "Dow Jones",
+            "AssetClass": "Dow Jones",
+            "Date": "2024-10-15",
+            "Action": "buy",
+            "Name": "TSLA",
+            "Units": 5,
+            "Unit_Price": 219.16000366210938,
+            "TransactionAmount": 1095.8000183105469
+        }
+    ]
+}

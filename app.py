@@ -3233,8 +3233,86 @@ def current_stock_price():
         print(f"Failed to retrieve the current price for {ticker} : {e}")
         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
-# Global dictionary to store transaction data by client_id
-client_transactions = {}
+# # Global dictionary to store transaction data by client_id
+# client_transactions = {}
+
+# @app.route('/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract form data from frontend
+#         order_data = request.json.get('order_data')
+#         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
+#         funds = request.json.get('funds')  # Example extra data if needed
+        
+#         # Assign default values if necessary
+#         if not order_data.get('date'):
+#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         units = order_data.get('units')
+#         # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
+#         buy_or_sell = order_data.get('buy_or_sell')
+
+#         # Create a dataframe with the relevant data
+#         data = {
+#             "Market": [order_data.get('market')],
+#             "AssetClass": [order_data.get('assetClass')],
+#             "Date": [order_data.get('date')],
+#             "Action": [order_data.get('buy_or_sell')],
+#             "Name": [order_data.get('name')],
+#             "Units": [order_data.get('units')],
+#             "Unit_Price": [order_data.get('unit_price')],
+#             "TransactionAmount": [order_data.get('transactionAmount')],
+#         }
+#         new_transaction = pd.DataFrame(data)
+        
+#         # If the client_id exists in our global dictionary, append the new transaction
+#         if client_id in client_transactions:
+#             client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
+#         else:
+#             # Create a new entry for the client_id if it doesn't exist
+#             client_transactions[client_id] = new_transaction
+        
+#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+
+#         return jsonify({"message": "Order placed successfully", "status": 200})
+
+#     except Exception as e:
+#         print(f"Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+# @app.route('/show_order_list', methods=['POST'])
+# def show_order_list():
+#     try:
+#         # Get client_id from the request
+#         client_id = request.json.get('clientId')
+        
+#         # If client_id is not provided or not found in the stored transactions
+#         if not client_id or client_id not in client_transactions:
+#             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+
+#         # Retrieve the transactions for the given client_id
+#         transactions_df = client_transactions[client_id]
+        
+#         # Convert the DataFrame to a JSON object and return it
+#         transactions_json = transactions_df.to_dict(orient='records')
+#         return jsonify({"transaction_data": transactions_json, "status": 200})
+
+#     except Exception as e:
+#         print(f"Error occurred while retrieving the order list: {e}")
+#         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
+
+
+
+# Path to the JSON file to store transaction data
+order_list_file = 'order_list.json'
+
+# Load existing transaction data from the JSON file (if it exists)
+if os.path.exists(order_list_file):
+    with open(order_list_file, 'r') as f:
+        client_transactions = json.load(f)
+else:
+    client_transactions = {}
 
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
@@ -3250,29 +3328,32 @@ def order_placed():
             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         units = order_data.get('units')
-        # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
         buy_or_sell = order_data.get('buy_or_sell')
 
-        # Create a dataframe with the relevant data
-        data = {
-            "Market": [order_data.get('market')],
-            "AssetClass": [order_data.get('assetClass')],
-            "Date": [order_data.get('date')],
-            "Action": [order_data.get('buy_or_sell')],
-            "Name": [order_data.get('name')],
-            "Units": [order_data.get('units')],
-            "Unit_Price": [order_data.get('unit_price')],
-            "TransactionAmount": [order_data.get('transactionAmount')],
+        # Create a dictionary with the relevant data
+        new_transaction = {
+            "Market": order_data.get('market'),
+            "AssetClass": order_data.get('assetClass'),
+            "Date": order_data.get('date'),
+            "Action": order_data.get('buy_or_sell'),
+            "Name": order_data.get('name'),
+            "Symbol": order_data.get('symbol'),
+            "Units": order_data.get('units'),
+            "UnitPrice": order_data.get('unit_price'),
+            "TransactionAmount": order_data.get('transactionAmount'),
         }
-        new_transaction = pd.DataFrame(data)
-        
-        # If the client_id exists in our global dictionary, append the new transaction
+
+        # If the client_id exists in the JSON file, append the new transaction
         if client_id in client_transactions:
-            client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
+            client_transactions[client_id].append(new_transaction)
         else:
             # Create a new entry for the client_id if it doesn't exist
-            client_transactions[client_id] = new_transaction
+            client_transactions[client_id] = [new_transaction]
         
+        # Save the updated transactions back to the JSON file
+        with open(order_list_file, 'w') as f:
+            json.dump(client_transactions, f, indent=4)
+
         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
 
         return jsonify({"message": "Order placed successfully", "status": 200})
@@ -3292,76 +3373,14 @@ def show_order_list():
             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
 
         # Retrieve the transactions for the given client_id
-        transactions_df = client_transactions[client_id]
-        
-        # Convert the DataFrame to a JSON object and return it
-        transactions_json = transactions_df.to_dict(orient='records')
-        return jsonify({"transaction_data": transactions_json, "status": 200})
+        transactions_list = client_transactions[client_id]
+        print(transactions_list)
+        return jsonify({"transaction_data": transactions_list, "status": 200})
 
     except Exception as e:
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
-
-# # Global variable to store transaction data between API calls
-# transaction_data = pd.DataFrame()
-
-# @app.route('/order_placed', methods=['POST'])
-# def order_placed():
-#     global transaction_data  # Make sure we're modifying the global transaction_data
-#     try:
-#         # Extract form data from frontend
-#         # Extract Funds from Financial Form and also add funds over here whicis passed separately (loan_term search kar )
-        
-#         # investmentAmount = request.json.get('investmentAmount')
-#         order_data = request.json.get('order_data')
-#         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
-#         client_id = request.json.get('clientId','RS4603')  # Get client ID
-#         funds = request.json.get('funds')  
-        
-#         # Assign default values if necessary
-#         if not order_data.get('date'):
-#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-#         units = order_data.get('units')
-#         # unit_price = order_data.get('price')/units
-#         buy_or_sell = order_data.get('buy_or_sell')
-
-#         # Create a dataframe with the relevant data
-#         data = {
-#             "Market": [order_data.get('market')],
-#             "AssetClass": [order_data.get('assetClass')],
-#             "Date": [order_data.get('date')],
-#             "Action": [order_data.get('buy_or_sell')],
-#             "Name": [order_data.get('name')],
-#             "Units": [order_data.get('units')],
-#             "Unit_Price": [order_data.get('unit_price')],
-#             "TransactionAmount": [order_data.get('transactionAmount')],
-#         }
-#         new_transaction = pd.DataFrame(data)
-        
-#         # Append the new transaction to the global transaction_data
-#         transaction_data = pd.concat([transaction_data, new_transaction], ignore_index=True)
-#         print(f"Order Data: {new_transaction}")
-
-#         return jsonify({"message": "Order placed successfully", "status": 200})
-
-#     except Exception as e:
-#         print(f"Error occured while placing order : {e}")
-#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
-
-# @app.route('/show_order_list', methods=['POST'])
-# def show_order_list():
-#     global transaction_data  # Access the global transaction_data
-
-#     try:
-#         # Convert the transaction_data DataFrame to a JSON object and return it
-#         transactions_json = transaction_data.to_dict(orient='records')
-#         return jsonify({"transaction_data": transactions_json, "status": 200})
-
-#     except Exception as e:
-#         print(f"Error occurred while passing the order transaction data: {e}")
-#         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
 
 @app.route('/portfolio', methods=['POST'])
