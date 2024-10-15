@@ -1,24 +1,37 @@
 {
     "RS4603": [
         {
-            "Market": "Dow Jones",
-            "AssetClass": "Dow Jones",
-            "Date": "2024-10-15",
+            "Market": "NASDAQ",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 12:42:40",
             "Action": "buy",
-            "Name": "NVDA",
+            "Name": "Tesla",
+            "Symbol": "TSLA",
             "Units": 2,
-            "Unit_Price": 138.07000732421875,
-            "TransactionAmount": 276.1400146484375
+            "UnitPrice": 219.16000366210938,
+            "TransactionAmount": 438.32000732421875
         },
         {
-            "Market": "Dow Jones",
-            "AssetClass": "Dow Jones",
-            "Date": "2024-10-15",
+            "Market": "NASDAQ",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 12:45:13",
             "Action": "buy",
-            "Name": "TSLA",
-            "Units": 5,
-            "Unit_Price": 219.16000366210938,
-            "TransactionAmount": 1095.8000183105469
+            "Name": "Tesla",
+            "Symbol": "TSLA",
+            "Units": 2,
+            "UnitPrice": 219.16000366210938,
+            "TransactionAmount": 438.32000732421875
+        },
+        {
+            "Market": "NASDAQ",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 12:55:36",
+            "Action": "buy",
+            "Name": "NVIDIA Corporation",
+            "Symbol": "NVDA",
+            "Units": 2,
+            "UnitPrice": 138.07000732421875,
+            "TransactionAmount": 276.1400146484375
         }
     ]
 }
