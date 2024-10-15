@@ -3264,17 +3264,6 @@ def dividend_yield():
 
 
 
-
-# # Path to the JSON file to store transaction data
-# order_list_file = 'order_list.json'
-
-# # Load existing transaction data from the JSON file (if it exists)
-# if os.path.exists(order_list_file):
-#     with open(order_list_file, 'r') as f:
-#         client_transactions = json.load(f)
-# else:
-#     client_transactions = {}
-
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
     try:
