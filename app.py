@@ -3237,7 +3237,7 @@ def current_stock_price():
 @app.route('/dividend_yield', methods=['POST'])
 def dividend_yield():
     
-    ticker_name = request.json.get('symbol')
+    ticker_name = request.json.get('ticker')
     # Create a Ticker object using yfinance
     stock = yf.Ticker(ticker_name)
     
@@ -3259,9 +3259,9 @@ def dividend_yield():
         else:
             print(f"{ticker_name} may not be a REIT or a commercial real estate company.")
         
+        return jsonify({'dividend_yield_percent': float(dividend_yield_percent) , "status": 200})
     except Exception as e:
         print(f"Error occurred while fetching data for {ticker_name}: {e}")
-
 
 
 @app.route('/order_placed', methods=['POST'])
@@ -3282,45 +3282,143 @@ def order_placed():
                 client_transactions = json.load(f)
         else:
             client_transactions = {}
-            
-        # Assign default values if necessary
-        if not order_data.get('date'):
-            order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        units = order_data.get('units')
-        buy_or_sell = order_data.get('buy_or_sell')
-
-        # Create a dictionary with the relevant data
-        new_transaction = {
-            "Market": order_data.get('market'),
-            "AssetClass": order_data.get('assetClass'),
-            "Date": order_data.get('date'),
-            "Action": order_data.get('buy_or_sell'),
-            "Name": order_data.get('name'),
-            "Symbol": order_data.get('symbol'),
-            "Units": order_data.get('units'),
-            "UnitPrice": order_data.get('unit_price'),
-            "TransactionAmount": order_data.get('transactionAmount'),
-        }
-
-        # If the client_id exists in the JSON file, append the new transaction
-        if client_id in client_transactions:
-            client_transactions[client_id].append(new_transaction)
-        else:
-            # Create a new entry for the client_id if it doesn't exist
-            client_transactions[client_id] = [new_transaction]
         
-        # Save the updated transactions back to the JSON file
-        with open(order_list_file, 'w') as f:
-            json.dump(client_transactions, f, indent=4)
+        assetClass = order_data.get('assetClass')
+        
+        if assetClass == 'Real Estate':
+            ownership = order_data.get('ownership')
+            if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
+                investment_amount = order_data.get('investment_amount')
+                dividend_yield = order_data.get('dividend_yield')
+                # estmated_annual_income = investment_amount * dividend_yield
+                # estmated_annual_yield = need current value to process this
+                # Create a dictionary with the relevant data
+                new_transaction = {
+                    "AssetClass": order_data.get('assetClass'),
+                    "ownership": order_data.get('ownership'),
+                    "Date": order_data.get('date'),
+                    "Name": order_data.get('name'),
+                    "InvestmentAmount": order_data.get('InvestmentAmount'),
+                    "DividendYield": order_data.get('dividend_yield'),
+                    # "EstimatedAnnualIncome" : estmated_annual_income
+                }
 
-        print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+                # If the client_id exists in the JSON file, append the new transaction
+                if client_id in client_transactions:
+                    client_transactions[client_id].append(new_transaction)
+                else:
+                    # Create a new entry for the client_id if it doesn't exist
+                    client_transactions[client_id] = [new_transaction]
+                
+                # Save the updated transactions back to the JSON file
+                with open(order_list_file, 'w') as f:
+                    json.dump(client_transactions, f, indent=4)
 
-        return jsonify({"message": "Order placed successfully", "status": 200})
+                print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+                
+            elif ownership == 'Direct':
+                pass
+            print(f"Order Data for {client_name} placed successfully for Real Estate Asset Class")
+            return jsonify({"message": "Order placed successfully", "status": 200})
+        else :
+            # Assign default values if necessary
+            if not order_data.get('date'):
+                order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            units = order_data.get('units')
+            buy_or_sell = order_data.get('buy_or_sell')
+
+            # Create a dictionary with the relevant data
+            new_transaction = {
+                "Market": order_data.get('market'),
+                "AssetClass": order_data.get('assetClass'),
+                "Date": order_data.get('date'),
+                "Action": order_data.get('buy_or_sell'),
+                "Name": order_data.get('name'),
+                "Symbol": order_data.get('symbol'),
+                "Units": order_data.get('units'),
+                "UnitPrice": order_data.get('unit_price'),
+                "TransactionAmount": order_data.get('transactionAmount'),
+            }
+
+            # If the client_id exists in the JSON file, append the new transaction
+            if client_id in client_transactions:
+                client_transactions[client_id].append(new_transaction)
+            else:
+                # Create a new entry for the client_id if it doesn't exist
+                client_transactions[client_id] = [new_transaction]
+            
+            # Save the updated transactions back to the JSON file
+            with open(order_list_file, 'w') as f:
+                json.dump(client_transactions, f, indent=4)
+
+            print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+
+            return jsonify({"message": "Order placed successfully", "status": 200})
 
     except Exception as e:
         print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+# Og code working fine without Real Estate :
+# @app.route('/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract form data from frontend
+#         order_data = request.json.get('order_data')
+#         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
+#         funds = request.json.get('funds')  # Example extra data if needed
+        
+#         # Path to the JSON file to store transaction data
+#         order_list_file = 'order_list.json'
+
+#         # Load existing transaction data from the JSON file (if it exists)
+#         if os.path.exists(order_list_file):
+#             with open(order_list_file, 'r') as f:
+#                 client_transactions = json.load(f)
+#         else:
+#             client_transactions = {}
+        
+        
+#         # Assign default values if necessary
+#         if not order_data.get('date'):
+#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         units = order_data.get('units')
+#         buy_or_sell = order_data.get('buy_or_sell')
+
+#         # Create a dictionary with the relevant data
+#         new_transaction = {
+#             "Market": order_data.get('market'),
+#             "AssetClass": order_data.get('assetClass'),
+#             "Date": order_data.get('date'),
+#             "Action": order_data.get('buy_or_sell'),
+#             "Name": order_data.get('name'),
+#             "Symbol": order_data.get('symbol'),
+#             "Units": order_data.get('units'),
+#             "UnitPrice": order_data.get('unit_price'),
+#             "TransactionAmount": order_data.get('transactionAmount'),
+#         }
+
+#         # If the client_id exists in the JSON file, append the new transaction
+#         if client_id in client_transactions:
+#             client_transactions[client_id].append(new_transaction)
+#         else:
+#             # Create a new entry for the client_id if it doesn't exist
+#             client_transactions[client_id] = [new_transaction]
+        
+#         # Save the updated transactions back to the JSON file
+#         with open(order_list_file, 'w') as f:
+#             json.dump(client_transactions, f, indent=4)
+
+#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+
+#         return jsonify({"message": "Order placed successfully", "status": 200})
+
+#     except Exception as e:
+#         print(f"Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 @app.route('/show_order_list', methods=['POST'])
 def show_order_list():
@@ -3359,9 +3457,76 @@ def show_order_list():
 
 
 
+@app.route('/save_portfolio', methods=['POST'])
+def save_portfolio():
+    try:
+        # Read the transactions from order_list.json
+        with open('order_list.json', 'r') as f:
+            order_list = json.load(f)
+
+        # Initialize an array to store the portfolio data
+        portfolio_data = []
+
+        # Iterate over all transactions in order_list
+        for order in order_list:
+            client_id = order.get('client_id', 'Unknown')
+            asset_class = order.get('assetClass', 'N/A')
+            name = order.get('name', 'N/A')
+            market = order.get('market', 'N/A')
+            units = order.get('units', 0)
+            bought_price = order.get('pricePerUnit', 0)
+            transaction_type = order.get('transactionType', 'N/A')
+            transaction_amount = order.get('transactionAmount', 0)
+            date = order.get('date', 'N/A')
+
+            # Fetch the current stock price (or use the one provided)
+            current_price = order.get('currentPrice', bought_price)  # Default to bought price if not provided
+            diff_price = current_price - bought_price
+            percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
+
+            # Calculate daily price change and value change if available
+            daily_price_change = order.get('dailyPriceChange', 0)
+            daily_value_change = daily_price_change * units
+
+            # Calculate investment gain/loss and other financial metrics
+            investment_gain_loss = (current_price - bought_price) * units
+            estimated_annual_income = order.get('estimatedAnnualIncome', 0)
+            estimated_yield = (estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
+
+            # Append the transaction details to the portfolio_data array
+            portfolio_data.append({
+                "Client ID": client_id,
+                "Asset Class": asset_class,
+                "Name": name,
+                "Market": market,
+                "Units": units,
+                "Price Per Unit (Bought)": bought_price,
+                "Current Price": current_price,
+                "Transaction Type": transaction_type,
+                "Transaction Amount": transaction_amount,
+                "Difference in Price": diff_price,
+                "Percentage Difference": f"{percentage_diff:.2f}%",
+                "Daily Price Change": daily_price_change,
+                "Daily Value Change": daily_value_change,
+                "Investment Gain/Loss": investment_gain_loss,
+                "Estimated Annual Income": estimated_annual_income,
+                "Estimated Yield": f"{estimated_yield:.2f}%",
+                "Time of Purchase": date
+            })
+
+        # Save the portfolio data as a JSON file
+        portfolio_file_path = 'portfolio.json'
+        with open(portfolio_file_path, 'w') as portfolio_file:
+            json.dump(portfolio_data, portfolio_file, indent=4)
+
+        return jsonify({"message": "Portfolio saved successfully", "file_path": portfolio_file_path}), 200
+
+    except Exception as e:
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
 @app.route('/portfolio', methods=['POST'])
 def portfolio():
-   
     try:
         # Extract form data from frontend
         portfolio_data = request.json.get('portfolio_data')

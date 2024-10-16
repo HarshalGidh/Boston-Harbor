@@ -32,6 +32,39 @@
             "Units": 2,
             "UnitPrice": 138.07000732421875,
             "TransactionAmount": 276.1400146484375
+        },
+        {
+            "Market": "NASDAQ",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 16:46:48",
+            "Action": "buy",
+            "Name": "Tesla",
+            "Symbol": "TSLA",
+            "Units": 2,
+            "UnitPrice": 219.16000366210938,
+            "TransactionAmount": 438.32000732421875
+        },
+        {
+            "Market": "S&P 500",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 16:56:57",
+            "Action": "buy",
+            "Name": "Apple",
+            "Symbol": "AAPL",
+            "Units": 5,
+            "UnitPrice": 231.3000030517578,
+            "TransactionAmount": 1156.500015258789
+        },
+        {
+            "Market": "Dow Jones",
+            "AssetClass": "Stocks",
+            "Date": "10/15/2024, 18:10:22",
+            "Action": "buy",
+            "Name": "Apple",
+            "Symbol": "AAPL",
+            "Units": 2,
+            "UnitPrice": 231.3000030517578,
+            "TransactionAmount": 462.6000061035156
         }
     ]
 }
