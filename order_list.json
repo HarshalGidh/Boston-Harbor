@@ -1,70 +1,152 @@
 {
     "RS4603": [
         {
-            "Market": "NASDAQ",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 12:42:40",
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 12:42:40",
             "Action": "buy",
-            "Name": "Tesla",
-            "Symbol": "TSLA",
+            "name": "Tesla",
+            "symbol": "TSLA",
             "Units": 2,
             "UnitPrice": 219.16000366210938,
-            "TransactionAmount": 438.32000732421875
+            "transactionAmount": 438.32000732421875
         },
         {
-            "Market": "NASDAQ",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 12:45:13",
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 12:45:13",
             "Action": "buy",
-            "Name": "Tesla",
-            "Symbol": "TSLA",
+            "name": "Tesla",
+            "symbol": "TSLA",
             "Units": 2,
             "UnitPrice": 219.16000366210938,
-            "TransactionAmount": 438.32000732421875
+            "transactionAmount": 438.32000732421875
         },
         {
-            "Market": "NASDAQ",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 12:55:36",
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 12:55:36",
             "Action": "buy",
-            "Name": "NVIDIA Corporation",
-            "Symbol": "NVDA",
+            "name": "NVIDIA Corporation",
+            "symbol": "NVDA",
             "Units": 2,
             "UnitPrice": 138.07000732421875,
-            "TransactionAmount": 276.1400146484375
+            "transactionAmount": 276.1400146484375
         },
         {
-            "Market": "NASDAQ",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 16:46:48",
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 16:46:48",
             "Action": "buy",
-            "Name": "Tesla",
-            "Symbol": "TSLA",
+            "name": "Tesla",
+            "symbol": "TSLA",
             "Units": 2,
             "UnitPrice": 219.16000366210938,
-            "TransactionAmount": 438.32000732421875
+            "transactionAmount": 438.32000732421875
         },
         {
-            "Market": "S&P 500",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 16:56:57",
+            "market": "S&P 500",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 16:56:57",
             "Action": "buy",
-            "Name": "Apple",
-            "Symbol": "AAPL",
+            "name": "Apple",
+            "symbol": "AAPL",
             "Units": 5,
             "UnitPrice": 231.3000030517578,
-            "TransactionAmount": 1156.500015258789
+            "transactionAmount": 1156.500015258789
         },
         {
-            "Market": "Dow Jones",
-            "AssetClass": "Stocks",
-            "Date": "10/15/2024, 18:10:22",
+            "market": "Dow Jones",
+            "assetClass": "Stocks",
+            "date": "10/15/2024, 18:10:22",
             "Action": "buy",
-            "Name": "Apple",
-            "Symbol": "AAPL",
+            "name": "Apple",
+            "symbol": "AAPL",
             "Units": 2,
             "UnitPrice": 231.3000030517578,
-            "TransactionAmount": 462.6000061035156
+            "transactionAmount": 462.6000061035156
+        },
+        {
+            "market": "Dow Jones",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 15:33:28",
+            "Action": "buy",
+            "name": "Tesla",
+            "symbol": "TSLA",
+            "Units": 4,
+            "UnitPrice": 219.57000732421875,
+            "transactionAmount": 878.280029296875
+        },
+        {
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 15:41:00",
+            "Action": "sell",
+            "name": "NVIDIA Corporation",
+            "symbol": "NVDA",
+            "Units": 5,
+            "UnitPrice": 131.60000610351562,
+            "transactionAmount": 658.0000305175781
+        },
+        {
+            "assetClass": "Real Estate",
+            "ownership": "REIT/Fund",
+            "date": "10/16/2024, 16:00:06",
+            "name": "Regency Centers Corporation",
+            "InvestmentAmount": null,
+            "DividendYield": null
+        },
+        {
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 16:07:26",
+            "Action": "buy",
+            "name": "Apple",
+            "symbol": "AAPL",
+            "Units": 10,
+            "UnitPrice": 233.85000610351562,
+            "transactionAmount": 2338.5000610351562
+        },
+        {
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 16:09:11",
+            "Action": "sell",
+            "name": "Tesla",
+            "symbol": "TSLA",
+            "Units": 4,
+            "UnitPrice": 219.57000732421875,
+            "transactionAmount": 878.280029296875
+        },
+        {
+            "market": "NASDAQ",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 16:12:19",
+            "Action": "buy",
+            "name": "Apple",
+            "symbol": "AAPL",
+            "Units": 2,
+            "UnitPrice": 233.85000610351562,
+            "transactionAmount": 467.70001220703125
+        },
+        {
+            "market": "S&P 500",
+            "assetClass": "Stocks",
+            "date": "10/16/2024, 16:15:46",
+            "Action": "buy",
+            "name": "Tesla",
+            "symbol": "TSLA",
+            "Units": 14,
+            "UnitPrice": 219.57000732421875,
+            "transactionAmount": 3073.9801025390625
+        },
+        {
+            "assetClass": "Real Estate",
+            "ownership": "REIT/Fund",
+            "date": "10/16/2024, 18:03:20",
+            "name": "Regency Centers Corporation",
+            "InvestmentAmount": null,
+            "DividendYield": null
         }
     ]
 }
