@@ -3496,7 +3496,7 @@ def portfolio():
         portfolio_data = []
 
         # Iterate over all transactions for the specific client
-        portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc = 0,0,0,0,0
+        portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc,portfolio_daily_value_change = 0,0,0,0,0,0
         for order in client_orders:
             assetClass = order.get('assetClass', 'N/A')
             name = order.get('name', 'N/A')  # Stock name
@@ -3572,7 +3572,7 @@ def portfolio():
                 
                 # Calculate investment gain/loss and other financial metrics
                 investment_gain_loss = diff_price * units
-                investment_gain_loss_per = round(transaction_amount/investment_gain_loss*100,2)
+                investment_gain_loss_per = round(investment_gain_loss/transaction_amount*100,2)
                 estimated_annual_income = 0 #order.get('estimatedAnnualIncome', 0)
                 estimated_yield = 0 #(estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
 
@@ -3606,11 +3606,11 @@ def portfolio():
             
             portfolio_current_value += current_value
             porfolio_daily_change += daily_price_change
-            
+            portfolio_daily_value_change += daily_value_change
             portfolio_investment_gain_loss += investment_gain_loss
         
-        portfolio_daily_change_perc = round(portfolio_current_value/porfolio_daily_change * 100,2)
-        portfolio_investment_gain_loss_perc = round(portfolio_current_value/portfolio_investment_gain_loss*100,2)
+        portfolio_daily_change_perc = round(porfolio_daily_change/portfolio_current_value *100 ,2)
+        portfolio_investment_gain_loss_perc = round(portfolio_investment_gain_loss/portfolio_current_value*100,4)
         
         # Save the portfolio data as a JSON file
         portfolio_file_path = f'portfolio_{client_id}.json'
@@ -3625,67 +3625,6 @@ def portfolio():
         print(f"Error occured in portfolio : {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
-
-# Previous version : 
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract form data from frontend
-#         portfolio_data = request.json.get('portfolio_data')
-#         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
-#         client_id = request.json.get('clientId','RS4603')  # Get client ID
-#         funds = request.json.get('funds')  
-        
-#         # Assign default values if necessary
-#         if not portfolio_data.get('date'):
-#             portfolio_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-#         # Get current stock price if not provided in the form
-#         stock_ticker = portfolio_data.get('name')
-#         if stock_ticker == 'apple' : stock_ticker = 'AAPL'
-#         if current_price is None:
-#             stock_data = yf.Ticker(stock_ticker)
-#             current_price = stock_data.history(period='1d')['Close'].iloc[-1]
-
-#         # Calculate the difference between bought price and current price
-#         bought_price = portfolio_data.get('pricePerUnit', 0)
-#         diff_price = current_price - bought_price
-        
-#         # Calculate percentage difference
-#         if bought_price > 0:
-#             percentage_diff = (diff_price / bought_price) * 100
-#         else:
-#             percentage_diff = -1 * (diff_price / bought_price) * 100
-
-#         # Create a dataframe with the relevant data
-#         data = {
-#             "Asset Class": [portfolio_data.get('assetClass')],
-#             "Name": [portfolio_data.get('name')],
-#             "Market": [portfolio_data.get('market')],
-#             "Units": [portfolio_data.get('units')],
-#             "Price Per Unit (Bought)": [bought_price],
-#             "Current Price": [current_price],
-#             "Transaction Type": [portfolio_data.get('transactionType')],
-#             "Transaction Amount": [portfolio_data.get('transactionAmount')],
-#             "Difference in Price": [diff_price],
-#             "Percentage Difference": [f"{percentage_diff:.2f}%"],
-#             "Time of Purchase": [portfolio_data.get('date')]
-#         }
-#         df = pd.DataFrame(data)
-#         print(f"Portfolio Data : {df}")
-        
-#         # Save the table as an Excel file with client name and ID
-#         file_path = f"data/{client_name}_{client_id}_stock_data.xlsx"
-#         df.to_excel(file_path, index=False)
-
-#         # Convert DataFrame to HTML table
-#         table_html = df.to_html(classes='table table-striped', index=False)
-
-#         # Send the Excel file and return the HTML table
-#         return jsonify({"table_html": table_html, "file_path": file_path})
-
-#     except Exception as e:
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
 @app.route('/download_excel', methods=['GET'])
@@ -3711,37 +3650,12 @@ def analyze_portfolio():
             portfolio_data = json.load(f)
 
         # Initialize portfolio-level metrics
-        portfolio_current_value = 0
-        portfolio_daily_change = 0
-        portfolio_investment_gain_loss = 0
-        total_investment = 0
+        portfolio_current_value = request.json.get('portfolio_current_value') 
+        portfolio_daily_change = request.json.get('portfolio_daily_change')
+        portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
+        portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
+        portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
 
-        # Iterate through the portfolio and calculate metrics
-        for asset in portfolio_data:
-            # Assuming the portfolio JSON contains these fields
-            current_price = asset.get('Current Price', 0)
-            units = asset.get('Units', 0)
-            bought_price = asset.get('Price Per Unit (Bought)', 0)
-            daily_price_change = asset.get('Daily Price Change', 0)
-
-            # Calculate current value for the asset
-            asset_current_value = current_price * units
-            portfolio_current_value += asset_current_value
-
-            # Calculate daily change for the asset
-            asset_daily_change = daily_price_change * units
-            portfolio_daily_change += asset_daily_change
-
-            # Calculate gain/loss for the asset
-            asset_gain_loss = (current_price - bought_price) * units
-            portfolio_investment_gain_loss += asset_gain_loss
-
-            # Calculate total investment (used to compute percentage changes)
-            total_investment += bought_price * units
-
-        # Calculate portfolio-level percentages
-        portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100 if portfolio_current_value > 0 else 0
-        portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / total_investment) * 100 if total_investment > 0 else 0
 
     except Exception as e:
         print(f"Error extracting data from request or portfolio: {e}")
@@ -3758,7 +3672,8 @@ def analyze_portfolio():
     - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
     - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
     
-    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations.
+    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations for the 
+    given portfolio : {portfolio_data} .
     """
 
     # Generate response using LLM (Generative AI Model)
