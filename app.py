@@ -3656,6 +3656,7 @@ def analyze_portfolio():
         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
 
+        print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
 
     except Exception as e:
         print(f"Error extracting data from request or portfolio: {e}")
@@ -3663,9 +3664,10 @@ def analyze_portfolio():
 
     # Create a task prompt for the LLM to generate analysis and suggestions
     task = f"""
-    You are a Stock Market Expert and Portfolio Analyst. The portfolio contains several stocks and investments.
+    You are a Stock Market Expert and Portfolio Analyst for the client : {client_name}. The portfolio contains several stocks and investments.
     Based on the portfolio data provided:
     
+    - The Avalibale Funds for the client is {funds}
     - The current value of the portfolio is {portfolio_current_value}.
     - The portfolio's daily change is {portfolio_daily_change}.
     - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
