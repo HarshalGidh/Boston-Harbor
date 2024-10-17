@@ -3464,90 +3464,165 @@ def show_order_list():
 def portfolio():
     try:
         # Extract the client_id from the POST request
-        client_id = request.json.get('client_id', None)
+        client_id = request.json.get('client_id') #, 'RS4603')
+        curr_date = request.json.get('curr_date', None) # to be used to check market is open or closed
+        # print(f"Portfolio of the client with client id is :{client_id}")
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Read the transactions from order_list.json
+            
+        # Read the order_list.json file
         with open('order_list.json', 'r') as f:
             order_list = json.load(f)
 
-        # Filter the transactions for the specific client_id
-        client_orders = [order for order in order_list if order.get('client_id') == client_id]
+        # print(order_list)
+
+        # Fetch orders for the client
+        client_orders = order_list.get(client_id, [])
+        # print(f"The orders are : {client_orders}")
+
+        # Check if any orders are found
         if not client_orders:
+            
             return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
+
+
+        # Filter the transactions for the specific client_id
+        # client_orders = [order for order in order_list if order.get('client_id') == client_id]
+        # if not client_orders:
+        #     return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
 
         # Initialize an array to store the portfolio data
         portfolio_data = []
 
         # Iterate over all transactions for the specific client
+        portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc = 0,0,0,0,0
         for order in client_orders:
-            asset_class = order.get('assetClass', 'N/A')
+            assetClass = order.get('assetClass', 'N/A')
             name = order.get('name', 'N/A')  # Stock name
-            market = order.get('market', 'N/A')
+            # market = order.get('market', 'N/A')
             symbol = order.get('symbol', 'N/A')
             units = order.get('Units', 0)
             bought_price = order.get('UnitPrice', 0)
             transaction_type = order.get('Action', 'N/A')
             transaction_amount = order.get('transactionAmount', 0)
             date = order.get('date', 'N/A')
+            
+            # print(f"\n{assetClass} \n{name} \n{units} \n{bought_price} \n{transaction_type} \n{transaction_amount} \n{date}")
+            
+            if assetClass == 'Real Estate':
+                ownership = order.get('ownership')
+                if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
+                    InvestmentAmount = order.get('InvestmentAmount')
+                    # print(f"Investment amount : {InvestmentAmount}")
+                    DividendYield = order.get('DividendYield')
+                    # print(f"Dividend Yield : {DividendYield}")
+                    estimated_annual_income = InvestmentAmount * DividendYield
+                    # print(f"Estimated Annualincome : {estimated_annual_income}")
+                    estimated_yield = round((InvestmentAmount/DividendYield))
+                    # print(f"Estimated yield : {estimated_yield}")
+                    
+                    current_price = 0
+                    current_value = 0
+                    daily_price_change = 0
+                    daily_value_change = 0
+                    bought_price = 0
+                    transaction_amount = 0
+                    investment_gain_loss = 0
+                    investment_gain_loss_per = 0
+                    
+            else :
+                # Fetch the current stock price from external source (API, database)
+                def fetch_current_stock_price(ticker):
+                    stock = yf.Ticker(ticker)
+                    try:
+                        # Fetch the current stock price using the 'regularMarketPrice' field
+                        current_price = stock.info.get('regularMarketPrice')
+                        
+                        if current_price is None:
+                            print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+                            # Fetch the last closing price if the current price is unavailable
+                            current_price = stock.history(period='1d')['Close'].iloc[-1]
+                            
+                        # Ensure we have a valid price at this point
+                        if current_price is None:
+                            raise ValueError(f"Unable to fetch current or closing price for {ticker}.")
+                        
+                        # print(current_price)
+                        return current_price
+                    
+                    except Exception as e:
+                        # Handle exceptions more explicitly
+                        print(f"Error fetching stock price for {ticker}: {str(e)}")
+                        return None
 
-            # Fetch the current stock price from external source (API, database)
-            def fetch_current_stock_price(ticker):
-                stock = yf.Ticker(ticker)
-                # Fetch the current stock price using the 'regularMarketPrice' field
-                current_price = stock.info.get('regularMarketPrice')
+        
+                current_price = fetch_current_stock_price(symbol)
+
+                # Calculate difference in price and percentage
+                print(f"Bought price is : {bought_price}")
+                diff_price = current_price - bought_price
+                percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
+
+                # Assume daily price change is available (fetch it if possible, or calculate)
+                daily_price_change =  diff_price #current_price - order.get('previousDayPrice', bought_price)  # Placeholder logic
+                daily_value_change = daily_price_change * units
+                current_value = current_price*units
+
                 
-                if not current_price:
-                    print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
-                    current_price = stock.history(period='1d')['Close'].iloc[-1]
-                
-                return current_price #jsonify({"current_price":current_price})
-    
-            current_price = current_stock_price(symbol)
-
-            # Calculate difference in price and percentage
-            diff_price = current_price - bought_price
-            percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
-
-            # Assume daily price change is available (fetch it if possible, or calculate)
-            daily_price_change =  diff_price #current_price - order.get('previousDayPrice', bought_price)  # Placeholder logic
-            daily_value_change = daily_price_change * units
-
-            # Calculate investment gain/loss and other financial metrics
-            investment_gain_loss = diff_price * units
-            estimated_annual_income = order.get('estimatedAnnualIncome', 0)
-            estimated_yield = (estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
+                # Calculate investment gain/loss and other financial metrics
+                investment_gain_loss = diff_price * units
+                investment_gain_loss_per = round(transaction_amount/investment_gain_loss*100,2)
+                estimated_annual_income = 0 #order.get('estimatedAnnualIncome', 0)
+                estimated_yield = 0 #(estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
 
             # Append the transaction details to the portfolio_data array
             portfolio_data.append({
-                "Client ID": client_id,
-                "Asset Class": asset_class,
-                "Name": name,
-                "Market": market,
-                "Units": units,
-                "Price Per Unit (Bought)": bought_price,
-                "Current Price": current_price,
-                "Transaction Type": transaction_type,
-                "Transaction Amount": transaction_amount,
-                "Difference in Price": diff_price,
-                "Percentage Difference": f"{percentage_diff:.2f}%",
-                "Daily Price Change": daily_price_change,
-                "Daily Value Change": daily_value_change,
-                "Investment Gain/Loss": investment_gain_loss,
-                "Estimated Annual Income": estimated_annual_income,
-                "Estimated Yield": f"{estimated_yield:.2f}%",
-                "Time of Purchase": date
+                "assetClass": assetClass,
+                "name": name,
+                "symbol": symbol ,
+                "Quantity": units,
+                "Delayed_Price": current_price, # Delayed Price
+                "current_value" : current_value ,
+                "Daily_Price_Change": daily_price_change,
+                "Daily_Value_Change" : daily_value_change,
+                "Amount_Invested_per_Unit" :  bought_price, #transaction_amount/units ,
+                "Amount_Invested": transaction_amount,
+                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per ,
+                "Investment_Gain_or_Loss": investment_gain_loss,
+                "Estimated_Annual_Income": estimated_annual_income,
+                "Estimated_Yield": estimated_yield,
+                "Time_Held": date,
             })
-
+            
+            print(f"Portfolio Data is : {portfolio_data}")
+            
+                # "Client ID": client_id,
+                # "Market": market,
+                # "Transaction Type": transaction_type,
+                # "Price Per Unit (Bought)": bought_price, 
+                # "Difference in Price": diff_price,
+                # "Percentage Difference": f"{percentage_diff:.2f}%",
+            
+            portfolio_current_value += current_value
+            porfolio_daily_change += daily_price_change
+            
+            portfolio_investment_gain_loss += investment_gain_loss
+        
+        portfolio_daily_change_perc = round(portfolio_current_value/porfolio_daily_change * 100,2)
+        portfolio_investment_gain_loss_perc = round(portfolio_current_value/portfolio_investment_gain_loss*100,2)
+        
         # Save the portfolio data as a JSON file
         portfolio_file_path = f'portfolio_{client_id}.json'
         with open(portfolio_file_path, 'w') as portfolio_file:
             json.dump(portfolio_data, portfolio_file, indent=4)
 
-        return jsonify({"message": "Portfolio saved successfully", "file_path": portfolio_file_path}), 200
+        return jsonify({"portfolio_current_value":portfolio_current_value,"porfolio_daily_change":porfolio_daily_change,
+                        "portfolio_daily_change_perc":portfolio_daily_change_perc,"portfolio_investment_gain_loss":portfolio_investment_gain_loss,
+                        "portfolio_investment_gain_loss_perc":portfolio_investment_gain_loss_perc,"portfolio_data": portfolio_data }), 200
 
     except Exception as e:
+        print(f"Error occured in portfolio : {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
@@ -3622,73 +3697,157 @@ def download_excel():
         return jsonify({"message": "File not found"}), 404
 
 
-    
-    
+
 @app.route('/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
-        # company = request.json.get('company',None)
+        # Extract client information from the request
         client_name = request.json.get('client_name')
-        funds_available = request.json.get('funds_available')
+        funds = request.json.get('funds')
         client_id = request.json.get('client_id')
-        no_of_stocks = request.json.get('no_of_stocks') # Maybe pass areay of stock Ticker Name
-        tickers = [request.json.get(f'ticker{i}') for i in range(no_of_stocks)]
-        stock_data = [request.json.get(f'stock_data{i}') for i in range(no_of_stocks)] # All stocks data,Stock Buy Price,No. of Units bought
-        query = request.json.get('query')
-        chat_id = request.json.get('chat_id', get_next_chat_id()) 
-        
-    except Exception as e :
-        print(f"Error extracting data from request: {e}")
-        return jsonify({'message': 'Failed to extract data from request'}), 400
-    
-    # If a valid ticker is found, fetch stock data
-    if tickers and not stock_data :
-        try:
-            stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
-            user_query = tickers  # Save the tickers as the user query
-        except Exception as e:
-            print("Error getting the stock data")
-            return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-    else:
-        # No valid ticker found, generate generic Portfolio suggestions
-        print("No valid tickers found in the query, generating general Portfolio suggestions.")
-        stock_data = {}  # No specific stock data need to check for news
-        formatted_data = ""  # No financial data
-        
-    if query:
-        task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
-                You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
-                with any queries they might have.
-                If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                Do not answer any questions unrelated to the stocks."""
-    else :
-        task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
-                You are the best Stock recommendations AI and you give the best recommendations for stocks. 
-                Given a list of stocks of a Portfolio, give Analysis of all the stocks 
-                The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                Do not answer any questions unrelated to the stocks."""
-    
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content(query)
-    print(response.text)
-        
-    try:
-        html_suggestions = markdown.markdown(response.text)
-        
-        print(f"Html Suggestions : {html_suggestions}")
-        
-        logging.info(f"Suggestions for stock: \n{response.text}")
-        
-        # format_suggestions = markdown_to_text(response)
-        print(f"Html Suggestions : {html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
-        
+
+        # Load the portfolio data from the client's JSON file
+        with open(f'portfolio_{client_id}.json', 'r') as f:
+            portfolio_data = json.load(f)
+
+        # Initialize portfolio-level metrics
+        portfolio_current_value = 0
+        portfolio_daily_change = 0
+        portfolio_investment_gain_loss = 0
+        total_investment = 0
+
+        # Iterate through the portfolio and calculate metrics
+        for asset in portfolio_data:
+            # Assuming the portfolio JSON contains these fields
+            current_price = asset.get('Current Price', 0)
+            units = asset.get('Units', 0)
+            bought_price = asset.get('Price Per Unit (Bought)', 0)
+            daily_price_change = asset.get('Daily Price Change', 0)
+
+            # Calculate current value for the asset
+            asset_current_value = current_price * units
+            portfolio_current_value += asset_current_value
+
+            # Calculate daily change for the asset
+            asset_daily_change = daily_price_change * units
+            portfolio_daily_change += asset_daily_change
+
+            # Calculate gain/loss for the asset
+            asset_gain_loss = (current_price - bought_price) * units
+            portfolio_investment_gain_loss += asset_gain_loss
+
+            # Calculate total investment (used to compute percentage changes)
+            total_investment += bought_price * units
+
+        # Calculate portfolio-level percentages
+        portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100 if portfolio_current_value > 0 else 0
+        portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / total_investment) * 100 if total_investment > 0 else 0
+
     except Exception as e:
-        logging.error(f"Error extracting text from response: {e}")
-        print(f"Error extracting text from response : {e}")
-        return jsonify({"error": "Failed to analyze stock data"}), 500
+        print(f"Error extracting data from request or portfolio: {e}")
+        return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
+
+    # Create a task prompt for the LLM to generate analysis and suggestions
+    task = f"""
+    You are a Stock Market Expert and Portfolio Analyst. The portfolio contains several stocks and investments.
+    Based on the portfolio data provided:
+    
+    - The current value of the portfolio is {portfolio_current_value}.
+    - The portfolio's daily change is {portfolio_daily_change}.
+    - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+    - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+    - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+    
+    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations.
+    """
+
+    # Generate response using LLM (Generative AI Model)
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(task)
+
+        # Convert the response to markdown and then extract text
+        html_suggestions = markdown.markdown(response.text)
+        format_suggestions = markdown_to_text(html_suggestions)
+        return jsonify({
+            "portfolio_current_value": portfolio_current_value,
+            "portfolio_daily_change": portfolio_daily_change,
+            "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+            "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+            "suggestion": format_suggestions
+        }), 200
+
+    except Exception as e:
+        print(f"Error generating suggestions from LLM: {e}")
+        return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
+
+
+    
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         # company = request.json.get('company',None)
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         client_id = request.json.get('client_id')
+#         with open(f'portfolio_{client_id}.json', 'r') as f:
+#             portfolio_table = json.load(f)
+       
+        
+#     except Exception as e :
+#         print(f"Error extracting data from request: {e}")
+#         return jsonify({'message': 'Failed to extract data from request'}), 400
+    
+#     # If a valid ticker is found, fetch stock data
+#     if tickers and not stock_data :
+#         try:
+#             stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
+#             user_query = tickers  # Save the tickers as the user query
+#         except Exception as e:
+#             print("Error getting the stock data")
+#             return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+#     else:
+#         # No valid ticker found, generate generic Portfolio suggestions
+#         print("No valid tickers found in the query, generating general Portfolio suggestions.")
+#         stock_data = {}  # No specific stock data need to check for news
+#         formatted_data = ""  # No financial data
+        
+#     if query:
+#         task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
+#                 with any queries they might have.
+#                 If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+#     else :
+#         task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. 
+#                 Given a list of stocks of a Portfolio, give Analysis of all the stocks 
+#                 The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+    
+#     model = genai.GenerativeModel('gemini-1.5-flash')
+#     response = model.generate_content(query)
+#     print(response.text)
+        
+#     try:
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"Html Suggestions : {html_suggestions}")
+        
+#         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+#         # format_suggestions = markdown_to_text(response)
+#         print(f"Html Suggestions : {html_suggestions}")
+#         format_suggestions = markdown_to_text(html_suggestions)
+#         return jsonify({'suggestion' : format_suggestions}),200
+        
+#     except Exception as e:
+#         logging.error(f"Error extracting text from response: {e}")
+#         print(f"Error extracting text from response : {e}")
+#         return jsonify({"error": "Failed to analyze stock data"}), 500
 
 
 # Run the Flask application

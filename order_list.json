@@ -93,8 +93,8 @@
             "ownership": "REIT/Fund",
             "date": "10/16/2024, 16:00:06",
             "name": "Regency Centers Corporation",
-            "InvestmentAmount": null,
-            "DividendYield": null
+            "InvestmentAmount": 150,
+            "DividendYield": 2.8
         },
         {
             "market": "NASDAQ",
@@ -145,8 +145,8 @@
             "ownership": "REIT/Fund",
             "date": "10/16/2024, 18:03:20",
             "name": "Regency Centers Corporation",
-            "InvestmentAmount": null,
-            "DividendYield": null
+            "InvestmentAmount": 100,
+            "DividendYield": 4
         }
     ]
 }
