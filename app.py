@@ -2398,7 +2398,7 @@ def save_to_word_file(data, file_name):
     longTermCoClient = insurance_coverage.get('longTermCoClient')
     doc.add_paragraph(f"Long Term Client: Benefit - {longTermCoClient.get('benefitLongTermClient', '')} Monthly Pay - {longTermCoClient.get('monthlyPayLongTermClient', '')}")
     
-    investmentAmount = investmentAmount.get('investmentAmount')
+    investmentAmount = insurance_coverage.get('investmentAmount')
     doc.add_paragraph(f"Investment Amount Available : {investmentAmount}")
                       
     # Goal Fields
@@ -3296,13 +3296,14 @@ def order_placed():
                 # estmated_annual_income = investment_amount * dividend_yield
                 # estmated_annual_yield = need current value to process this
                 # Create a dictionary with the relevant data
+                print(order_data)
                 new_transaction = {
                     "AssetClass": order_data.get('assetClass'),
                     "ownership": order_data.get('ownership'),
                     "Date": order_data.get('date'),
                     "Name": order_data.get('name'),
-                    "InvestmentAmount": order_data.get('InvestmentAmount'),
-                    "DividendYield": order_data.get('dividend_yield'),
+                    "TransactionAmount": order_data.get('TransactionAmount',500),
+                    "DividendYield": order_data.get('DividendYield',3.2),
                     # "EstimatedAnnualIncome" : estmated_annual_income
                 }
  
@@ -3498,31 +3499,31 @@ def portfolio():
         # Iterate over all transactions for the specific client
         portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc,portfolio_daily_value_change = 0,0,0,0,0,0
         for order in client_orders:
-            assetClass = order.get('assetClass', 'N/A')
-            name = order.get('name', 'N/A')  # Stock name
+            assetClass = order.get('AssetClass', 'N/A')
+            name = order.get('Name', 'N/A')  # Stock name
             # market = order.get('market', 'N/A')
-            symbol = order.get('symbol', 'N/A')
+            symbol = order.get('Symbol', 'N/A')
             units = order.get('Units', 0)
             bought_price = order.get('UnitPrice', 0)
             transaction_type = order.get('Action', 'N/A')
-            transaction_amount = order.get('transactionAmount', 0)
-            date = order.get('date', 'N/A')
+            transaction_amount = order.get('TransactionAmount', 0)
+            date = order.get('Date', 'N/A')
             
-            # print(f"\n{assetClass} \n{name} \n{units} \n{bought_price} \n{transaction_type} \n{transaction_amount} \n{date}")
+            print(f"\n{assetClass} \n{name} \n{units} \n{bought_price} \n{transaction_type} \n{transaction_amount} \n{date}")
             
             if assetClass == 'Real Estate':
                 ownership = order.get('ownership')
                 if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
-                    InvestmentAmount = order.get('InvestmentAmount')
-                    # print(f"Investment amount : {InvestmentAmount}")
-                    DividendYield = order.get('DividendYield')
-                    # print(f"Dividend Yield : {DividendYield}")
+                    InvestmentAmount = order.get('TransactionAmount',500)
+                    print(f"Investment amount : {InvestmentAmount}")
+                    DividendYield = order.get('DividendYield',3.2)
+                    print(f"Dividend Yield : {DividendYield}")
                     estimated_annual_income = InvestmentAmount * DividendYield
-                    # print(f"Estimated Annualincome : {estimated_annual_income}")
+                    print(f"Estimated Annualincome : {estimated_annual_income}")
                     estimated_yield = round((InvestmentAmount/DividendYield))
-                    # print(f"Estimated yield : {estimated_yield}")
+                    print(f"Estimated yield : {estimated_yield}")
                     
-                    current_price = 0
+                    current_price = 0 
                     current_value = 0
                     daily_price_change = 0
                     daily_value_change = 0
@@ -3558,7 +3559,7 @@ def portfolio():
 
         
                 current_price = fetch_current_stock_price(symbol)
-
+                print(f"Current Stock Price is :{current_price}")
                 # Calculate difference in price and percentage
                 print(f"Bought price is : {bought_price}")
                 diff_price = current_price - bought_price
@@ -3651,7 +3652,7 @@ def analyze_portfolio():
 
         # Initialize portfolio-level metrics
         portfolio_current_value = request.json.get('portfolio_current_value') 
-        portfolio_daily_change = request.json.get('portfolio_daily_change')
+        portfolio_daily_change = request.json.get('porfolio_daily_change')
         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
@@ -3663,6 +3664,9 @@ def analyze_portfolio():
         return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
 
     # Create a task prompt for the LLM to generate analysis and suggestions
+    funds -= portfolio_current_value
+    print(f" Current funds available : {funds}")
+    print(f"{portfolio_daily_change}")
     task = f"""
     You are a Stock Market Expert and Portfolio Analyst for the client : {client_name}. The portfolio contains several stocks and investments.
     Based on the portfolio data provided:

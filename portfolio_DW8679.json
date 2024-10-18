@@ -1,0 +1,36 @@
+[
+    {
+        "assetClass": "Stocks",
+        "name": "NVIDIA Corporation",
+        "symbol": "NVDA",
+        "Quantity": 5,
+        "Delayed_Price": 136.92999267578125,
+        "current_value": 684.6499633789062,
+        "Daily_Price_Change": 0.0,
+        "Daily_Value_Change": 0.0,
+        "Amount_Invested_per_Unit": 136.92999267578125,
+        "Amount_Invested": 684.6499633789062,
+        "Investment_Gain_or_Loss_percentage": 0.0,
+        "Investment_Gain_or_Loss": 0.0,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "10/18/2024, 00:20:23"
+    },
+    {
+        "assetClass": "Stocks",
+        "name": "Apple",
+        "symbol": "AAPL",
+        "Quantity": 5,
+        "Delayed_Price": 232.14999389648438,
+        "current_value": 1160.7499694824219,
+        "Daily_Price_Change": 0.0,
+        "Daily_Value_Change": 0.0,
+        "Amount_Invested_per_Unit": 232.14999389648438,
+        "Amount_Invested": 1160.7499694824219,
+        "Investment_Gain_or_Loss_percentage": 0.0,
+        "Investment_Gain_or_Loss": 0.0,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "10/18/2024, 00:21:03"
+    }
+]
