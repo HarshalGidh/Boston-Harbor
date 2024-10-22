@@ -3645,7 +3645,7 @@ def analyze_portfolio():
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
         client_id = request.json.get('client_id')
-
+        investor_personality = request.json.get('investor_personality','Aggressive Investor Personality')
         # Load the portfolio data from the client's JSON file
         with open(f'portfolio_{client_id}.json', 'r') as f:
             portfolio_data = json.load(f)
@@ -3668,7 +3668,7 @@ def analyze_portfolio():
     print(f" Current funds available : {funds}")
     print(f"{portfolio_daily_change}")
     task = f"""
-    You are a Stock Market Expert and Portfolio Analyst for the client : {client_name}. The portfolio contains several stocks and investments.
+    You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client : {client_name}. The portfolio contains several stocks and investments.
     Based on the portfolio data provided:
     
     - The Avalibale Funds for the client is {funds}
@@ -3677,9 +3677,13 @@ def analyze_portfolio():
     - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
     - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
     - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-    
-    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations for the 
-    given portfolio : {portfolio_data} .
+    - The risk tolerance of the client based on their investment personality is {investor_personality}
+    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations to the Wealth Manager for the client for the 
+    given portfolio : {portfolio_data}.
+    Help the Wealth Manager know the Strengths and Weaknesses of the Portfolio,give him the overall Performance and Analysis of the Portfolio and Where and How much to invest and in which Stocks
+    and also give reasons for the stock recommendation based on the Funds available to the client based on their investor personalitu. Also help the Wealth Manager rearrange the funds and which stocks to sell and when
+    if required to maximize the Profits for the Client.
+    Remember you are giving response to a Wealth Manager so need to show Disclaimer.
     """
 
     # Generate response using LLM (Generative AI Model)
