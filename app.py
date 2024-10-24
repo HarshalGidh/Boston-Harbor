@@ -3267,6 +3267,41 @@ def dividend_yield():
         print(f"Error occurred while fetching data for {ticker_name}: {e}")
 
 # # Works well for real estate as well : 
+## Direct Ownership :
+def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
+                                        property_management_fees, maintenance_repairs, 
+                                        property_taxes, insurance, utilities, hoa_fees):
+    # 1. Calculate the Gross Rental Income (assuming 100% occupancy)
+    gross_rental_income = market_value * cap_rate
+    
+    # 2. Adjust for vacancy
+    effective_rental_income = gross_rental_income * (1 - vacancy_rate)
+    
+    # 3. Total Operating Expenses
+    operating_expenses = (property_management_fees + maintenance_repairs + property_taxes + 
+                          insurance + utilities + hoa_fees)
+    
+    # 4. Net Operating Income (NOI)
+    noi = effective_rental_income - operating_expenses
+    
+    # 5. Capital Expenditures (CapEx)
+    # CapEx are large expenses that increase property value but are not part of NOI
+    cash_flow_before_financing = noi - capex
+    
+    # 6. Return on Investment (ROI) assuming market value as initial investment
+    roi = (cash_flow_before_financing / market_value) * 100
+    
+    # Return a dictionary with all key metrics
+    return gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi
+    # return {
+    #     'Gross Rental Income': gross_rental_income,
+    #     'Effective Rental Income': effective_rental_income,
+    #     'Operating Expenses': operating_expenses,
+    #     'Net Operating Income (NOI)': noi,
+    #     'Cash Flow Before Financing': cash_flow_before_financing,
+    #     'Return on Investment (ROI)': roi
+    # }
+
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
     try:
@@ -3320,8 +3355,72 @@ def order_placed():
  
                 print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
                
-            elif ownership == 'Direct':
-                pass
+            elif ownership == 'Direct': # else
+                try:
+                    name = request.json.get('name')
+                    vacancy_rate = request.json.get('vacancy_rate',12)
+                    capex = request.json.get('capex',15000)
+                    cap_rate = request.json.get('cap_rate',5)
+                    market_value = request.json.get('market_value',300000)
+                    property_management_fees = request.json.get('property_management_fees',200)
+                    maintenance_repairs = request.json.get('maintenance_repairs',150)
+                    property_taxes = request.json.get('property_taxes',100)
+                    insurance = request.json.get('insurance',280000)
+                    utilities = request.json.get('utilities',500)
+                    hoa_fees = request.json.get('hoa_fees',300)
+                    print(name)
+                    print(vacancy_rate)
+                    print(capex)
+                    print(cap_rate)
+                    print(market_value)
+                    print(property_management_fees)
+                    print(maintenance_repairs)
+                    print(property_taxes)
+                    print(insurance)
+                    print(utilities)
+                    print(hoa_fees)
+                    
+                    gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi = calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
+                                        property_management_fees, maintenance_repairs, 
+                                        property_taxes, insurance, utilities, hoa_fees)
+                    
+                    print("--------------------------------")
+                    print(f"{gross_rental_income}\n{effective_rental_income}\n{operating_expenses}\n{noi}\n{cash_flow_before_financing}\n{roi}")
+                    
+                    
+                    # Annual Gross Rental Income calculation 
+                    annual_gross_rental_income = gross_rental_income * 12
+
+                    # Estimated Annual Income calculation 
+                    estimated_annual_income = effective_rental_income - operating_expenses
+
+                    # Yield calculation 
+                    estimated_yield = (estimated_annual_income / market_value) * 100
+
+                    print(f"Estimated Annual Income: ${estimated_annual_income}")
+                    print(f"Estimated Yield: {estimated_yield}%")
+                    
+                    new_transaction = {"name":name,"estimated_annual_income":estimated_annual_income,
+                                    "estimated_yield":estimated_yield}
+                    # If the client_id exists in the JSON file, append the new transaction
+                    if client_id in client_transactions:
+                        client_transactions[client_id].append(new_transaction)
+                    else:
+                        # Create a new entry for the client_id if it doesn't exist
+                        client_transactions[client_id] = [new_transaction]
+                
+                    # Save the updated transactions back to the JSON file
+                    with open(order_list_file, 'w') as f:
+                        json.dump(client_transactions, f, indent=4)
+                    
+                    return jsonify({"name":name,"estimated_annual_income":estimated_annual_income,
+                                    "estimated_yield":estimated_yield})
+                                      
+                except Exception as e:
+                    print(f"Failed to process Direct Ownership order for {client_name} ({client_id}): {e}")
+                    return jsonify({"error": f"Failed to process Direct Ownership order for {client_name} ({client_id})", "status": 500}), 500
+            
+            
             print(f"Order Data for {client_name} placed successfully for Real Estate Asset Class")
             return jsonify({"message": "Order placed successfully", "status": 200})
         else :
@@ -3637,6 +3736,48 @@ def download_excel():
         return jsonify({"message": "File not found"}), 404
 
 
+## Collect live news for stocks in portfolio :
+# Define a function to fetch news for a given query 
+def fetch_news(query):
+    news_url = f'https://newsapi.org/v2/everything?q={query}&apiKey={NEWS_API_KEY}&pageSize=3'
+    news_response = requests.get(news_url)
+    
+    if news_response.status_code == 200:
+        news_data = news_response.json()
+        articles = news_data.get('articles', [])
+        if articles:
+            top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+        else:
+            top_news = "No news articles found."
+    else:
+        top_news = "Failed to fetch news articles."
+    
+    return top_news
+
+# Function to collect news for each asset in the portfolio
+def collect_portfolio_news(portfolio_data):
+    portfolio_news = {}
+    
+    for asset in portfolio_data:
+        asset_class = asset.get("AssetClass", "Unknown")
+        name = asset.get("Name", "")
+        symbol = asset.get("Symbol", None)
+        
+        # Generate a news query based on the asset class and name/symbol
+        if asset_class == "Stocks" or asset_class == "Bonds":
+            query = symbol if symbol else name
+        elif asset_class == "cryptocurrency":
+            query = asset.get("Name", "")
+        elif asset_class == "Real Estate":
+            query = asset.get("Name", "")
+        else:
+            query = asset.get("Name", "")
+        
+        # Fetch news for the query
+        news = fetch_news(query)
+        portfolio_news[name] = news
+    
+    return portfolio_news
 
 @app.route('/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
@@ -3650,6 +3791,23 @@ def analyze_portfolio():
         with open(f'portfolio_{client_id}.json', 'r') as f:
             portfolio_data = json.load(f)
 
+        # Fetch news for each asset in the portfolio
+        portfolio_news = collect_portfolio_news(portfolio_data)
+
+        # Print the collected news for debugging
+        for asset, news in portfolio_news.items():
+            print(f"News for {asset}:\n{news}\n{'-'*50}")
+            
+        
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions"]
+        economic_news = {}
+
+        for topic in topics:
+            news = fetch_news(topic)
+            economic_news[topic] = news
+        
+        print(economic_news)
+            
         # Initialize portfolio-level metrics
         portfolio_current_value = request.json.get('portfolio_current_value') 
         portfolio_daily_change = request.json.get('porfolio_daily_change')
@@ -3667,24 +3825,70 @@ def analyze_portfolio():
     funds -= portfolio_current_value
     print(f" Current funds available : {funds}")
     print(f"{portfolio_daily_change}")
-    task = f"""
-    You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client : {client_name}. The portfolio contains several stocks and investments.
-    Based on the portfolio data provided:
     
-    - The Avalibale Funds for the client is {funds}
-    - The current value of the portfolio is {portfolio_current_value}.
-    - The portfolio's daily change is {portfolio_daily_change}.
-    - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-    - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-    - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-    - The risk tolerance of the client based on their investment personality is {investor_personality}
-    Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations to the Wealth Manager for the client for the 
-    given portfolio : {portfolio_data}.
-    Help the Wealth Manager know the Strengths and Weaknesses of the Portfolio,give him the overall Performance and Analysis of the Portfolio and Where and How much to invest and in which Stocks
-    and also give reasons for the stock recommendation based on the Funds available to the client based on their investor personalitu. Also help the Wealth Manager rearrange the funds and which stocks to sell and when
-    if required to maximize the Profits for the Client.
-    Remember you are giving response to a Wealth Manager so need to show Disclaimer.
-    """
+        # # Best one so far :
+    
+
+    task = f"""
+        You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
+        Based on the portfolio data provided:
+
+        - The available funds for the client are {funds}.
+        - The current value of the portfolio is {portfolio_current_value}.
+        - The portfolio's daily change is {portfolio_daily_change}.
+        - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+        - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+        - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+        - The risk tolerance of the client based on their investment personality is {investor_personality}.
+
+        Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+        and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
+        and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+
+        - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
+        - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
+        - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+
+        Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+
+        Additionally, provide:
+
+        1. A risk assessment of the current portfolio composition.
+        2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+        3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+        4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+        5. Strategies for tax efficiency in the portfolio management.
+        6. Insights on market trends and current economic news that could impact the portfolio.
+        7. Contingency plans for different market scenarios (bullish, bearish, and volatile markets).
+
+        Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+        Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+        """
+
+        
+            
+    ## Previous task prompt
+    # task = f"""
+    # You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client : {client_name}. The portfolio contains several stocks and investments.
+    # Based on the portfolio data provided:
+    
+    # - The Avalibale Funds for the client is {funds}
+    # - The current value of the portfolio is {portfolio_current_value}.
+    # - The portfolio's daily change is {portfolio_daily_change}.
+    # - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+    # - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+    # - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+    # - The risk tolerance of the client based on their investment personality is {investor_personality}
+    # Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the 
+    # given portfolio : {portfolio_data}.
+    # If the client has a conservative investment personality then give stock recommendations that could give returns but with minimal risk.
+    # If the client has a Moderate investment personality then give stock recommendations that could give returns but with little bit risk.
+    # If the client has an aggressive investment personality then give stock recommendations that could give more returns but with high risk. Also help the Wealth Manager rearrange the funds and which stocks to sell and when to buy them.
+    # Help the Wealth Manager know the Strengths and Weaknesses of the Portfolio,give him the overall Performance and Analysis of the Portfolio and Where and How much to invest and in which Stocks
+    # and also give reasons for the stock recommendation based on the Funds available to the client based on their investor personalitu. Also help the Wealth Manager rearrange the funds and which stocks to sell and when
+    # if required to maximize the Profits for the Client.
+    # Remember you are giving response to a Wealth Manager so need to show Disclaimer.
+    # """
 
     # Generate response using LLM (Generative AI Model)
     try:

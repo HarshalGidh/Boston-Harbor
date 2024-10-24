@@ -226,6 +226,17 @@
             "Name": "Prologis",
             "TransactionAmount": 500,
             "DividendYield": 3.2
+        },
+        {
+            "Market": "Dow Jones",
+            "AssetClass": "Stocks",
+            "Date": "10/23/2024, 05:54:57",
+            "Action": "buy",
+            "Name": "NVIDIA Corporation",
+            "Symbol": "NVDA",
+            "Units": 2,
+            "UnitPrice": 143.58999633789062,
+            "TransactionAmount": 287.17999267578125
         }
     ],
     "DW8679": [
