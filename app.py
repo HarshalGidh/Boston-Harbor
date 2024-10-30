@@ -3229,7 +3229,20 @@ def current_stock_price():
         if not current_price:
             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
             current_price = stock.history(period='1d')['Close'].iloc[-1]
+            return jsonify({"current_price":current_price})
         
+        if current_price is None:
+            # If still None, check for mutual fund-specific fields
+            print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+            fund_close_price = stock.history(period="1d")['Close']
+            if len(fund_close_price) > 0:
+                current_price = fund_close_price.iloc[-1]  # Last available closing price
+            return jsonify({"current_price":current_price})
+
+        # If everything fails, raise an error
+        if current_price is None:
+            raise ValueError(f"Unable to retrieve price for {ticker}.")
+
         return jsonify({"current_price":current_price})
     
     except Exception as e:
@@ -3301,169 +3314,90 @@ def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_va
     #     'Cash Flow Before Financing': cash_flow_before_financing,
     #     'Return on Investment (ROI)': roi
     # }
-
+    
+    
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
     try:
-        # Extract form data from frontend
+        # Extract data from the request
         order_data = request.json.get('order_data')
-        client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
-        client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
-        funds = request.json.get('funds')  # Example extra data if needed
-        print(f" Available Funds : {funds}")
-        # Path to the JSON file to store transaction data
+        client_name = request.json.get('client_name') #, 'Rohit Sharma')
+        client_id = request.json.get('client_id') #, 'RS4603')
+        funds = request.json.get('funds')
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+        
         order_list_file = 'order_list.json'
- 
-        # Load existing transaction data from the JSON file (if it exists)
+        
+        # Load existing data if available
         if os.path.exists(order_list_file):
             with open(order_list_file, 'r') as f:
                 client_transactions = json.load(f)
         else:
             client_transactions = {}
-       
+
+        # Initialize a transaction list for the client if it doesn't exist
+        if client_id not in client_transactions:
+            client_transactions[client_id] = []
+            print(f"New client detected. Initializing transaction list for {client_id}")
+
+        # Process Real Estate or other assets based on asset class
         assetClass = order_data.get('assetClass')
-       
+        print(f"Processing Asset Class: {assetClass}")
+        
         if assetClass == 'Real Estate':
             ownership = order_data.get('ownership')
-            if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
-                investment_amount = order_data.get('investment_amount')
-                dividend_yield = order_data.get('dividend_yield')
-                # estmated_annual_income = investment_amount * dividend_yield
-                # estmated_annual_yield = need current value to process this
-                # Create a dictionary with the relevant data
-                print(order_data)
+            if ownership in ['REIT/Fund', 'Commercial Real Estate (Triple Net Lease)']:
+                # Real estate REIT/fund or commercial real estate transaction
                 new_transaction = {
-                    "AssetClass": order_data.get('assetClass'),
-                    "ownership": order_data.get('ownership'),
+                    "AssetClass": assetClass,
+                    "ownership": ownership,
                     "Date": order_data.get('date'),
                     "Name": order_data.get('name'),
-                    "TransactionAmount": order_data.get('TransactionAmount',500),
-                    "DividendYield": order_data.get('DividendYield',3.2),
-                    # "EstimatedAnnualIncome" : estmated_annual_income
+                    "TransactionAmount": order_data.get('investmentAmount'), # ('transactionAmount', 500),
+                    "DividendYield": order_data.get('dividendYield') #, 3.2)
                 }
- 
-                # If the client_id exists in the JSON file, append the new transaction
-                if client_id in client_transactions:
-                    client_transactions[client_id].append(new_transaction)
-                else:
-                    # Create a new entry for the client_id if it doesn't exist
-                    client_transactions[client_id] = [new_transaction]
-               
-                # Save the updated transactions back to the JSON file
-                with open(order_list_file, 'w') as f:
-                    json.dump(client_transactions, f, indent=4)
- 
-                print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
-               
-            elif ownership == 'Direct': # else
-                try:
-                    name = request.json.get('name')
-                    vacancy_rate = request.json.get('vacancy_rate',12)
-                    capex = request.json.get('capex',15000)
-                    cap_rate = request.json.get('cap_rate',5)
-                    market_value = request.json.get('market_value',300000)
-                    property_management_fees = request.json.get('property_management_fees',200)
-                    maintenance_repairs = request.json.get('maintenance_repairs',150)
-                    property_taxes = request.json.get('property_taxes',100)
-                    insurance = request.json.get('insurance',280000)
-                    utilities = request.json.get('utilities',500)
-                    hoa_fees = request.json.get('hoa_fees',300)
-                    print(name)
-                    print(vacancy_rate)
-                    print(capex)
-                    print(cap_rate)
-                    print(market_value)
-                    print(property_management_fees)
-                    print(maintenance_repairs)
-                    print(property_taxes)
-                    print(insurance)
-                    print(utilities)
-                    print(hoa_fees)
-                    
-                    gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi = calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
-                                        property_management_fees, maintenance_repairs, 
-                                        property_taxes, insurance, utilities, hoa_fees)
-                    
-                    print("--------------------------------")
-                    print(f"{gross_rental_income}\n{effective_rental_income}\n{operating_expenses}\n{noi}\n{cash_flow_before_financing}\n{roi}")
-                    
-                    
-                    # Annual Gross Rental Income calculation 
-                    annual_gross_rental_income = gross_rental_income * 12
-
-                    # Estimated Annual Income calculation 
-                    estimated_annual_income = effective_rental_income - operating_expenses
-
-                    # Yield calculation 
-                    estimated_yield = (estimated_annual_income / market_value) * 100
-
-                    print(f"Estimated Annual Income: ${estimated_annual_income}")
-                    print(f"Estimated Yield: {estimated_yield}%")
-                    
-                    new_transaction = {"name":name,"estimated_annual_income":estimated_annual_income,
-                                    "estimated_yield":estimated_yield}
-                    # If the client_id exists in the JSON file, append the new transaction
-                    if client_id in client_transactions:
-                        client_transactions[client_id].append(new_transaction)
-                    else:
-                        # Create a new entry for the client_id if it doesn't exist
-                        client_transactions[client_id] = [new_transaction]
-                
-                    # Save the updated transactions back to the JSON file
-                    with open(order_list_file, 'w') as f:
-                        json.dump(client_transactions, f, indent=4)
-                    
-                    return jsonify({"name":name,"estimated_annual_income":estimated_annual_income,
-                                    "estimated_yield":estimated_yield})
-                                      
-                except Exception as e:
-                    print(f"Failed to process Direct Ownership order for {client_name} ({client_id}): {e}")
-                    return jsonify({"error": f"Failed to process Direct Ownership order for {client_name} ({client_id})", "status": 500}), 500
-            
-            
-            print(f"Order Data for {client_name} placed successfully for Real Estate Asset Class")
-            return jsonify({"message": "Order placed successfully", "status": 200})
-        else :
-            # Assign default values if necessary
-            if not order_data.get('date'):
-                order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
- 
-            units = order_data.get('units')
-            buy_or_sell = order_data.get('buy_or_sell')
- 
-            # Create a dictionary with the relevant data
+            else:
+                # Direct real estate transaction
+                new_transaction = {
+                    "AssetClass": assetClass,
+                    "ownership": ownership,
+                    "Date": order_data.get('date'),
+                    "Name": order_data.get('name'),
+                    "estimated_annual_income": order_data.get('estimated_annual_income'),
+                    "estimated_yield": order_data.get('estimated_yield')
+                }
+        else:
+            # Standard transaction for Stocks, Bonds, etc.
             new_transaction = {
                 "Market": order_data.get('market'),
-                "AssetClass": order_data.get('assetClass'),
+                "AssetClass": assetClass,
                 "Date": order_data.get('date'),
                 "Action": order_data.get('buy_or_sell'),
                 "Name": order_data.get('name'),
                 "Symbol": order_data.get('symbol'),
                 "Units": order_data.get('units'),
                 "UnitPrice": order_data.get('unit_price'),
-                "TransactionAmount": order_data.get('transactionAmount'),
+                "TransactionAmount": order_data.get('transactionAmount')
             }
- 
-            # If the client_id exists in the JSON file, append the new transaction
-            if client_id in client_transactions:
-                client_transactions[client_id].append(new_transaction)
-            else:
-                # Create a new entry for the client_id if it doesn't exist
-                client_transactions[client_id] = [new_transaction]
-           
-            # Save the updated transactions back to the JSON file
-            with open(order_list_file, 'w') as f:
-                json.dump(client_transactions, f, indent=4)
- 
-            print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
- 
-            return jsonify({"message": "Order placed successfully", "status": 200})
- 
+
+        # Append the new transaction to the correct client's transaction list
+        client_transactions[client_id].append(new_transaction)
+        print(f"Appended transaction to client {client_id}: {new_transaction}")
+
+        # Save the updated data back to the JSON file
+        with open(order_list_file, 'w') as f:
+            json.dump(client_transactions, f, indent=4)
+
+        print(f"Order for {client_name} ({client_id}) successfully placed.")
+        return jsonify({"message": "Order placed successfully", "status": 200})
+
     except Exception as e:
         print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
-# Og code working fine without Real Estate :
+
+
+# # OG Code :
 # @app.route('/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
@@ -3472,56 +3406,159 @@ def order_placed():
 #         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
 #         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
 #         funds = request.json.get('funds')  # Example extra data if needed
-        
+#         print(f" Available Funds : {funds}")
 #         # Path to the JSON file to store transaction data
 #         order_list_file = 'order_list.json'
-
+ 
 #         # Load existing transaction data from the JSON file (if it exists)
 #         if os.path.exists(order_list_file):
 #             with open(order_list_file, 'r') as f:
 #                 client_transactions = json.load(f)
 #         else:
 #             client_transactions = {}
-        
-        
-#         # Assign default values if necessary
-#         if not order_data.get('date'):
-#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+       
+#         assetClass = order_data.get('assetClass')
+       
+#         if assetClass == 'Real Estate':
+#             ownership = order_data.get('ownership')
+#             if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
+#                 investment_amount = order_data.get('investment_amount')
+#                 dividend_yield = order_data.get('dividend_yield')
+#                 # estmated_annual_income = investment_amount * dividend_yield
+#                 # estmated_annual_yield = need current value to process this
+#                 # Create a dictionary with the relevant data
+#                 print(order_data)
+#                 new_transaction = {
+#                     "AssetClass": order_data.get('assetClass'),
+#                     "ownership": order_data.get('ownership'),
+#                     "Date": order_data.get('date'),
+#                     "Name": order_data.get('name'),
+#                     "TransactionAmount": order_data.get('TransactionAmount',500),
+#                     "DividendYield": order_data.get('DividendYield',3.2),
+#                     # "EstimatedAnnualIncome" : estmated_annual_income
+#                 }
+ 
+#                 # If the client_id exists in the JSON file, append the new transaction
+#                 if client_id in client_transactions:
+#                     client_transactions[client_id].append(new_transaction)
+#                 else:
+#                     # Create a new entry for the client_id if it doesn't exist
+#                     client_transactions[client_id] = [new_transaction]
+               
+#                 # Save the updated transactions back to the JSON file
+#                 with open(order_list_file, 'w') as f:
+#                     json.dump(client_transactions, f, indent=4)
+ 
+#                 print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+               
+#             elif ownership == 'Direct': # else
+#                 try:
+#                     name = request.json.get('name')
+#                     vacancy_rate = request.json.get('vacancy_rate',12)
+#                     capex = request.json.get('capex',15000)
+#                     cap_rate = request.json.get('cap_rate',5)
+#                     market_value = request.json.get('market_value',300000)
+#                     property_management_fees = request.json.get('property_management_fees',200)
+#                     maintenance_repairs = request.json.get('maintenance_repairs',150)
+#                     property_taxes = request.json.get('property_taxes',100)
+#                     insurance = request.json.get('insurance',280000)
+#                     utilities = request.json.get('utilities',500)
+#                     hoa_fees = request.json.get('hoa_fees',300)
+#                     print(name)
+#                     print(vacancy_rate)
+#                     print(capex)
+#                     print(cap_rate)
+#                     print(market_value)
+#                     print(property_management_fees)
+#                     print(maintenance_repairs)
+#                     print(property_taxes)
+#                     print(insurance)
+#                     print(utilities)
+#                     print(hoa_fees)
+                    
+#                     gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi = calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
+#                                         property_management_fees, maintenance_repairs, 
+#                                         property_taxes, insurance, utilities, hoa_fees)
+                    
+#                     print("--------------------------------")
+#                     print(f"{gross_rental_income}\n{effective_rental_income}\n{operating_expenses}\n{noi}\n{cash_flow_before_financing}\n{roi}")
+                    
+                    
+#                     # Annual Gross Rental Income calculation 
+#                     annual_gross_rental_income = gross_rental_income * 12
 
-#         units = order_data.get('units')
-#         buy_or_sell = order_data.get('buy_or_sell')
+#                     # Estimated Annual Income calculation 
+#                     estimated_annual_income = effective_rental_income - operating_expenses
 
-#         # Create a dictionary with the relevant data
-#         new_transaction = {
-#             "Market": order_data.get('market'),
-#             "AssetClass": order_data.get('assetClass'),
-#             "Date": order_data.get('date'),
-#             "Action": order_data.get('buy_or_sell'),
-#             "Name": order_data.get('name'),
-#             "Symbol": order_data.get('symbol'),
-#             "Units": order_data.get('units'),
-#             "UnitPrice": order_data.get('unit_price'),
-#             "TransactionAmount": order_data.get('transactionAmount'),
-#         }
+#                     # Yield calculation 
+#                     estimated_yield = (estimated_annual_income / market_value) * 100
 
-#         # If the client_id exists in the JSON file, append the new transaction
-#         if client_id in client_transactions:
-#             client_transactions[client_id].append(new_transaction)
-#         else:
-#             # Create a new entry for the client_id if it doesn't exist
-#             client_transactions[client_id] = [new_transaction]
-        
-#         # Save the updated transactions back to the JSON file
-#         with open(order_list_file, 'w') as f:
-#             json.dump(client_transactions, f, indent=4)
-
-#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
-
-#         return jsonify({"message": "Order placed successfully", "status": 200})
-
+#                     print(f"Estimated Annual Income: ${estimated_annual_income}")
+#                     print(f"Estimated Yield: {estimated_yield}%")
+                    
+#                     new_transaction = {"name":name,"estimated_annual_income":estimated_annual_income,
+#                                     "estimated_yield":estimated_yield}
+#                     # If the client_id exists in the JSON file, append the new transaction
+#                     if client_id in client_transactions:
+#                         client_transactions[client_id].append(new_transaction)
+#                     else:
+#                         # Create a new entry for the client_id if it doesn't exist
+#                         client_transactions[client_id] = [new_transaction]
+                
+#                     # Save the updated transactions back to the JSON file
+#                     with open(order_list_file, 'w') as f:
+#                         json.dump(client_transactions, f, indent=4)
+                    
+#                     return jsonify({"name":name,"estimated_annual_income":estimated_annual_income,
+#                                     "estimated_yield":estimated_yield})
+                                      
+#                 except Exception as e:
+#                     print(f"Failed to process Direct Ownership order for {client_name} ({client_id}): {e}")
+#                     return jsonify({"error": f"Failed to process Direct Ownership order for {client_name} ({client_id})", "status": 500}), 500
+            
+            
+#             print(f"Order Data for {client_name} placed successfully for Real Estate Asset Class")
+#             return jsonify({"message": "Order placed successfully", "status": 200})
+#         else :
+#             # Assign default values if necessary
+#             if not order_data.get('date'):
+#                 order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+ 
+#             units = order_data.get('units')
+#             buy_or_sell = order_data.get('buy_or_sell')
+ 
+#             # Create a dictionary with the relevant data
+#             new_transaction = {
+#                 "Market": order_data.get('market'),
+#                 "AssetClass": order_data.get('assetClass'),
+#                 "Date": order_data.get('date'),
+#                 "Action": order_data.get('buy_or_sell'),
+#                 "Name": order_data.get('name'),
+#                 "Symbol": order_data.get('symbol'),
+#                 "Units": order_data.get('units'),
+#                 "UnitPrice": order_data.get('unit_price'),
+#                 "TransactionAmount": order_data.get('transactionAmount'),
+#             }
+ 
+#             # If the client_id exists in the JSON file, append the new transaction
+#             if client_id in client_transactions:
+#                 client_transactions[client_id].append(new_transaction)
+#             else:
+#                 # Create a new entry for the client_id if it doesn't exist
+#                 client_transactions[client_id] = [new_transaction]
+           
+#             # Save the updated transactions back to the JSON file
+#             with open(order_list_file, 'w') as f:
+#                 json.dump(client_transactions, f, indent=4)
+ 
+#             print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+ 
+#             return jsonify({"message": "Order placed successfully", "status": 200})
+ 
 #     except Exception as e:
 #         print(f"Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
 
 @app.route('/show_order_list', methods=['POST'])
 def show_order_list():
@@ -3630,6 +3667,9 @@ def portfolio():
                     transaction_amount = 0
                     investment_gain_loss = 0
                     investment_gain_loss_per = 0
+                    
+                elif ownership == "Direct":
+                    pass
                     
             else :
                 # Fetch the current stock price from external source (API, database)
@@ -3779,36 +3819,40 @@ def collect_portfolio_news(portfolio_data):
     
     return portfolio_news
 
+
 @app.route('/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
-        # Extract client information from the request
+        # Retrieve the requested asset type
+        assetName = request.json.get('assetName', 'all')
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
         client_id = request.json.get('client_id')
-        investor_personality = request.json.get('investor_personality','Aggressive Investor Personality')
-        # Load the portfolio data from the client's JSON file
-        with open(f'portfolio_{client_id}.json', 'r') as f:
-            portfolio_data = json.load(f)
+        investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
 
-        # Fetch news for each asset in the portfolio
-        portfolio_news = collect_portfolio_news(portfolio_data)
+        # Initialize economic news to pass to LLM
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+        economic_news = {topic: fetch_news(topic) for topic in topics}
 
-        # Print the collected news for debugging
-        for asset, news in portfolio_news.items():
-            print(f"News for {asset}:\n{news}\n{'-'*50}")
+        # Load portfolio data for client (if analyzing the whole portfolio)
+        portfolio_data = {}
+        portfolio_news = {}
+
+        if assetName == 'all':
+            # Load the complete portfolio
+            with open(f'portfolio_{client_id}.json', 'r') as f:
+                portfolio_data = json.load(f)
+            portfolio_news = collect_portfolio_news(portfolio_data)
+
+        else:
+            # Extract specific asset data from request if assetName is specific
+            portfolioList = request.json.get('portfolioList', [])
+            portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
             
-        
-        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions"]
-        economic_news = {}
+            # Fetch news for each asset in the specified list
+            portfolio_news = collect_portfolio_news(portfolio_data)
 
-        for topic in topics:
-            news = fetch_news(topic)
-            economic_news[topic] = news
-        
-        print(economic_news)
-            
-        # Initialize portfolio-level metrics
+         # Initialize portfolio-level metrics
         portfolio_current_value = request.json.get('portfolio_current_value') 
         portfolio_daily_change = request.json.get('porfolio_daily_change')
         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
@@ -3817,99 +3861,195 @@ def analyze_portfolio():
 
         print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
 
-    except Exception as e:
-        print(f"Error extracting data from request or portfolio: {e}")
-        return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
 
-    # Create a task prompt for the LLM to generate analysis and suggestions
-    funds -= portfolio_current_value
-    print(f" Current funds available : {funds}")
-    print(f"{portfolio_daily_change}")
-    
-        # # Best one so far :
-    
+        # Task prompt for LLM based on the asset name
+        task = f"""
+                You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
+                Based on the portfolio data provided:
 
-    task = f"""
-        You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
-        Based on the portfolio data provided:
+                - The available funds for the client are {funds}.
+                - The current value of the portfolio is {portfolio_current_value}.
+                - The portfolio's daily change is {portfolio_daily_change}.
+                - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+                - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+                - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+                - The risk tolerance of the client based on their investment personality is {investor_personality}.
 
-        - The available funds for the client are {funds}.
-        - The current value of the portfolio is {portfolio_current_value}.
-        - The portfolio's daily change is {portfolio_daily_change}.
-        - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-        - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-        - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-        - The risk tolerance of the client based on their investment personality is {investor_personality}.
+                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+                and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
+                and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
 
-        Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-        and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
-        and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+                - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
+                - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
+                - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
 
-        - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
-        - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
-        - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+                Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
 
-        Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+                Additionally, provide:
 
-        Additionally, provide:
+                1. A risk assessment of the current portfolio composition.
+                2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+                3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+                4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+                5. Strategies for tax efficiency in the portfolio management.
+                6. Insights on market trends and current economic news that could impact the portfolio.
+                7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
 
-        1. A risk assessment of the current portfolio composition.
-        2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-        3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-        4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-        5. Strategies for tax efficiency in the portfolio management.
-        6. Insights on market trends and current economic news that could impact the portfolio.
-        7. Contingency plans for different market scenarios (bullish, bearish, and volatile markets).
+                Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+                Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+                """
 
-        Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-        Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
-        """
+        # Generate response using LLM
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(task)
 
-        
+            # Process the response
+            html_suggestions = markdown.markdown(response.text)
+            format_suggestions = markdown_to_text(html_suggestions)
             
-    ## Previous task prompt
-    # task = f"""
-    # You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client : {client_name}. The portfolio contains several stocks and investments.
-    # Based on the portfolio data provided:
-    
-    # - The Avalibale Funds for the client is {funds}
-    # - The current value of the portfolio is {portfolio_current_value}.
-    # - The portfolio's daily change is {portfolio_daily_change}.
-    # - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-    # - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-    # - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-    # - The risk tolerance of the client based on their investment personality is {investor_personality}
-    # Provide an analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the 
-    # given portfolio : {portfolio_data}.
-    # If the client has a conservative investment personality then give stock recommendations that could give returns but with minimal risk.
-    # If the client has a Moderate investment personality then give stock recommendations that could give returns but with little bit risk.
-    # If the client has an aggressive investment personality then give stock recommendations that could give more returns but with high risk. Also help the Wealth Manager rearrange the funds and which stocks to sell and when to buy them.
-    # Help the Wealth Manager know the Strengths and Weaknesses of the Portfolio,give him the overall Performance and Analysis of the Portfolio and Where and How much to invest and in which Stocks
-    # and also give reasons for the stock recommendation based on the Funds available to the client based on their investor personalitu. Also help the Wealth Manager rearrange the funds and which stocks to sell and when
-    # if required to maximize the Profits for the Client.
-    # Remember you are giving response to a Wealth Manager so need to show Disclaimer.
-    # """
+            # Return response in JSON format
+            return jsonify({
+                    "portfolio_current_value": portfolio_current_value,
+                    "portfolio_daily_change": portfolio_daily_change,
+                    "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+                    "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                    "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+                    "suggestion": format_suggestions
+            }), 200
 
-    # Generate response using LLM (Generative AI Model)
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(task)
-
-        # Convert the response to markdown and then extract text
-        html_suggestions = markdown.markdown(response.text)
-        format_suggestions = markdown_to_text(html_suggestions)
-        return jsonify({
-            "portfolio_current_value": portfolio_current_value,
-            "portfolio_daily_change": portfolio_daily_change,
-            "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-            "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-            "suggestion": format_suggestions
-        }), 200
+        except Exception as e:
+            print(f"Error generating suggestions from LLM: {e}")
+            return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
 
     except Exception as e:
-        print(f"Error generating suggestions from LLM: {e}")
-        return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
+        print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
+        return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
+
+
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         assetName = request.json.get('assetName','all')
+#         if assetName == 'all':
+#             try:
+#                 # Extract client information from the request
+#                 client_name = request.json.get('client_name')
+#                 funds = request.json.get('funds')
+#                 client_id = request.json.get('client_id')
+#                 investor_personality = request.json.get('investor_personality','Aggressive Investor Personality')
+                
+                    
+#                 # Load the portfolio data from the client's JSON file
+#                 with open(f'portfolio_{client_id}.json', 'r') as f:
+#                     portfolio_data = json.load(f)
+
+#                 # Fetch news for each asset in the portfolio
+#                 portfolio_news = collect_portfolio_news(portfolio_data)
+
+#                 # Print the collected news for debugging
+#                 for asset, news in portfolio_news.items():
+#                     print(f"News for {asset}:\n{news}\n{'-'*50}")
+                    
+                
+#                 topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions","US Elections","Global Wars"]
+#                 economic_news = {}
+
+#                 for topic in topics:
+#                     news = fetch_news(topic)
+#                     economic_news[topic] = news
+                
+#                 print(economic_news)
+                    
+                # # Initialize portfolio-level metrics
+                # portfolio_current_value = request.json.get('portfolio_current_value') 
+                # portfolio_daily_change = request.json.get('porfolio_daily_change')
+                # portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
+                # portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
+                # portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+
+                # print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+
+#             except Exception as e:
+#                 print(f"Error extracting data from request or portfolio: {e}")
+#                 return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
+
+#             # Create a task prompt for the LLM to generate analysis and suggestions
+#             funds -= portfolio_current_value
+#             print(f" Current funds available : {funds}")
+#             print(f"{portfolio_daily_change}")
+            
+#                 # # Best one so far :
+            
+
+            # task = f"""
+            #     You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
+            #     Based on the portfolio data provided:
+
+            #     - The available funds for the client are {funds}.
+            #     - The current value of the portfolio is {portfolio_current_value}.
+            #     - The portfolio's daily change is {portfolio_daily_change}.
+            #     - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+            #     - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+            #     - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+            #     - The risk tolerance of the client based on their investment personality is {investor_personality}.
+
+            #     Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+            #     and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
+            #     and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+
+            #     - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
+            #     - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
+            #     - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+
+            #     Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+
+            #     Additionally, provide:
+
+            #     1. A risk assessment of the current portfolio composition.
+            #     2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+            #     3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+            #     4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+            #     5. Strategies for tax efficiency in the portfolio management.
+            #     6. Insights on market trends and current economic news that could impact the portfolio.
+            #     7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+
+            #     Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+            #     Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+            #     """
+
+
+#             # Generate response using LLM (Generative AI Model)
+#             try:
+#                 model = genai.GenerativeModel('gemini-1.5-flash')
+#                 response = model.generate_content(task)
+
+#                 # Convert the response to markdown and then extract text
+#                 html_suggestions = markdown.markdown(response.text)
+#                 format_suggestions = markdown_to_text(html_suggestions)
+                # return jsonify({
+                #     "portfolio_current_value": portfolio_current_value,
+                #     "portfolio_daily_change": portfolio_daily_change,
+                #     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+                #     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                #     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+                #     "suggestion": format_suggestions
+                # }), 200
+
+#             except Exception as e:
+#                 print(f"Error generating suggestions from LLM: {e}")
+#                 return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
+        
+#         elif assetName == "stocks":
+#             portfolioList = request.json.get('portfolioList')
+#             pass
+        
+#         elif assetName == "bonds":
+#             pass
+            
+#     except Exception as e:
+#         print(f"Error in getting the correct assetName, passed : {assetName}")
+#         return jsonify({"message": f"Error in getting the correct assetName {assetName}"}),500
 
 
     
