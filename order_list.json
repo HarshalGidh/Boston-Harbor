@@ -262,5 +262,40 @@
             "UnitPrice": 232.14999389648438,
             "TransactionAmount": 1160.7499694824219
         }
+    ],
+    "SW7938": [
+        {
+            "Market": "Dow Jones",
+            "AssetClass": "Stocks",
+            "Date": "11/28/2024, 23:25:59",
+            "Action": "buy",
+            "Name": "Tesla",
+            "Symbol": "TSLA",
+            "Units": 3,
+            "UnitPrice": 332.8900146484375,
+            "TransactionAmount": 998.6700439453125
+        },
+        {
+            "Market": "NASDAQ",
+            "AssetClass": "Bonds",
+            "Date": "11/29/2024, 02:18:08",
+            "Action": "buy",
+            "Name": "Vanguard Total Bond Market ETF",
+            "Symbol": "BND",
+            "Units": 2,
+            "UnitPrice": 73.33000183105469,
+            "TransactionAmount": 146.66000366210938
+        },
+        {
+            "Market": "NASDAQ",
+            "AssetClass": "Commodities",
+            "Date": "11/29/2024, 02:18:41",
+            "Action": "buy",
+            "Name": "Commodities Index",
+            "Symbol": "COM",
+            "Units": 1,
+            "UnitPrice": 28.709999084472656,
+            "TransactionAmount": 28.709999084472656
+        }
     ]
 }

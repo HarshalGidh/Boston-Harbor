@@ -32,86 +32,7 @@ import seaborn as sns
 # Import things that are needed generically
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import BaseTool, StructuredTool, tool
-# Define functions to generate investment suggestions :\
-
-
-# # -------------------------------------Start Aws---------------------
-# import paramiko
-
-# # Set up the SSH key file, IP, username, and passphrase
-# key_path = "keys/aws_key.pem"  # Path to the converted .pem file
-# hostname = "172.31.15.173"  # AWS EC2 public IP address
-# username = "pragatidhobe"  # EC2 instance username
-# passphrase = "12345678"  # Passphrase, if any
-
-# # Create an SSH client instance
-# ssh_client = paramiko.SSHClient()
-# ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-# try:
-#     # Load SSH key
-#     key = paramiko.RSAKey.from_private_key_file(key_path, password=passphrase)
-
-#     # Connect to the instance
-#     ssh_client.connect(hostname=hostname, username=username, pkey=key)
-
-#     # Execute a command (example)
-#     stdin, stdout, stderr = ssh_client.exec_command("ls")
-#     print(stdout.read().decode())  # Print command output
-
-# except Exception as e:
-#     print(f"An error occurred: {e}")
-
-# finally:
-#     ssh_client.close()
-
-# # -------------------------------------End Aws---------------------
-
-
-import boto3
-
-# AWS keys
-aws_access_key = "AKIA6NLHKOWCE7UXAPLX"
-aws_secret_key = "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"
-S3_bucket_name = "boston-harbor-data"  # bucket name
-client_summary_folder = "client_summary_folder/"  # bucket name
-suggestions_folder = "suggestions_folder/"  # bucket name
-order_list_folder = "order_list_folder/"  # bucket name
-portfolio_list_folder = "portfolio_list_folder/"  # bucket name
-personality_assessment_folder = "personality_assessment_folder/"  # bucket name
-
-# Connecting to Amazon S3
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=aws_access_key,
-    aws_secret_access_key=aws_secret_key
-)
-
-def list_s3_keys(bucket_name, prefix=""):
-    try:
-        # List objects in the bucket with the given prefix
-        response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-        if 'Contents' in response:
-            print("Keys in the S3 folder:")
-            for obj in response['Contents']:
-                print(obj['Key'])
-        else:
-            print("No files found in the specified folder.")
-    except Exception as e:
-        print(f"Error listing objects in S3: {e}")
-
-# Call the function
-list_s3_keys(S3_bucket_name, order_list_folder)
-
-
-
-
-# =------------------------------------------------------=
-
-
-
-
-
+# Define functions to generate investment suggestions :
 
 load_dotenv()
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -1255,13 +1176,14 @@ from collections import defaultdict
 #     print(f"DATA extracted from Responses : {data}")
 #     return data
 
-# new coden:
-def extract_numerical_data(response):
-    # Patterns for different sections
+
+
+def extract_numerical_data(response): # curr version but cant capture annual return 
+    # Define patterns to match different sections and their respective allocations
     patterns = {
-        'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
-        'Conservative Investments': re.compile(r'Conservative Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
-        'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns.*?:\s*(.*?)$', re.DOTALL)
+        'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+        'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+        'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
     }
 
     data = defaultdict(dict)
@@ -1270,118 +1192,59 @@ def extract_numerical_data(response):
         match = pattern.search(response)
         if match:
             investments_text = match.group(1)
-            # Extract investment details
-            investment_pattern = re.compile(r'([\w\s&/-]+?)\s*\((\d+%)-(\d+%)\)')
+            # Extract individual investment types and their allocations
+            investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
             for investment_match in investment_pattern.findall(investments_text):
                 investment_type, min_allocation, max_allocation = investment_match
                 data[section][investment_type.strip()] = {
-                    'min': min_allocation.strip(),
-                    'max': max_allocation.strip()
+                    'min': min_allocation,
+                    'max': max_allocation
                 }
 
-    # Extract additional details
-    time_horizon_pattern = re.compile(r'Time Horizon.*?(\d+)-(\d+)\s*years', re.IGNORECASE)
+    # Extract time horizon and expected returns
+    time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-    min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
-    max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
+    min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+    max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
 
     time_horizon_match = time_horizon_pattern.search(response)
+    min_return_match = min_return_pattern.search(response)
+    max_return_match = max_return_pattern.search(response)
+    min_growth_match = min_growth_pattern.search(response)
+    max_growth_match = max_growth_pattern.search(response)
+
     if time_horizon_match:
         data['Time Horizon'] = {
-            'min_years': int(time_horizon_match.group(1)),
-            'max_years': int(time_horizon_match.group(2))
+            'min_years': time_horizon_match.group(1),
+            'max_years': time_horizon_match.group(2)
         }
 
-    min_return_match = min_return_pattern.search(response)
     if min_return_match:
         data['Expected Annual Return'] = {
             'min': min_return_match.group(1),
             'max': min_return_match.group(2)
         }
 
-    max_growth_match = max_growth_pattern.search(response)
-    if max_growth_match:
-        data['Expected Growth in Dollars'] = {
-            'min': int(max_growth_match.group(1).replace(',', '')),
-            'max': int(max_growth_match.group(2).replace(',', ''))
+    if max_return_match:
+        data['Expected Annual Return'] = {
+            'min': max_return_match.group(1),
+            'max': max_return_match.group(2)
         }
 
-    print("Section Data Extracted:", data)
-    print("Growth-Oriented Investments:", data.get('Growth-Oriented Investments', 'Not Found'))
-    print("Conservative Investments:", data.get('Conservative Investments', 'Not Found'))
-    print("Time Horizon Data:", data.get('Time Horizon', 'Not Found'))
+    if min_growth_match:
+        data['Expected Growth in Dollars'] = {
+            'min': min_growth_match.group(1),
+            'max': min_growth_match.group(2)
+        }
 
+    if max_growth_match:
+        data['Expected Growth in Dollars'] = {
+            'min': max_growth_match.group(1),
+            'max': max_growth_match.group(2)
+        }
+    print(f"Data Extracted from Response : {data}")
     return data
-
-
-# def extract_numerical_data(response): # curr version but cant capture annual return 
-#     # Define patterns to match different sections and their respective allocations
-#     patterns = {
-#         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-#         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-#         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
-#     }
-
-#     data = defaultdict(dict)
-
-#     for section, pattern in patterns.items():
-#         match = pattern.search(response)
-#         if match:
-#             investments_text = match.group(1)
-#             # Extract individual investment types and their allocations
-#             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
-#             for investment_match in investment_pattern.findall(investments_text):
-#                 investment_type, min_allocation, max_allocation = investment_match
-#                 data[section][investment_type.strip()] = {
-#                     'min': min_allocation,
-#                     'max': max_allocation
-#                 }
-
-#     # Extract time horizon and expected returns
-#     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
-#     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-#     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-#     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-#     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-
-#     time_horizon_match = time_horizon_pattern.search(response)
-#     min_return_match = min_return_pattern.search(response)
-#     max_return_match = max_return_pattern.search(response)
-#     min_growth_match = min_growth_pattern.search(response)
-#     max_growth_match = max_growth_pattern.search(response)
-
-#     if time_horizon_match:
-#         data['Time Horizon'] = {
-#             'min_years': time_horizon_match.group(1),
-#             'max_years': time_horizon_match.group(2)
-#         }
-
-#     if min_return_match:
-#         data['Expected Annual Return'] = {
-#             'min': min_return_match.group(1),
-#             'max': min_return_match.group(2)
-#         }
-
-#     if max_return_match:
-#         data['Expected Annual Return'] = {
-#             'min': max_return_match.group(1),
-#             'max': max_return_match.group(2)
-#         }
-
-#     if min_growth_match:
-#         data['Expected Growth in Dollars'] = {
-#             'min': min_growth_match.group(1),
-#             'max': min_growth_match.group(2)
-#         }
-
-#     if max_growth_match:
-#         data['Expected Growth in Dollars'] = {
-#             'min': max_growth_match.group(1),
-#             'max': max_growth_match.group(2)
-#         }
-#     print(f"Data Extracted from Response : {data}")
-#     return data
 
 def normalize_allocations(allocations):
     total = sum(allocations)
@@ -2557,298 +2420,59 @@ def save_to_word_file(data, file_name):
 @app.route('/submit-client-data', methods=['POST'])
 def submit_client_data():
     try:
-        # Parse JSON payload
         data = request.get_json()
-        if not data:
-            return jsonify({'message': 'Invalid or missing request payload'}), 400
+        print(data)
+        # Generate the unique ID
+        client_name = data['clientDetail']['clientName']
         
-        # Extract client details
-        client_name = data.get('clientDetail', {}).get('clientName')
-        unique_id = data.get('uniqueId')
+        # unique_id = generate_unique_id(client_name)
+        # unique_id = data['clientDetail']['uniqueId']
         
-        if not client_name or not unique_id:
-            return jsonify({'message': 'Client name and unique ID are required'}), 400
-
-        print(f"Processing data for client: {client_name}, ID: {unique_id}")
+        unique_id = data['uniqueId']
+        print(unique_id)
         
-        # Define the S3 key
-        s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
+        data['uniqueId'] = unique_id
         
-        # Check if the client data already exists in S3
-        try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
-            existing_data = json.loads(response['Body'].read().decode('utf-8'))
-            is_update = True
-            print(f"Existing data found for unique ID: {unique_id}")
-        except s3.exceptions.NoSuchKey:
-            existing_data = {}
-            is_update = False
-            print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
+        # Save the data to a Word file
         
-        # Merge or replace the existing data (logic can vary based on requirements)
-        if is_update:
-            existing_data.update(data)
-            data_to_save = existing_data
-        else:
-            data_to_save = data
+        file_name = unique_id
+        # save_to_word_file(data, file_name)
+        save_to_word_file(data, file_name)
         
-        # Save the updated or new data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_bucket_name,
-                Key=s3_key,
-                Body=json.dumps(data_to_save),
-                ContentType="application/json"
-            )
-            action = "updated" if is_update else "created"
-            print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
-        except Exception as s3_error:
-            logging.error(f"Error uploading data to S3: {s3_error}")
-            return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
-        
-        # Return a success response
         return jsonify({
-            'message': f'Client data successfully {action}.',
-            'uniqueId': unique_id
+            'message': 'Client data received and saved successfully.'
         }), 200
-
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-        return jsonify({'message': f"An error occurred: {e}"}), 500
-
-@app.route('/get-all-client-data', methods=['GET'])
-def get_all_client_data():
-    try:
-        # List objects in the S3 bucket
-        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix="client_summary_folder")
-        
-        # Check if there are any objects in the bucket
-        if 'Contents' in response:
-            all_data = []
-            for obj in response['Contents']:
-                # Get the object content
-                try:
-                    file_key = obj['Key']
-                    # Retrieve and decode file content
-                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
-                    file_data = file_response['Body'].read().decode('utf-8')
-                     # Parse the file content as JSON
-                    data_json = json.loads(file_data)
-                    all_data.append(data_json)
-                except Exception as e:
-                    print(f"Error reading file {obj['Key']}: {e}")
-                    continue
-            
-            return jsonify({
-                # 'message': 'All client data retrieved successfully.',
-                'data': all_data
-            }), 200
-        
-        else:
-            return jsonify({'message': 'No client data found in the bucket.'}), 404
-
-    except Exception as e:
-        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-
-
-@app.route('/get-client-data-by-id', methods=['GET'])
-def get_client_data():
-    try:
-        # Retrieve client_id from query parameters
-        client_id = request.args.get('client_id')
-        
-        # Validate the client_id
-        if not client_id:
-            return jsonify({'message': 'client_id is required as a query parameter'}), 400
-
-        # Define the S3 key for the object
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-
-        # Retrieve the object from S3
-        try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
-            # Decode and parse the JSON data
-            client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
-            return jsonify({
-                'message': 'Client data retrieved successfully.',
-                'data': client_data
-            }), 200
-        except s3.exceptions.NoSuchKey:
-            return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-        except Exception as e:
-            return jsonify({'message': f"Error retrieving data: {e}"}), 500
-
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
+# Determine Investment personality through the investor assesmnet tab : 
 @app.route('/investor-personality-assessment', methods=['POST'])
-async def investor_personality_assessment():
+def investor_personality_assessment():
     try:
-        # Parse incoming request data
-        data = request.json
-        logging.debug(f"Received request data: {data}")
-        
-        if not data:
-            logging.error("No data received in the request.")
-            return jsonify({'message': 'Invalid request: No data received.'}), 400
-
+        # Collecting client name and assessment data
+        data = request.json  # Expecting JSON input
+        # client_name = data.get('client_name')
         client_id = data.get('client_id')
-        assessment_data = data.get('assessment_data')
-
-        if not client_id or not assessment_data:
-            logging.error("Missing client_id or assessment_data.")
-            return jsonify({'message': 'Client ID and assessment data are required.'}), 400
-
-        # Determine the investment personality
-        personality = await determine_investment_personality(assessment_data)
-        logging.info(f"Determined personality for client ID {client_id}: {personality}")
+        assessment_data = data.get('assessment_data')  
         
-          # Define the S3 key for client data
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-        existing_data = None
-
-        # Check for existing client data in S3 (to store investment_personality in client detail)
-        try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
-            existing_data = json.loads(response['Body'].read().decode('utf-8'))
-            logging.info(f"Existing data found for client ID {client_id}: {existing_data}")
-        except s3.exceptions.NoSuchKey:
-            logging.error(f"No existing client data found for client ID {client_id}.")
-            return jsonify({'message': f"No existing client data found for client ID {client_id}."}), 404
-
-        # Update the existing data with the new investment personality
-        if existing_data:
-            existing_data['investment_personality'] = personality
-            logging.info(f"Updated investment personality for client ID {client_id}: {personality}")
+        # if not client_id or not assessment_data:
+        #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
         
-        # Save the updated data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_bucket_name,
-                Key=s3_key,
-                Body=json.dumps(existing_data),
-                ContentType='application/json'
-            )
-            logging.info(f"Client data successfully updated in S3 for client ID: {client_id}")
-        except Exception as e:
-            logging.error(f"Error occurred while saving updated data to S3: {e}")
-            return jsonify({'message': f'Error occurred while saving updated data to S3: {e}'}), 500
+        logging.info(f"Received assessment data for client with client id : {client_id}")
 
+        # Pass the assessment data to determine the investment personality
+        personality = asyncio.run(determine_investment_personality(assessment_data))
+        logging.info(f"Determined personality for {client_id}: {personality}")
 
-        # Check if the file exists in S3
-        file_key = f"{personality_assessment_folder}{client_id}.json"
-        existing_file_data = None
-
-        try:
-            file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
-            file_data = file_response['Body'].read().decode('utf-8')
-            existing_file_data = json.loads(file_data)
-            logging.info(f"Existing file data for client ID {client_id}: {existing_file_data}")
-        except s3.exceptions.NoSuchKey:
-            logging.info(f"No existing file found for client ID {client_id}. Creating a new file.")
-
-        # Update or create data
-        updated_data = {
+        # Return the personality and client id in response
+        return jsonify({
             'client_id': client_id,
-            'assessment_data': assessment_data,
             'investment_personality': personality
-        }
-
-        if existing_file_data:
-            # Update the existing file with new data
-            existing_file_data.update(updated_data)
-            updated_data = existing_file_data
-            logging.info(f"Updated data for client ID {client_id}: {updated_data}")
-
-        # Save the data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_bucket_name,
-                Key=file_key,
-                Body=json.dumps(updated_data),
-                ContentType='application/json'
-            )
-            logging.info(f"Data successfully saved to S3 for clientId: {client_id}")
-        except Exception as e:
-            logging.error(f"Error occurred while saving to S3: {e}")
-            return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
-
-        # Return the result
-        return jsonify(updated_data), 200
-        # return jsonify({
-        #     'message': 'Data saved successfully',
-        #     'client_id': client_id,
-        #     'data': assessment_data,
-        #     'investment_personality': personality
-        # }), 200
-
+        }), 200
+    
     except Exception as e:
-        logging.error(f"Unhandled exception: {e}")
-        return jsonify({'message': 'Internal Server Error'}), 500
- 
-@app.route('/get-personality-assessment', methods=['POST'])
-def get_client_data_by_id():
-    try:
-        # Parse incoming request data
-        payload = request.json
-        logging.info(f"Received request payload: {payload}")
-
-        # Validate the payload
-        if not payload or 'client_id' not in payload:
-            logging.error("Invalid request: Missing client_id in payload.")
-            return jsonify({'message': 'client_id is required in the payload.'}), 400
-
-        client_id = payload.get('client_id')
-
-        # Ensure client_id is a valid non-empty string
-        if not client_id or not isinstance(client_id, str):
-            logging.error("Invalid client_id: Must be a non-empty string.")
-            return jsonify({'message': 'client_id must be a non-empty string.'}), 400
-
-        # Define folder path for S3
-        folder_path = f"{personality_assessment_folder}"
-        logging.info(f"Looking for files in folder: {folder_path}")
-
-        # List objects in the folder
-        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix=folder_path)
-        logging.debug(f"S3 list_objects_v2 response: {response}")
-
-        # Check if the folder contains any objects
-        if 'Contents' not in response:
-            logging.warning(f"No files found in folder: {folder_path}")
-            return jsonify({'message': 'No data found in the specified folder.'}), 404
-
-        # Iterate through the files to find the matching client_id
-        for obj in response['Contents']:
-            file_key = obj['Key']
-
-            # Skip the folder itself and non-JSON files
-            if file_key == folder_path or not file_key.endswith('.json'):
-                continue
-
-            # Fetch file content if the file matches the client_id
-            if f"{client_id}.json" in file_key:
-                try:
-                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
-                    file_content = json.loads(file_response['Body'].read().decode('utf-8'))
-                    logging.info(f"Found and retrieved data for client_id {client_id}.")
-                    
-                    return jsonify({
-                        'message': 'Data fetched successfully.',
-                        'data': file_content  # Ensure the actual client data is nested in 'data'
-                    }), 200
-                except Exception as fetch_error:
-                    logging.error(f"Error retrieving file {file_key}: {fetch_error}")
-                    return jsonify({'message': 'Error retrieving client data from S3.'}), 500
-
-        # If no matching file is found
-        logging.warning(f"No data found for client_id {client_id}.")
-        return jsonify({'message': 'No data found for the provided client_id.'}), 404
-
-    except Exception as e:
-        logging.error(f"Unhandled exception: {e}")
+        logging.error(f"Error processing investor assessment: {e}")
         return jsonify({'message': 'Internal Server Error'}), 500
     
 
@@ -2867,6 +2491,7 @@ async def make_suggestions(investmentPersonality,clientName,financial_file="data
             
             print(f"Data passed : {financial_data}")
             
+            # Get api 
             financial_file = f"data\{financial_file}"
             
             print(f"Finished processing the File for the client : {financial_file}")
@@ -2897,53 +2522,101 @@ async def make_suggestions(investmentPersonality,clientName,financial_file="data
             
             # need to change the data extraction process : 
             data_extracted = extract_numerical_data(suggestions)
-            
-            min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                            [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-            max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                            [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+            # Fixing pie and bar chart generation
+            growth_investments = data_extracted.get('Growth-Oriented Investments', {})
+            conservative_investments = data_extracted.get('Conservative Investments', {})
 
-            # Normalize allocations
+            # Generate normalized allocations
+            min_allocations = [int(growth_investments[label]['min'].strip('%')) for label in growth_investments] + \
+                            [int(conservative_investments[label]['min'].strip('%')) for label in conservative_investments]
+            max_allocations = [int(growth_investments[label]['max'].strip('%')) for label in growth_investments] + \
+                            [int(conservative_investments[label]['max'].strip('%')) for label in conservative_investments]
+
+            # Normalize
             min_allocations = normalize_allocations(min_allocations)
             max_allocations = normalize_allocations(max_allocations)
 
-            # Update Bar Chart Data
+            # Bar Chart
             bar_chart_data = {
-                'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-                'datasets': [{
-                    'label': 'Allocation for Min returns',
-                    'data': min_allocations,
-                    'backgroundColor': 'skyblue'
-                },
-                {
-                    'label': 'Allocation for Max returns',
-                    'data': max_allocations,
-                    'backgroundColor': 'lightgreen'
-                }]
+                'labels': list(growth_investments.keys()) + list(conservative_investments.keys()),
+                'datasets': [
+                    {'label': 'Allocation for Min returns', 'data': min_allocations, 'backgroundColor': 'skyblue'},
+                    {'label': 'Allocation for Max returns', 'data': max_allocations, 'backgroundColor': 'lightgreen'}
+                ]
             }
 
-            # Similar changes can be made for the Pie Chart Data:
-            all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+            # Pie Chart
+            all_labels = list({**growth_investments, **conservative_investments}.keys())
             num_labels = len(all_labels)
             max_allocations_for_pie = normalize_allocations(
-                [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-                [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+                [int(growth_investments.get(label, {}).get('max', '0').strip('%')) for label in growth_investments] +
+                [int(conservative_investments.get(label, {}).get('max', '0').strip('%')) for label in conservative_investments]
             )
-            
-            # Generate colors based on the number of labels
-            dynamic_colors = generate_colors(num_labels)
 
-            # Update Pie Chart Data
+            # Normalize to 100% for pie chart
+            total = sum(max_allocations_for_pie)
+            max_allocations_for_pie = [(value / total) * 100 for value in max_allocations_for_pie]
+
+            dynamic_colors = generate_colors(num_labels)
             pie_chart_data = {
                 'labels': all_labels,
-                'datasets': [{
-                    'label': 'Investment Allocation',
-                    'data': max_allocations_for_pie,
-                    'backgroundColor': dynamic_colors,
-                    'hoverOffset': 4
-                }]
+                'datasets': [{'label': 'Investment Allocation', 'data': max_allocations_for_pie, 'backgroundColor': dynamic_colors, 'hoverOffset': 4}]
             }
+
+            print(f"Bar chart data: {bar_chart_data}")
+            print(f"Pie chart data: {pie_chart_data}")
+
+            # # prev code :
             
+            # min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+            #                 [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+            # max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+            #                 [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+            # # Normalize allocations
+            # min_allocations = normalize_allocations(min_allocations)
+            # max_allocations = normalize_allocations(max_allocations)
+
+            # # Update Bar Chart Data
+            # bar_chart_data = {
+            #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+            #     'datasets': [{
+            #         'label': 'Allocation for Min returns',
+            #         'data': min_allocations,
+            #         'backgroundColor': 'skyblue'
+            #     },
+            #     {
+            #         'label': 'Allocation for Max returns',
+            #         'data': max_allocations,
+            #         'backgroundColor': 'lightgreen'
+            #     }]
+            # }
+
+            # print(f"bar graph :"{bar_chart_data})
+            
+            # # Similar changes can be made for the Pie Chart Data:
+            # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+            # num_labels = len(all_labels)
+            # max_allocations_for_pie = normalize_allocations(
+            #     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+            #     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+            # )
+            
+            # # Generate colors based on the number of labels
+            # dynamic_colors = generate_colors(num_labels)
+
+            # # Update Pie Chart Data
+            # pie_chart_data = {
+            #     'labels': all_labels,
+            #     'datasets': [{
+            #         'label': 'Investment Allocation',
+            #         'data': max_allocations_for_pie,
+            #         'backgroundColor': dynamic_colors,
+            #         'hoverOffset': 4
+            #     }]
+            # }
+            
+            # print(f"pie chart data :"{pie_chart_data})
             
             # Prepare the data for the line chart with inflation adjustment
             initial_investment = 10000
@@ -3111,7 +2784,7 @@ def generate_investment_suggestions():
         answer = markdown_table_to_html(formatSuggestions)
         print(answer)
         data_extracted = extract_numerical_data(suggestions)
-
+        
         # Fixing pie and bar chart generation
         growth_investments = data_extracted.get('Growth-Oriented Investments', {})
         conservative_investments = data_extracted.get('Conservative Investments', {})
@@ -3156,6 +2829,8 @@ def generate_investment_suggestions():
         print(f"Bar chart data: {bar_chart_data}")
         print(f"Pie chart data: {pie_chart_data}")
 
+        # Prev Code :
+        
         # min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
         #                   [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
         # max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
@@ -3204,6 +2879,7 @@ def generate_investment_suggestions():
         # }
         
         # print(f"Pie Chart Data is : {pie_chart_data}")
+        
         # Prepare the data for the line chart with inflation adjustment
         initial_investment = 10000
         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
@@ -3735,28 +3411,30 @@ def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_va
     #     'Return on Investment (ROI)': roi
     # }
     
+    
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
     try:
         # Extract data from the request
         order_data = request.json.get('order_data')
-        client_name = request.json.get('client_name')
-        client_id = request.json.get('client_id')
+        client_name = request.json.get('client_name') #, 'Rohit Sharma')
+        client_id = request.json.get('client_id') #, 'RS4603')
         funds = request.json.get('funds')
         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+        
+        order_list_file = 'order_list.json'
+        
+        # Load existing data if available
+        if os.path.exists(order_list_file):
+            with open(order_list_file, 'r') as f:
+                client_transactions = json.load(f)
+        else:
+            client_transactions = {}
 
-        # File key for the S3 object
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-
-        # Load existing data from S3 if available
-        try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
-            client_transactions = json.loads(response['Body'].read().decode('utf-8'))
-            print(f"Loaded existing transactions for client {client_id}")
-        except s3.exceptions.NoSuchKey:
-            # Initialize a new transaction list if the file doesn't exist
-            client_transactions = []
-            print(f"No existing transactions for client {client_id}. Initializing new list.")
+        # Initialize a transaction list for the client if it doesn't exist
+        if client_id not in client_transactions:
+            client_transactions[client_id] = []
+            print(f"New client detected. Initializing transaction list for {client_id}")
 
         # Process Real Estate or other assets based on asset class
         assetClass = order_data.get('assetClass')
@@ -3771,8 +3449,8 @@ def order_placed():
                     "ownership": ownership,
                     "Date": order_data.get('date'),
                     "Name": order_data.get('name'),
-                    "TransactionAmount": order_data.get('investmentAmount'),
-                    "DividendYield": order_data.get('dividendYield')
+                    "TransactionAmount": order_data.get('investmentAmount'), # ('transactionAmount', 500),
+                    "DividendYield": order_data.get('dividendYield') #, 3.2)
                 }
             else:
                 # Direct real estate transaction
@@ -3798,15 +3476,15 @@ def order_placed():
                 "TransactionAmount": order_data.get('transactionAmount')
             }
 
-        # Append the new transaction to the client's transaction list
-        client_transactions.append(new_transaction)
-        print(f"Appended transaction for client {client_id}: {new_transaction}")
+        # Append the new transaction to the correct client's transaction list
+        client_transactions[client_id].append(new_transaction)
+        print(f"Appended transaction to client {client_id}: {new_transaction}")
 
-        # Save the updated data back to S3
-        updated_data = json.dumps(client_transactions, indent=4)
-        s3.put_object(Bucket=S3_bucket_name, Key=order_list_key, Body=updated_data)
-        print(f"Saved updated transactions for client {client_id} in S3 bucket.")
+        # Save the updated data back to the JSON file
+        with open(order_list_file, 'w') as f:
+            json.dump(client_transactions, f, indent=4)
 
+        print(f"Order for {client_name} ({client_id}) successfully placed.")
         return jsonify({"message": "Order placed successfully", "status": 200})
 
     except Exception as e:
@@ -3981,39 +3659,38 @@ def order_placed():
 @app.route('/show_order_list', methods=['POST'])
 def show_order_list():
     try:
-        # Get client_id from the request
-        client_id = request.json.get('client_id')
+        # Path to the JSON file to store transaction data
+        order_list_file = 'order_list.json'
 
-        if not client_id:
-            return jsonify({"message": "Client ID is required", "status": 400})
-
-        # Define the S3 file key for the given client ID
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-        print(f"clientIDDDD: {client_id}")
-
+        # Load existing transaction data from the JSON file (if it exists)
+        if os.path.exists(order_list_file):
+            with open(order_list_file, 'r') as f:
+                client_transactions = json.load(f)
+        else:
+            client_transactions = {}
         try:
-            # Fetch the file from the S3 bucket
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
-            file_content = response['Body'].read().decode('utf-8')
-
-            # Parse the file content as JSON
-            client_transactions = json.loads(file_content)
-            print(f"Retrieved transactions for client {client_id}: {client_transactions}")
-
-            return jsonify({"transaction_data": client_transactions, "status": 200})
-
-        except s3.exceptions.NoSuchKey:
-            # Handle case where the file does not exist in S3
-            print(f"No transactions found for client ID: {client_id}")
+            # Get client_id from the request
+            # client_id = 'RS4603'
+            
+            client_id = request.json.get('client_id')
+            
+        except Exception as e :
+            print(f"Error occurred while retrieving client ID: {e} \nClient ID: {client_id} ")
+            return jsonify({"message": f"Error occurred while retrieving client ID: {str(e)}"}), 400
+        
+        # If client_id is not provided or not found in the stored transactions
+        if not client_id or client_id not in client_transactions:
             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
 
-        except Exception as e:
-            print(f"Error occurred while fetching data from S3: {e}")
-            return jsonify({"message": f"Error occurred while fetching data from S3: {str(e)}"}), 500
+        # Retrieve the transactions for the given client_id
+        transactions_list = client_transactions[client_id]
+        print(transactions_list)
+        return jsonify({"transaction_data": transactions_list, "status": 200})
 
     except Exception as e:
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
+
 
 
 @app.route('/portfolio', methods=['POST'])
@@ -4023,34 +3700,19 @@ def portfolio():
         client_id = request.json.get('client_id') #, 'RS4603')
         curr_date = request.json.get('curr_date', None) # to be used to check market is open or closed
         # print(f"Portfolio of the client with client id is :{client_id}")
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-        # print(f"client_orders {order_list_key}")
-            
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-
-        #  Load existing data of order list from S3 if available
-        try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
-            client_orders = json.loads(response['Body'].read().decode('utf-8'))
-            print(f"client_orders {client_orders}")
-
-        except s3.exceptions.NoSuchKey:
-            # Initialize a new transaction list if the file doesn't exist
-            client_orders = []
-            print(f"No existing transactions for client {client_id}. Initializing new list.")
-
-
-           # Read the order_list.json file
-        # with open('order_list.json', 'r') as f:
-        #     order_list = json.load(f)
+            
+        # Read the order_list.json file
+        with open('order_list.json', 'r') as f:
+            order_list = json.load(f)
 
         # print(order_list)
 
-        # # Fetch orders for the client
-        # client_orders = order_list.get(client_id, [])
-        # # print(f"The orders are : {client_orders}")
+        # Fetch orders for the client
+        client_orders = order_list.get(client_id, [])
+        # print(f"The orders are : {client_orders}")
 
         # Check if any orders are found
         if not client_orders:
@@ -4065,7 +3727,7 @@ def portfolio():
 
         # Initialize an array to store the portfolio data
         portfolio_data = []
-        print(f"client_ordersclient_orders : {client_orders}")
+
         # Iterate over all transactions for the specific client
         portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc,portfolio_daily_value_change = 0,0,0,0,0,0
         for order in client_orders:
@@ -4128,7 +3790,7 @@ def portfolio():
                     except Exception as e:
                         # Handle exceptions more explicitly
                         print(f"Error fetching stock price for {ticker}: {str(e)}")
-                        return 0
+                        return None
 
         
                 current_price = fetch_current_stock_price(symbol)
@@ -4190,30 +3852,10 @@ def portfolio():
         portfolio_file_path = f'portfolio_{client_id}.json'
         with open(portfolio_file_path, 'w') as portfolio_file:
             json.dump(portfolio_data, portfolio_file, indent=4)
-            
-            portfolio_response = {
-            "portfolio_current_value":portfolio_current_value,
-            "porfolio_daily_change":porfolio_daily_change,
-            "portfolio_daily_change_perc":portfolio_daily_change_perc,
-            "portfolio_investment_gain_loss":portfolio_investment_gain_loss,
-            "portfolio_investment_gain_loss_perc":portfolio_investment_gain_loss_perc,
-            "portfolio_data": portfolio_data }
-            
-        try:
-            s3.put_object(
-                Bucket=S3_bucket_name,
-                # Key=f"responses/{clientId}_response.json",
-                Key=f"{portfolio_list_folder}/{client_id}.json",
-                Body=json.dumps(portfolio_response),
-                ContentType='application/json'
-            )
-            logging.info(f"Response successfully saved to S3 for client_id: {client_id}")
-        except Exception as e:
-            logging.error(f"Error occurred while saving to S3: {e}")
-            return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
-        
 
-        return jsonify(portfolio_response), 200
+        return jsonify({"portfolio_current_value":portfolio_current_value,"porfolio_daily_change":porfolio_daily_change,
+                        "portfolio_daily_change_perc":portfolio_daily_change_perc,"portfolio_investment_gain_loss":portfolio_investment_gain_loss,
+                        "portfolio_investment_gain_loss_perc":portfolio_investment_gain_loss_perc,"portfolio_data": portfolio_data }), 200
 
     except Exception as e:
         print(f"Error occured in portfolio : {e}")
@@ -4369,8 +4011,7 @@ def analyze_portfolio():
                     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
                     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
                     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-                    "suggestion": format_suggestions,
-                     "assetClass": assetName
+                    "suggestion": format_suggestions
             }), 200
 
         except Exception as e:
