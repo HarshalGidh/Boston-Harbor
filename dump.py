@@ -32,7 +32,86 @@ import seaborn as sns
 # Import things that are needed generically
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import BaseTool, StructuredTool, tool
-# Define functions to generate investment suggestions :
+# Define functions to generate investment suggestions :\
+
+
+# # -------------------------------------Start Aws---------------------
+# import paramiko
+
+# # Set up the SSH key file, IP, username, and passphrase
+# key_path = "keys/aws_key.pem"  # Path to the converted .pem file
+# hostname = "172.31.15.173"  # AWS EC2 public IP address
+# username = "pragatidhobe"  # EC2 instance username
+# passphrase = "12345678"  # Passphrase, if any
+
+# # Create an SSH client instance
+# ssh_client = paramiko.SSHClient()
+# ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+# try:
+#     # Load SSH key
+#     key = paramiko.RSAKey.from_private_key_file(key_path, password=passphrase)
+
+#     # Connect to the instance
+#     ssh_client.connect(hostname=hostname, username=username, pkey=key)
+
+#     # Execute a command (example)
+#     stdin, stdout, stderr = ssh_client.exec_command("ls")
+#     print(stdout.read().decode())  # Print command output
+
+# except Exception as e:
+#     print(f"An error occurred: {e}")
+
+# finally:
+#     ssh_client.close()
+
+# # -------------------------------------End Aws---------------------
+
+
+import boto3
+
+# AWS keys
+aws_access_key = "AKIA6NLHKOWCE7UXAPLX"
+aws_secret_key = "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"
+S3_bucket_name = "boston-harbor-data"  # bucket name
+client_summary_folder = "client_summary_folder/"  # bucket name
+suggestions_folder = "suggestions_folder/"  # bucket name
+order_list_folder = "order_list_folder/"  # bucket name
+portfolio_list_folder = "portfolio_list_folder/"  # bucket name
+personality_assessment_folder = "personality_assessment_folder/"  # bucket name
+
+# Connecting to Amazon S3
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=aws_access_key,
+    aws_secret_access_key=aws_secret_key
+)
+
+def list_s3_keys(bucket_name, prefix=""):
+    try:
+        # List objects in the bucket with the given prefix
+        response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        if 'Contents' in response:
+            print("Keys in the S3 folder:")
+            for obj in response['Contents']:
+                print(obj['Key'])
+        else:
+            print("No files found in the specified folder.")
+    except Exception as e:
+        print(f"Error listing objects in S3: {e}")
+
+# Call the function
+list_s3_keys(S3_bucket_name, order_list_folder)
+
+
+
+
+# =------------------------------------------------------=
+
+
+
+
+
 
 load_dotenv()
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -635,151 +714,246 @@ async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthl
         
         # New Prompt Template :
         
-        prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-                Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
-                Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
-                Also give the user detailed information about the investment how to invest,where to invest and how much they
-                should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
-                Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-                investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
-                Also give the user minimum and maximum expected growth in dollars for the time horizon .
-                Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
-                
-                You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+        prompt_template = investmentPersonality +   "\n" + """ 
+                                You are a Financial Advisor tasked with creating responsible investment suggestions for a client. Use the following instructions to ensure consistent output:
 
-                Step-by-Step Guidance:
-                1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
-                2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
-                3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
-                4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
-                5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
-                6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
-                7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
-                8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
-                
-                
-                Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
-                
-                Client's Financial Information :(# This is a header line have it in bold) 
-                
-                
-                Client Name: """ + clientName + """(# have the client name in underline)
+                                ---
 
-                Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis, This is a header line have it in bold. The data below it should be displayed in a table format so make sure of that data.There must be 2 columns 1 for Category and second for Value.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
-                
-                - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
-                
-                - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
-                
-                
-                - Monthly Liabilities: (# Monthly payments derived from liabilities)
-                
-                - Total Annual Income : (# Sum of all client's anual income)
-                
-                - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
-                
-                - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+                                ### Required Output Format:
 
+                                #### Client Financial Details:
+                                - **Client Name**: """ + clientName + """
+                                - **Assets**:
+                                - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+                                - **Liabilities**:
+                                - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+                                - **Other Details**:
+                                - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
 
-                Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
-                (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
-                (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
-                
-                (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
-                Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
-                
-                (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
-                I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
-                
-                (#If the financial is 1 or 2 only then give investment suggestions to the client)
-                
-                
-                
-                Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+                                #### Investment Allocation:
+                                Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+                                - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+                                - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+                                - **Target**: Describe the purpose of the investment.
+                                - **How to Invest**: Provide instructions on how to invest in this asset.
+                                - **Where to Invest**: Specify platforms or tools for making the investment.
 
-                Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+                                **Example**:
+                                **Growth-Oriented Investments**:
+                                - **Index Funds (S&P 500)**: `20% - 30%`
+                                - *Target*: Long-term growth potential aligned with the overall market performance.
+                                - *How to Invest*: Purchase shares of low-cost S&P 500 index funds through a brokerage account.
+                                - *Where to Invest*: Fidelity, Vanguard, Schwab.
 
-                
-                Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `X% - Y%`
+                                - **Maximum Expected Annual Return**: `X% - Y%`
+                                - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Time Horizon**: `Z years`
 
-                Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
-                How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
-                
-                Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
-                
-                ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
-                
-                Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
-                
-                Consider investing in blue-chip companies or growth sectors like technology. 
-                
-                
-                Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+                                ---
+
+                                ### Example Output:
+
+                                #### Client Financial Details:
+                                | Asset Type          | Current Value ($) | Annual Contribution ($) |
+                                |----------------------|-------------------|--------------------------|
+                                | 401(k), 403(b), 457  | 300               | 15                       |
+                                | Traditional IRA      | 200               | 15                       |
+                                | Roth IRA             | 500               | 28                       |
+                                | Cash/Bank Accounts   | 500,000           | 30,000                   |
+                                | Real Estate          | 1,000,000         | -                        |
+
+                                | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+                                |---------------------|-------------|--------------------|----------------------|
+                                | Mortgage            | 1,000       | 10                | 100                  |
+                                | Credit Card         | 400         | 8                 | 400                  |
+                                | Other Loans         | 500         | 6                 | 100                  |
+
+                                **Growth-Oriented Investments**:
+                                - **Index Funds (S&P 500)**: `20% - 30%`
+                                - *Target*: Long-term growth potential aligned with the market.
+                                - *How to Invest*: Purchase low-cost index funds.
+                                - *Where to Invest*: Fidelity, Vanguard, Schwab.
+
+                                **Conservative Investments**:
+                                - **High-Yield Savings Account**: `30% - 40%`
+                                - *Target*: Maintain liquidity for emergencies.
+                                - *How to Invest*: Deposit funds into an FDIC-insured account.
+                                - *Where to Invest*: Ally Bank, Capital One 360.
+
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `4% - 6%`
+                                - **Maximum Expected Annual Return**: `8% - 12%`
+                                - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+                                - **Maximum Expected Growth in Dollars**: `$8,000 - $12,000`
+                                - **Time Horizon**: `1 year`
+
+                                ---
+
+                                Ensure the output strictly follows this structure.
 
 
-                Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
-                
-                
-                Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+                            ### Rationale for Investment Suggestions:
+                            Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
 
-                Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
-                How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
-                
-                Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
-                
-                Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
-                
-                Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
-                
-                Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
-                
-                Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
-                
-                Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+                            ---
+                            <context>
+                            {context}
+                            </context>
+                            Question: {input}
+
+        """
 
 
-                Time Horizon and Expected Returns:
 
-                Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+        # Wasnt consistent for generating the Bar Graph and Pie Chart :
+        # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+        #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
+        #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
+        #         Also give the user detailed information about the investment how to invest,where to invest and how much they
+        #         should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+        #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+        #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
+        #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
+        #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
+                
+        #         You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+
+        #         Step-by-Step Guidance:
+        #         1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
+        #         2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
+        #         3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
+        #         4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+        #         5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+        #         6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+        #         7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+        #         8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
                 
                 
-                Minimum Expected Annual Return: 4% - 6% 
+        #         Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
+                
+        #         Client's Financial Information :(# This is a header line have it in bold) 
                 
                 
-                Maximum Expected Annual Return: 8% - 10% 
+        #         Client Name: """ + clientName + """(# have the client name in underline)
+
+        #         Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis, This is a header line have it in bold. The data below it should be displayed in a table format so make sure of that data.There must be 2 columns 1 for Category and second for Value.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
+                
+        #         - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
+                
+        #         - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
                 
                 
-                Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
-                Minimum Expected Growth in Dollars: 
+        #         - Monthly Liabilities: (# Monthly payments derived from liabilities)
                 
-                4,000−6,000 (over 10 years) 
+        #         - Total Annual Income : (# Sum of all client's anual income)
+                
+        #         - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
+                
+        #         - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+
+
+        #         Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
+        #         (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
+        #         (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
+                
+        #         (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
+        #         Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
+                
+        #         (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
+        #         I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
+                
+        #         (#If the financial is 1 or 2 only then give investment suggestions to the client)
                 
                 
-                Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+                
+        #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+
+        #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
 
                 
-                Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+        #         Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+        #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+        #         How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
+                
+        #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+                
+        #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+                
+        #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+                
+        #         Consider investing in blue-chip companies or growth sectors like technology. 
+                
+                
+        #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+
+
+        #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+        #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+        #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+        #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+        #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+        #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+        #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+        #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+        #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+        #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+
+        #         Time Horizon and Expected Returns:
+
+        #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
+        #         Minimum Expected Annual Return: 4% - 6% 
+                
+                
+        #         Maximum Expected Annual Return: 8% - 10% 
+                
+                
+        #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
+        #         Minimum Expected Growth in Dollars: 
+                
+        #         4,000−6,000 (over 10 years) 
+                
+                
+        #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+        #         Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
                    
                     
-                Rationale for Investment Suggestions:
+        #         Rationale for Investment Suggestions:
 
-                This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+        #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
 
                 
-                Important Considerations:
+        #         Important Considerations:
 
-                Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+        #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
 
-                Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+        #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
 
-                Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
-                <context>
-                {context}
-                </context>
-                Question: {input}"""
+                # Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
+                # <context>
+                # {context}
+                # </context>
+                # Question: {input}"""
 
         
         # # Without category and value :
@@ -1176,14 +1350,13 @@ from collections import defaultdict
 #     print(f"DATA extracted from Responses : {data}")
 #     return data
 
-
-
-def extract_numerical_data(response): # curr version but cant capture annual return 
-    # Define patterns to match different sections and their respective allocations
+# new coden:
+def extract_numerical_data(response):
+    # Patterns for different sections
     patterns = {
-        'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-        'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-        'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+        'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
+        'Conservative Investments': re.compile(r'Conservative Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
+        'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns.*?:\s*(.*?)$', re.DOTALL)
     }
 
     data = defaultdict(dict)
@@ -1192,59 +1365,118 @@ def extract_numerical_data(response): # curr version but cant capture annual ret
         match = pattern.search(response)
         if match:
             investments_text = match.group(1)
-            # Extract individual investment types and their allocations
-            investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+            # Extract investment details
+            investment_pattern = re.compile(r'([\w\s&/-]+?)\s*\((\d+%)-(\d+%)\)')
             for investment_match in investment_pattern.findall(investments_text):
                 investment_type, min_allocation, max_allocation = investment_match
                 data[section][investment_type.strip()] = {
-                    'min': min_allocation,
-                    'max': max_allocation
+                    'min': min_allocation.strip(),
+                    'max': max_allocation.strip()
                 }
 
-    # Extract time horizon and expected returns
-    time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+    # Extract additional details
+    time_horizon_pattern = re.compile(r'Time Horizon.*?(\d+)-(\d+)\s*years', re.IGNORECASE)
     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-    min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-    max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+    min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
+    max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
 
     time_horizon_match = time_horizon_pattern.search(response)
-    min_return_match = min_return_pattern.search(response)
-    max_return_match = max_return_pattern.search(response)
-    min_growth_match = min_growth_pattern.search(response)
-    max_growth_match = max_growth_pattern.search(response)
-
     if time_horizon_match:
         data['Time Horizon'] = {
-            'min_years': time_horizon_match.group(1),
-            'max_years': time_horizon_match.group(2)
+            'min_years': int(time_horizon_match.group(1)),
+            'max_years': int(time_horizon_match.group(2))
         }
 
+    min_return_match = min_return_pattern.search(response)
     if min_return_match:
         data['Expected Annual Return'] = {
             'min': min_return_match.group(1),
             'max': min_return_match.group(2)
         }
 
-    if max_return_match:
-        data['Expected Annual Return'] = {
-            'min': max_return_match.group(1),
-            'max': max_return_match.group(2)
-        }
-
-    if min_growth_match:
-        data['Expected Growth in Dollars'] = {
-            'min': min_growth_match.group(1),
-            'max': min_growth_match.group(2)
-        }
-
+    max_growth_match = max_growth_pattern.search(response)
     if max_growth_match:
         data['Expected Growth in Dollars'] = {
-            'min': max_growth_match.group(1),
-            'max': max_growth_match.group(2)
+            'min': int(max_growth_match.group(1).replace(',', '')),
+            'max': int(max_growth_match.group(2).replace(',', ''))
         }
-    print(f"Data Extracted from Response : {data}")
+
+    print("Section Data Extracted:", data)
+    print("Growth-Oriented Investments:", data.get('Growth-Oriented Investments', 'Not Found'))
+    print("Conservative Investments:", data.get('Conservative Investments', 'Not Found'))
+    print("Time Horizon Data:", data.get('Time Horizon', 'Not Found'))
+
     return data
+
+
+# def extract_numerical_data(response): # curr version but cant capture annual return 
+#     # Define patterns to match different sections and their respective allocations
+#     patterns = {
+#         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+#         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+#         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+#     }
+
+#     data = defaultdict(dict)
+
+#     for section, pattern in patterns.items():
+#         match = pattern.search(response)
+#         if match:
+#             investments_text = match.group(1)
+#             # Extract individual investment types and their allocations
+#             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+#             for investment_match in investment_pattern.findall(investments_text):
+#                 investment_type, min_allocation, max_allocation = investment_match
+#                 data[section][investment_type.strip()] = {
+#                     'min': min_allocation,
+#                     'max': max_allocation
+#                 }
+
+#     # Extract time horizon and expected returns
+#     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+#     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+#     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+#     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+#     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+
+#     time_horizon_match = time_horizon_pattern.search(response)
+#     min_return_match = min_return_pattern.search(response)
+#     max_return_match = max_return_pattern.search(response)
+#     min_growth_match = min_growth_pattern.search(response)
+#     max_growth_match = max_growth_pattern.search(response)
+
+#     if time_horizon_match:
+#         data['Time Horizon'] = {
+#             'min_years': time_horizon_match.group(1),
+#             'max_years': time_horizon_match.group(2)
+#         }
+
+#     if min_return_match:
+#         data['Expected Annual Return'] = {
+#             'min': min_return_match.group(1),
+#             'max': min_return_match.group(2)
+#         }
+
+#     if max_return_match:
+#         data['Expected Annual Return'] = {
+#             'min': max_return_match.group(1),
+#             'max': max_return_match.group(2)
+#         }
+
+#     if min_growth_match:
+#         data['Expected Growth in Dollars'] = {
+#             'min': min_growth_match.group(1),
+#             'max': min_growth_match.group(2)
+#         }
+
+#     if max_growth_match:
+#         data['Expected Growth in Dollars'] = {
+#             'min': max_growth_match.group(1),
+#             'max': max_growth_match.group(2)
+#         }
+#     print(f"Data Extracted from Response : {data}")
+#     return data
 
 def normalize_allocations(allocations):
     total = sum(allocations)
@@ -2398,6 +2630,9 @@ def save_to_word_file(data, file_name):
     longTermCoClient = insurance_coverage.get('longTermCoClient')
     doc.add_paragraph(f"Long Term Client: Benefit - {longTermCoClient.get('benefitLongTermClient', '')} Monthly Pay - {longTermCoClient.get('monthlyPayLongTermClient', '')}")
     
+    investmentAmount = insurance_coverage.get('investmentAmount')
+    doc.add_paragraph(f"Investment Amount Available : {investmentAmount}")
+                      
     # Goal Fields
     goal_fields = data.get('goalFields', [])
     for goal in goal_fields:
@@ -2417,59 +2652,298 @@ def save_to_word_file(data, file_name):
 @app.route('/submit-client-data', methods=['POST'])
 def submit_client_data():
     try:
+        # Parse JSON payload
         data = request.get_json()
-        print(data)
-        # Generate the unique ID
-        client_name = data['clientDetail']['clientName']
+        if not data:
+            return jsonify({'message': 'Invalid or missing request payload'}), 400
         
-        # unique_id = generate_unique_id(client_name)
-        # unique_id = data['clientDetail']['uniqueId']
+        # Extract client details
+        client_name = data.get('clientDetail', {}).get('clientName')
+        unique_id = data.get('uniqueId')
         
-        unique_id = data['uniqueId']
-        print(unique_id)
+        if not client_name or not unique_id:
+            return jsonify({'message': 'Client name and unique ID are required'}), 400
+
+        print(f"Processing data for client: {client_name}, ID: {unique_id}")
         
-        data['uniqueId'] = unique_id
+        # Define the S3 key
+        s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
         
-        # Save the data to a Word file
+        # Check if the client data already exists in S3
+        try:
+            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            existing_data = json.loads(response['Body'].read().decode('utf-8'))
+            is_update = True
+            print(f"Existing data found for unique ID: {unique_id}")
+        except s3.exceptions.NoSuchKey:
+            existing_data = {}
+            is_update = False
+            print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
         
-        file_name = unique_id
-        # save_to_word_file(data, file_name)
-        save_to_word_file(data, file_name)
+        # Merge or replace the existing data (logic can vary based on requirements)
+        if is_update:
+            existing_data.update(data)
+            data_to_save = existing_data
+        else:
+            data_to_save = data
         
+        # Save the updated or new data back to S3
+        try:
+            s3.put_object(
+                Bucket=S3_bucket_name,
+                Key=s3_key,
+                Body=json.dumps(data_to_save),
+                ContentType="application/json"
+            )
+            action = "updated" if is_update else "created"
+            print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
+        except Exception as s3_error:
+            logging.error(f"Error uploading data to S3: {s3_error}")
+            return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
+        
+        # Return a success response
         return jsonify({
-            'message': 'Client data received and saved successfully.'
+            'message': f'Client data successfully {action}.',
+            'uniqueId': unique_id
         }), 200
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+
+@app.route('/get-all-client-data', methods=['GET'])
+def get_all_client_data():
+    try:
+        # List objects in the S3 bucket
+        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix="client_summary_folder")
+        
+        # Check if there are any objects in the bucket
+        if 'Contents' in response:
+            all_data = []
+            for obj in response['Contents']:
+                # Get the object content
+                try:
+                    file_key = obj['Key']
+                    # Retrieve and decode file content
+                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+                    file_data = file_response['Body'].read().decode('utf-8')
+                     # Parse the file content as JSON
+                    data_json = json.loads(file_data)
+                    all_data.append(data_json)
+                except Exception as e:
+                    print(f"Error reading file {obj['Key']}: {e}")
+                    continue
+            
+            return jsonify({
+                # 'message': 'All client data retrieved successfully.',
+                'data': all_data
+            }), 200
+        
+        else:
+            return jsonify({'message': 'No client data found in the bucket.'}), 404
+
+    except Exception as e:
+        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+
+
+@app.route('/get-client-data-by-id', methods=['GET'])
+def get_client_data():
+    try:
+        # Retrieve client_id from query parameters
+        client_id = request.args.get('client_id')
+        
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+        # Define the S3 key for the object
+        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+
+        # Retrieve the object from S3
+        try:
+            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            # Decode and parse the JSON data
+            client_data = json.loads(response['Body'].read().decode('utf-8'))
+            
+            return jsonify({
+                'message': 'Client data retrieved successfully.',
+                'data': client_data
+            }), 200
+        except s3.exceptions.NoSuchKey:
+            return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+        except Exception as e:
+            return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
-# Determine Investment personality through the investor assesmnet tab : 
 @app.route('/investor-personality-assessment', methods=['POST'])
-def investor_personality_assessment():
+async def investor_personality_assessment():
     try:
-        # Collecting client name and assessment data
-        data = request.json  # Expecting JSON input
-        # client_name = data.get('client_name')
+        # Parse incoming request data
+        data = request.json
+        logging.debug(f"Received request data: {data}")
+        
+        if not data:
+            logging.error("No data received in the request.")
+            return jsonify({'message': 'Invalid request: No data received.'}), 400
+
         client_id = data.get('client_id')
-        assessment_data = data.get('assessment_data')  
-        
-        # if not client_id or not assessment_data:
-        #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
-        
-        logging.info(f"Received assessment data for client with client id : {client_id}")
+        assessment_data = data.get('assessment_data')
 
-        # Pass the assessment data to determine the investment personality
-        personality = asyncio.run(determine_investment_personality(assessment_data))
-        logging.info(f"Determined personality for {client_id}: {personality}")
+        if not client_id or not assessment_data:
+            logging.error("Missing client_id or assessment_data.")
+            return jsonify({'message': 'Client ID and assessment data are required.'}), 400
 
-        # Return the personality and client id in response
-        return jsonify({
+        # Determine the investment personality
+        personality = await determine_investment_personality(assessment_data)
+        logging.info(f"Determined personality for client ID {client_id}: {personality}")
+        
+          # Define the S3 key for client data
+        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+        existing_data = None
+
+        # Check for existing client data in S3 (to store investment_personality in client detail)
+        try:
+            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            existing_data = json.loads(response['Body'].read().decode('utf-8'))
+            logging.info(f"Existing data found for client ID {client_id}: {existing_data}")
+        except s3.exceptions.NoSuchKey:
+            logging.error(f"No existing client data found for client ID {client_id}.")
+            return jsonify({'message': f"No existing client data found for client ID {client_id}."}), 404
+
+        # Update the existing data with the new investment personality
+        if existing_data:
+            existing_data['investment_personality'] = personality
+            logging.info(f"Updated investment personality for client ID {client_id}: {personality}")
+        
+        # Save the updated data back to S3
+        try:
+            s3.put_object(
+                Bucket=S3_bucket_name,
+                Key=s3_key,
+                Body=json.dumps(existing_data),
+                ContentType='application/json'
+            )
+            logging.info(f"Client data successfully updated in S3 for client ID: {client_id}")
+        except Exception as e:
+            logging.error(f"Error occurred while saving updated data to S3: {e}")
+            return jsonify({'message': f'Error occurred while saving updated data to S3: {e}'}), 500
+
+
+        # Check if the file exists in S3
+        file_key = f"{personality_assessment_folder}{client_id}.json"
+        existing_file_data = None
+
+        try:
+            file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+            file_data = file_response['Body'].read().decode('utf-8')
+            existing_file_data = json.loads(file_data)
+            logging.info(f"Existing file data for client ID {client_id}: {existing_file_data}")
+        except s3.exceptions.NoSuchKey:
+            logging.info(f"No existing file found for client ID {client_id}. Creating a new file.")
+
+        # Update or create data
+        updated_data = {
             'client_id': client_id,
+            'assessment_data': assessment_data,
             'investment_personality': personality
-        }), 200
-    
+        }
+
+        if existing_file_data:
+            # Update the existing file with new data
+            existing_file_data.update(updated_data)
+            updated_data = existing_file_data
+            logging.info(f"Updated data for client ID {client_id}: {updated_data}")
+
+        # Save the data back to S3
+        try:
+            s3.put_object(
+                Bucket=S3_bucket_name,
+                Key=file_key,
+                Body=json.dumps(updated_data),
+                ContentType='application/json'
+            )
+            logging.info(f"Data successfully saved to S3 for clientId: {client_id}")
+        except Exception as e:
+            logging.error(f"Error occurred while saving to S3: {e}")
+            return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
+
+        # Return the result
+        return jsonify(updated_data), 200
+        # return jsonify({
+        #     'message': 'Data saved successfully',
+        #     'client_id': client_id,
+        #     'data': assessment_data,
+        #     'investment_personality': personality
+        # }), 200
+
     except Exception as e:
-        logging.error(f"Error processing investor assessment: {e}")
+        logging.error(f"Unhandled exception: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
+ 
+@app.route('/get-personality-assessment', methods=['POST'])
+def get_client_data_by_id():
+    try:
+        # Parse incoming request data
+        payload = request.json
+        logging.info(f"Received request payload: {payload}")
+
+        # Validate the payload
+        if not payload or 'client_id' not in payload:
+            logging.error("Invalid request: Missing client_id in payload.")
+            return jsonify({'message': 'client_id is required in the payload.'}), 400
+
+        client_id = payload.get('client_id')
+
+        # Ensure client_id is a valid non-empty string
+        if not client_id or not isinstance(client_id, str):
+            logging.error("Invalid client_id: Must be a non-empty string.")
+            return jsonify({'message': 'client_id must be a non-empty string.'}), 400
+
+        # Define folder path for S3
+        folder_path = f"{personality_assessment_folder}"
+        logging.info(f"Looking for files in folder: {folder_path}")
+
+        # List objects in the folder
+        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix=folder_path)
+        logging.debug(f"S3 list_objects_v2 response: {response}")
+
+        # Check if the folder contains any objects
+        if 'Contents' not in response:
+            logging.warning(f"No files found in folder: {folder_path}")
+            return jsonify({'message': 'No data found in the specified folder.'}), 404
+
+        # Iterate through the files to find the matching client_id
+        for obj in response['Contents']:
+            file_key = obj['Key']
+
+            # Skip the folder itself and non-JSON files
+            if file_key == folder_path or not file_key.endswith('.json'):
+                continue
+
+            # Fetch file content if the file matches the client_id
+            if f"{client_id}.json" in file_key:
+                try:
+                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+                    file_content = json.loads(file_response['Body'].read().decode('utf-8'))
+                    logging.info(f"Found and retrieved data for client_id {client_id}.")
+                    
+                    return jsonify({
+                        'message': 'Data fetched successfully.',
+                        'data': file_content  # Ensure the actual client data is nested in 'data'
+                    }), 200
+                except Exception as fetch_error:
+                    logging.error(f"Error retrieving file {file_key}: {fetch_error}")
+                    return jsonify({'message': 'Error retrieving client data from S3.'}), 500
+
+        # If no matching file is found
+        logging.warning(f"No data found for client_id {client_id}.")
+        return jsonify({'message': 'No data found for the provided client_id.'}), 404
+
+    except Exception as e:
+        logging.error(f"Unhandled exception: {e}")
         return jsonify({'message': 'Internal Server Error'}), 500
     
 
@@ -2732,55 +3206,99 @@ def generate_investment_suggestions():
         answer = markdown_table_to_html(formatSuggestions)
         print(answer)
         data_extracted = extract_numerical_data(suggestions)
-        
-        min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                          [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-        max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                          [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
 
-        # Normalize allocations
+        # Fixing pie and bar chart generation
+        growth_investments = data_extracted.get('Growth-Oriented Investments', {})
+        conservative_investments = data_extracted.get('Conservative Investments', {})
+
+        # Generate normalized allocations
+        min_allocations = [int(growth_investments[label]['min'].strip('%')) for label in growth_investments] + \
+                        [int(conservative_investments[label]['min'].strip('%')) for label in conservative_investments]
+        max_allocations = [int(growth_investments[label]['max'].strip('%')) for label in growth_investments] + \
+                        [int(conservative_investments[label]['max'].strip('%')) for label in conservative_investments]
+
+        # Normalize
         min_allocations = normalize_allocations(min_allocations)
         max_allocations = normalize_allocations(max_allocations)
 
-        # Update Bar Chart Data
-        
+        # Bar Chart
         bar_chart_data = {
-            'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-            'datasets': [{
-                'label': 'Allocation for Min returns',
-                'data': min_allocations,
-                'backgroundColor': 'skyblue'
-            },
-            {
-                'label': 'Allocation for Max returns',
-                'data': max_allocations,
-                'backgroundColor': 'lightgreen'
-            }]
+            'labels': list(growth_investments.keys()) + list(conservative_investments.keys()),
+            'datasets': [
+                {'label': 'Allocation for Min returns', 'data': min_allocations, 'backgroundColor': 'skyblue'},
+                {'label': 'Allocation for Max returns', 'data': max_allocations, 'backgroundColor': 'lightgreen'}
+            ]
         }
 
-        # Similar changes can be made for the Pie Chart Data:
-        all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+        # Pie Chart
+        all_labels = list({**growth_investments, **conservative_investments}.keys())
         num_labels = len(all_labels)
         max_allocations_for_pie = normalize_allocations(
-            [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-            [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+            [int(growth_investments.get(label, {}).get('max', '0').strip('%')) for label in growth_investments] +
+            [int(conservative_investments.get(label, {}).get('max', '0').strip('%')) for label in conservative_investments]
         )
-        
-        # Generate colors based on the number of labels
-        dynamic_colors = generate_colors(num_labels)
 
-        # Update Pie Chart Data
+        # Normalize to 100% for pie chart
+        total = sum(max_allocations_for_pie)
+        max_allocations_for_pie = [(value / total) * 100 for value in max_allocations_for_pie]
+
+        dynamic_colors = generate_colors(num_labels)
         pie_chart_data = {
             'labels': all_labels,
-            'datasets': [{
-                'label': 'Investment Allocation',
-                'data': max_allocations_for_pie,
-                'backgroundColor': dynamic_colors,
-                'hoverOffset': 4
-            }]
+            'datasets': [{'label': 'Investment Allocation', 'data': max_allocations_for_pie, 'backgroundColor': dynamic_colors, 'hoverOffset': 4}]
         }
+
+        print(f"Bar chart data: {bar_chart_data}")
+        print(f"Pie chart data: {pie_chart_data}")
+
+        # min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+        #                   [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+        # max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+        #                   [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+        # # Normalize allocations
+        # min_allocations = normalize_allocations(min_allocations)
+        # max_allocations = normalize_allocations(max_allocations)
+
+        # # Update Bar Chart Data
         
-        print(f"Pie Chart Data is : {pie_chart_data}")
+        # bar_chart_data = {
+        #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+        #     'datasets': [{
+        #         'label': 'Allocation for Min returns',
+        #         'data': min_allocations,
+        #         'backgroundColor': 'skyblue'
+        #     },
+        #     {
+        #         'label': 'Allocation for Max returns',
+        #         'data': max_allocations,
+        #         'backgroundColor': 'lightgreen'
+        #     }]
+        # }
+
+        # # Similar changes can be made for the Pie Chart Data:
+        # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+        # num_labels = len(all_labels)
+        # max_allocations_for_pie = normalize_allocations(
+        #     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+        #     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+        # )
+        
+        # # Generate colors based on the number of labels
+        # dynamic_colors = generate_colors(num_labels)
+
+        # # Update Pie Chart Data
+        # pie_chart_data = {
+        #     'labels': all_labels,
+        #     'datasets': [{
+        #         'label': 'Investment Allocation',
+        #         'data': max_allocations_for_pie,
+        #         'backgroundColor': dynamic_colors,
+        #         'hoverOffset': 4
+        #     }]
+        # }
+        
+        # print(f"Pie Chart Data is : {pie_chart_data}")
         # Prepare the data for the line chart with inflation adjustment
         initial_investment = 10000
         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
@@ -3226,16 +3744,173 @@ def current_stock_price():
         if not current_price:
             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
             current_price = stock.history(period='1d')['Close'].iloc[-1]
+            return jsonify({"current_price":current_price})
         
+        if current_price is None:
+            # If still None, check for mutual fund-specific fields
+            print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+            fund_close_price = stock.history(period="1d")['Close']
+            if len(fund_close_price) > 0:
+                current_price = fund_close_price.iloc[-1]  # Last available closing price
+            return jsonify({"current_price":current_price})
+
+        # If everything fails, raise an error
+        if current_price is None:
+            raise ValueError(f"Unable to retrieve price for {ticker}.")
+
         return jsonify({"current_price":current_price})
     
     except Exception as e:
         print(f"Failed to retrieve the current price for {ticker} : {e}")
         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
-# # Global dictionary to store transaction data by client_id
-# client_transactions = {}
 
+@app.route('/dividend_yield', methods=['POST'])
+def dividend_yield():
+    
+    ticker_name = request.json.get('ticker')
+    # Create a Ticker object using yfinance
+    stock = yf.Ticker(ticker_name)
+    
+    # Fetch the stock information, including dividend yield
+    try:
+        dividend_yield = stock.info.get('dividendYield')
+        sector = stock.info.get('sector')
+        industry = stock.info.get('industry')
+
+        if dividend_yield is not None:
+            dividend_yield_percent = dividend_yield * 100  # Convert to percentage
+            print(f"The dividend yield for {ticker_name} is: {dividend_yield_percent:.2f}%")
+        else:
+            print(f"No dividend yield information available for {ticker_name}.")
+        
+        # Additional information check to verify it's a REIT or commercial real estate company
+        if industry and ('reit' in industry.lower() or 'real estate' in industry.lower()):
+            print(f"{ticker_name} belongs to the {industry} industry.")
+        else:
+            print(f"{ticker_name} may not be a REIT or a commercial real estate company.")
+        
+        return jsonify({'dividend_yield_percent': float(dividend_yield_percent) , "status": 200})
+    except Exception as e:
+        print(f"Error occurred while fetching data for {ticker_name}: {e}")
+
+# # Works well for real estate as well : 
+## Direct Ownership :
+def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
+                                        property_management_fees, maintenance_repairs, 
+                                        property_taxes, insurance, utilities, hoa_fees):
+    # 1. Calculate the Gross Rental Income (assuming 100% occupancy)
+    gross_rental_income = market_value * cap_rate
+    
+    # 2. Adjust for vacancy
+    effective_rental_income = gross_rental_income * (1 - vacancy_rate)
+    
+    # 3. Total Operating Expenses
+    operating_expenses = (property_management_fees + maintenance_repairs + property_taxes + 
+                          insurance + utilities + hoa_fees)
+    
+    # 4. Net Operating Income (NOI)
+    noi = effective_rental_income - operating_expenses
+    
+    # 5. Capital Expenditures (CapEx)
+    # CapEx are large expenses that increase property value but are not part of NOI
+    cash_flow_before_financing = noi - capex
+    
+    # 6. Return on Investment (ROI) assuming market value as initial investment
+    roi = (cash_flow_before_financing / market_value) * 100
+    
+    # Return a dictionary with all key metrics
+    return gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi
+    # return {
+    #     'Gross Rental Income': gross_rental_income,
+    #     'Effective Rental Income': effective_rental_income,
+    #     'Operating Expenses': operating_expenses,
+    #     'Net Operating Income (NOI)': noi,
+    #     'Cash Flow Before Financing': cash_flow_before_financing,
+    #     'Return on Investment (ROI)': roi
+    # }
+    
+@app.route('/order_placed', methods=['POST'])
+def order_placed():
+    try:
+        # Extract data from the request
+        order_data = request.json.get('order_data')
+        client_name = request.json.get('client_name')
+        client_id = request.json.get('client_id')
+        funds = request.json.get('funds')
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+
+        # File key for the S3 object
+        order_list_key = f"{order_list_folder}{client_id}_orders.json"
+
+        # Load existing data from S3 if available
+        try:
+            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+            print(f"Loaded existing transactions for client {client_id}")
+        except s3.exceptions.NoSuchKey:
+            # Initialize a new transaction list if the file doesn't exist
+            client_transactions = []
+            print(f"No existing transactions for client {client_id}. Initializing new list.")
+
+        # Process Real Estate or other assets based on asset class
+        assetClass = order_data.get('assetClass')
+        print(f"Processing Asset Class: {assetClass}")
+        
+        if assetClass == 'Real Estate':
+            ownership = order_data.get('ownership')
+            if ownership in ['REIT/Fund', 'Commercial Real Estate (Triple Net Lease)']:
+                # Real estate REIT/fund or commercial real estate transaction
+                new_transaction = {
+                    "AssetClass": assetClass,
+                    "ownership": ownership,
+                    "Date": order_data.get('date'),
+                    "Name": order_data.get('name'),
+                    "TransactionAmount": order_data.get('investmentAmount'),
+                    "DividendYield": order_data.get('dividendYield')
+                }
+            else:
+                # Direct real estate transaction
+                new_transaction = {
+                    "AssetClass": assetClass,
+                    "ownership": ownership,
+                    "Date": order_data.get('date'),
+                    "Name": order_data.get('name'),
+                    "estimated_annual_income": order_data.get('estimated_annual_income'),
+                    "estimated_yield": order_data.get('estimated_yield')
+                }
+        else:
+            # Standard transaction for Stocks, Bonds, etc.
+            new_transaction = {
+                "Market": order_data.get('market'),
+                "AssetClass": assetClass,
+                "Date": order_data.get('date'),
+                "Action": order_data.get('buy_or_sell'),
+                "Name": order_data.get('name'),
+                "Symbol": order_data.get('symbol'),
+                "Units": order_data.get('units'),
+                "UnitPrice": order_data.get('unit_price'),
+                "TransactionAmount": order_data.get('transactionAmount')
+            }
+
+        # Append the new transaction to the client's transaction list
+        client_transactions.append(new_transaction)
+        print(f"Appended transaction for client {client_id}: {new_transaction}")
+
+        # Save the updated data back to S3
+        updated_data = json.dumps(client_transactions, indent=4)
+        s3.put_object(Bucket=S3_bucket_name, Key=order_list_key, Body=updated_data)
+        print(f"Saved updated transactions for client {client_id} in S3 bucket.")
+
+        return jsonify({"message": "Order placed successfully", "status": 200})
+
+    except Exception as e:
+        print(f"Error occurred while placing order: {e}")
+        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+
+
+# # OG Code :
 # @app.route('/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
@@ -3244,215 +3919,401 @@ def current_stock_price():
 #         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
 #         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
 #         funds = request.json.get('funds')  # Example extra data if needed
-        
-#         # Assign default values if necessary
-#         if not order_data.get('date'):
-#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-#         units = order_data.get('units')
-#         # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
-#         buy_or_sell = order_data.get('buy_or_sell')
-
-#         # Create a dataframe with the relevant data
-#         data = {
-#             "Market": [order_data.get('market')],
-#             "AssetClass": [order_data.get('assetClass')],
-#             "Date": [order_data.get('date')],
-#             "Action": [order_data.get('buy_or_sell')],
-#             "Name": [order_data.get('name')],
-#             "Units": [order_data.get('units')],
-#             "Unit_Price": [order_data.get('unit_price')],
-#             "TransactionAmount": [order_data.get('transactionAmount')],
-#         }
-#         new_transaction = pd.DataFrame(data)
-        
-#         # If the client_id exists in our global dictionary, append the new transaction
-#         if client_id in client_transactions:
-#             client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
+#         print(f" Available Funds : {funds}")
+#         # Path to the JSON file to store transaction data
+#         order_list_file = 'order_list.json'
+ 
+#         # Load existing transaction data from the JSON file (if it exists)
+#         if os.path.exists(order_list_file):
+#             with open(order_list_file, 'r') as f:
+#                 client_transactions = json.load(f)
 #         else:
-#             # Create a new entry for the client_id if it doesn't exist
-#             client_transactions[client_id] = new_transaction
-        
-#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+#             client_transactions = {}
+       
+#         assetClass = order_data.get('assetClass')
+       
+#         if assetClass == 'Real Estate':
+#             ownership = order_data.get('ownership')
+#             if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
+#                 investment_amount = order_data.get('investment_amount')
+#                 dividend_yield = order_data.get('dividend_yield')
+#                 # estmated_annual_income = investment_amount * dividend_yield
+#                 # estmated_annual_yield = need current value to process this
+#                 # Create a dictionary with the relevant data
+#                 print(order_data)
+#                 new_transaction = {
+#                     "AssetClass": order_data.get('assetClass'),
+#                     "ownership": order_data.get('ownership'),
+#                     "Date": order_data.get('date'),
+#                     "Name": order_data.get('name'),
+#                     "TransactionAmount": order_data.get('TransactionAmount',500),
+#                     "DividendYield": order_data.get('DividendYield',3.2),
+#                     # "EstimatedAnnualIncome" : estmated_annual_income
+#                 }
+ 
+#                 # If the client_id exists in the JSON file, append the new transaction
+#                 if client_id in client_transactions:
+#                     client_transactions[client_id].append(new_transaction)
+#                 else:
+#                     # Create a new entry for the client_id if it doesn't exist
+#                     client_transactions[client_id] = [new_transaction]
+               
+#                 # Save the updated transactions back to the JSON file
+#                 with open(order_list_file, 'w') as f:
+#                     json.dump(client_transactions, f, indent=4)
+ 
+#                 print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+               
+#             elif ownership == 'Direct': # else
+#                 try:
+#                     name = request.json.get('name')
+#                     vacancy_rate = request.json.get('vacancy_rate',12)
+#                     capex = request.json.get('capex',15000)
+#                     cap_rate = request.json.get('cap_rate',5)
+#                     market_value = request.json.get('market_value',300000)
+#                     property_management_fees = request.json.get('property_management_fees',200)
+#                     maintenance_repairs = request.json.get('maintenance_repairs',150)
+#                     property_taxes = request.json.get('property_taxes',100)
+#                     insurance = request.json.get('insurance',280000)
+#                     utilities = request.json.get('utilities',500)
+#                     hoa_fees = request.json.get('hoa_fees',300)
+#                     print(name)
+#                     print(vacancy_rate)
+#                     print(capex)
+#                     print(cap_rate)
+#                     print(market_value)
+#                     print(property_management_fees)
+#                     print(maintenance_repairs)
+#                     print(property_taxes)
+#                     print(insurance)
+#                     print(utilities)
+#                     print(hoa_fees)
+                    
+#                     gross_rental_income,effective_rental_income,operating_expenses,noi,cash_flow_before_financing,roi = calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_value, 
+#                                         property_management_fees, maintenance_repairs, 
+#                                         property_taxes, insurance, utilities, hoa_fees)
+                    
+#                     print("--------------------------------")
+#                     print(f"{gross_rental_income}\n{effective_rental_income}\n{operating_expenses}\n{noi}\n{cash_flow_before_financing}\n{roi}")
+                    
+                    
+#                     # Annual Gross Rental Income calculation 
+#                     annual_gross_rental_income = gross_rental_income * 12
 
-#         return jsonify({"message": "Order placed successfully", "status": 200})
+#                     # Estimated Annual Income calculation 
+#                     estimated_annual_income = effective_rental_income - operating_expenses
 
+#                     # Yield calculation 
+#                     estimated_yield = (estimated_annual_income / market_value) * 100
+
+#                     print(f"Estimated Annual Income: ${estimated_annual_income}")
+#                     print(f"Estimated Yield: {estimated_yield}%")
+                    
+#                     new_transaction = {"name":name,"estimated_annual_income":estimated_annual_income,
+#                                     "estimated_yield":estimated_yield}
+#                     # If the client_id exists in the JSON file, append the new transaction
+#                     if client_id in client_transactions:
+#                         client_transactions[client_id].append(new_transaction)
+#                     else:
+#                         # Create a new entry for the client_id if it doesn't exist
+#                         client_transactions[client_id] = [new_transaction]
+                
+#                     # Save the updated transactions back to the JSON file
+#                     with open(order_list_file, 'w') as f:
+#                         json.dump(client_transactions, f, indent=4)
+                    
+#                     return jsonify({"name":name,"estimated_annual_income":estimated_annual_income,
+#                                     "estimated_yield":estimated_yield})
+                                      
+#                 except Exception as e:
+#                     print(f"Failed to process Direct Ownership order for {client_name} ({client_id}): {e}")
+#                     return jsonify({"error": f"Failed to process Direct Ownership order for {client_name} ({client_id})", "status": 500}), 500
+            
+            
+#             print(f"Order Data for {client_name} placed successfully for Real Estate Asset Class")
+#             return jsonify({"message": "Order placed successfully", "status": 200})
+#         else :
+#             # Assign default values if necessary
+#             if not order_data.get('date'):
+#                 order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+ 
+#             units = order_data.get('units')
+#             buy_or_sell = order_data.get('buy_or_sell')
+ 
+#             # Create a dictionary with the relevant data
+#             new_transaction = {
+#                 "Market": order_data.get('market'),
+#                 "AssetClass": order_data.get('assetClass'),
+#                 "Date": order_data.get('date'),
+#                 "Action": order_data.get('buy_or_sell'),
+#                 "Name": order_data.get('name'),
+#                 "Symbol": order_data.get('symbol'),
+#                 "Units": order_data.get('units'),
+#                 "UnitPrice": order_data.get('unit_price'),
+#                 "TransactionAmount": order_data.get('transactionAmount'),
+#             }
+ 
+#             # If the client_id exists in the JSON file, append the new transaction
+#             if client_id in client_transactions:
+#                 client_transactions[client_id].append(new_transaction)
+#             else:
+#                 # Create a new entry for the client_id if it doesn't exist
+#                 client_transactions[client_id] = [new_transaction]
+           
+#             # Save the updated transactions back to the JSON file
+#             with open(order_list_file, 'w') as f:
+#                 json.dump(client_transactions, f, indent=4)
+ 
+#             print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+ 
+#             return jsonify({"message": "Order placed successfully", "status": 200})
+ 
 #     except Exception as e:
 #         print(f"Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
-# @app.route('/show_order_list', methods=['POST'])
-# def show_order_list():
-#     try:
-#         # Get client_id from the request
-#         client_id = request.json.get('clientId')
-        
-#         # If client_id is not provided or not found in the stored transactions
-#         if not client_id or client_id not in client_transactions:
-#             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
-
-#         # Retrieve the transactions for the given client_id
-#         transactions_df = client_transactions[client_id]
-        
-#         # Convert the DataFrame to a JSON object and return it
-#         transactions_json = transactions_df.to_dict(orient='records')
-#         return jsonify({"transaction_data": transactions_json, "status": 200})
-
-#     except Exception as e:
-#         print(f"Error occurred while retrieving the order list: {e}")
-#         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
-
-
-
-# Path to the JSON file to store transaction data
-order_list_file = 'order_list.json'
-
-# Load existing transaction data from the JSON file (if it exists)
-if os.path.exists(order_list_file):
-    with open(order_list_file, 'r') as f:
-        client_transactions = json.load(f)
-else:
-    client_transactions = {}
-
-@app.route('/order_placed', methods=['POST'])
-def order_placed():
-    try:
-        # Extract form data from frontend
-        order_data = request.json.get('order_data')
-        client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
-        client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
-        funds = request.json.get('funds')  # Example extra data if needed
-        
-        # Path to the JSON file to store transaction data
-        order_list_file = 'order_list.json'
-
-        # Load existing transaction data from the JSON file (if it exists)
-        if os.path.exists(order_list_file):
-            with open(order_list_file, 'r') as f:
-                client_transactions = json.load(f)
-        else:
-            client_transactions = {}
-            
-        # Assign default values if necessary
-        if not order_data.get('date'):
-            order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        units = order_data.get('units')
-        buy_or_sell = order_data.get('buy_or_sell')
-
-        # Create a dictionary with the relevant data
-        new_transaction = {
-            "Market": order_data.get('market'),
-            "AssetClass": order_data.get('assetClass'),
-            "Date": order_data.get('date'),
-            "Action": order_data.get('buy_or_sell'),
-            "Name": order_data.get('name'),
-            "Symbol": order_data.get('symbol'),
-            "Units": order_data.get('units'),
-            "UnitPrice": order_data.get('unit_price'),
-            "TransactionAmount": order_data.get('transactionAmount'),
-        }
-
-        # If the client_id exists in the JSON file, append the new transaction
-        if client_id in client_transactions:
-            client_transactions[client_id].append(new_transaction)
-        else:
-            # Create a new entry for the client_id if it doesn't exist
-            client_transactions[client_id] = [new_transaction]
-        
-        # Save the updated transactions back to the JSON file
-        with open(order_list_file, 'w') as f:
-            json.dump(client_transactions, f, indent=4)
-
-        print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
-
-        return jsonify({"message": "Order placed successfully", "status": 200})
-
-    except Exception as e:
-        print(f"Error occurred while placing order: {e}")
-        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 @app.route('/show_order_list', methods=['POST'])
 def show_order_list():
     try:
         # Get client_id from the request
         client_id = request.json.get('client_id')
-        
-        # If client_id is not provided or not found in the stored transactions
-        if not client_id or client_id not in client_transactions:
+
+        if not client_id:
+            return jsonify({"message": "Client ID is required", "status": 400})
+
+        # Define the S3 file key for the given client ID
+        order_list_key = f"{order_list_folder}{client_id}_orders.json"
+        print(f"clientIDDDD: {client_id}")
+
+        try:
+            # Fetch the file from the S3 bucket
+            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            file_content = response['Body'].read().decode('utf-8')
+
+            # Parse the file content as JSON
+            client_transactions = json.loads(file_content)
+            print(f"Retrieved transactions for client {client_id}: {client_transactions}")
+
+            return jsonify({"transaction_data": client_transactions, "status": 200})
+
+        except s3.exceptions.NoSuchKey:
+            # Handle case where the file does not exist in S3
+            print(f"No transactions found for client ID: {client_id}")
             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
 
-        # Retrieve the transactions for the given client_id
-        transactions_list = client_transactions[client_id]
-        print(transactions_list)
-        return jsonify({"transaction_data": transactions_list, "status": 200})
+        except Exception as e:
+            print(f"Error occurred while fetching data from S3: {e}")
+            return jsonify({"message": f"Error occurred while fetching data from S3: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
 
-
 @app.route('/portfolio', methods=['POST'])
 def portfolio():
-   
     try:
-        # Extract form data from frontend
-        portfolio_data = request.json.get('portfolio_data')
-        client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
-        client_id = request.json.get('clientId','RS4603')  # Get client ID
-        funds = request.json.get('funds')  
+        # Extract the client_id from the POST request
+        client_id = request.json.get('client_id') #, 'RS4603')
+        curr_date = request.json.get('curr_date', None) # to be used to check market is open or closed
+        # print(f"Portfolio of the client with client id is :{client_id}")
+        order_list_key = f"{order_list_folder}{client_id}_orders.json"
+        # print(f"client_orders {order_list_key}")
+            
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
+
+        #  Load existing data of order list from S3 if available
+        try:
+            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            client_orders = json.loads(response['Body'].read().decode('utf-8'))
+            print(f"client_orders {client_orders}")
+
+        except s3.exceptions.NoSuchKey:
+            # Initialize a new transaction list if the file doesn't exist
+            client_orders = []
+            print(f"No existing transactions for client {client_id}. Initializing new list.")
+
+
+           # Read the order_list.json file
+        # with open('order_list.json', 'r') as f:
+        #     order_list = json.load(f)
+
+        # print(order_list)
+
+        # # Fetch orders for the client
+        # client_orders = order_list.get(client_id, [])
+        # # print(f"The orders are : {client_orders}")
+
+        # Check if any orders are found
+        if not client_orders:
+            
+            return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
+
+
+        # Filter the transactions for the specific client_id
+        # client_orders = [order for order in order_list if order.get('client_id') == client_id]
+        # if not client_orders:
+        #     return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
+
+        # Initialize an array to store the portfolio data
+        portfolio_data = []
+        print(f"client_ordersclient_orders : {client_orders}")
+        # Iterate over all transactions for the specific client
+        portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc,portfolio_daily_value_change = 0,0,0,0,0,0
+        for order in client_orders:
+            assetClass = order.get('AssetClass', 'N/A')
+            name = order.get('Name', 'N/A')  # Stock name
+            # market = order.get('market', 'N/A')
+            symbol = order.get('Symbol', 'N/A')
+            units = order.get('Units', 0)
+            bought_price = order.get('UnitPrice', 0)
+            transaction_type = order.get('Action', 'N/A')
+            transaction_amount = order.get('TransactionAmount', 0)
+            date = order.get('Date', 'N/A')
+            
+            print(f"\n{assetClass} \n{name} \n{units} \n{bought_price} \n{transaction_type} \n{transaction_amount} \n{date}")
+            
+            if assetClass == 'Real Estate':
+                ownership = order.get('ownership')
+                if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
+                    InvestmentAmount = order.get('TransactionAmount',500)
+                    print(f"Investment amount : {InvestmentAmount}")
+                    DividendYield = order.get('DividendYield',3.2)
+                    print(f"Dividend Yield : {DividendYield}")
+                    estimated_annual_income = InvestmentAmount * DividendYield
+                    print(f"Estimated Annualincome : {estimated_annual_income}")
+                    estimated_yield = round((InvestmentAmount/DividendYield))
+                    print(f"Estimated yield : {estimated_yield}")
+                    
+                    current_price = 0 
+                    current_value = 0
+                    daily_price_change = 0
+                    daily_value_change = 0
+                    bought_price = 0
+                    transaction_amount = 0
+                    investment_gain_loss = 0
+                    investment_gain_loss_per = 0
+                    
+                elif ownership == "Direct":
+                    pass
+                    
+            else :
+                # Fetch the current stock price from external source (API, database)
+                def fetch_current_stock_price(ticker):
+                    stock = yf.Ticker(ticker)
+                    try:
+                        # Fetch the current stock price using the 'regularMarketPrice' field
+                        current_price = stock.info.get('regularMarketPrice')
+                        
+                        if current_price is None:
+                            print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+                            # Fetch the last closing price if the current price is unavailable
+                            current_price = stock.history(period='1d')['Close'].iloc[-1]
+                            
+                        # Ensure we have a valid price at this point
+                        if current_price is None:
+                            raise ValueError(f"Unable to fetch current or closing price for {ticker}.")
+                        
+                        # print(current_price)
+                        return current_price
+                    
+                    except Exception as e:
+                        # Handle exceptions more explicitly
+                        print(f"Error fetching stock price for {ticker}: {str(e)}")
+                        return 0
+
         
-        # Assign default values if necessary
-        if not portfolio_data.get('date'):
-            portfolio_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                current_price = fetch_current_stock_price(symbol)
+                print(f"Current Stock Price is :{current_price}")
+                # Calculate difference in price and percentage
+                print(f"Bought price is : {bought_price}")
+                diff_price = current_price - bought_price
+                percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
 
-        # Get current stock price if not provided in the form
-        stock_ticker = portfolio_data.get('name')
-        if stock_ticker == 'apple' : stock_ticker = 'AAPL'
-        if current_price is None:
-            stock_data = yf.Ticker(stock_ticker)
-            current_price = stock_data.history(period='1d')['Close'].iloc[-1]
+                # Assume daily price change is available (fetch it if possible, or calculate)
+                daily_price_change =  diff_price #current_price - order.get('previousDayPrice', bought_price)  # Placeholder logic
+                daily_value_change = daily_price_change * units
+                current_value = current_price*units
 
-        # Calculate the difference between bought price and current price
-        bought_price = portfolio_data.get('pricePerUnit', 0)
-        diff_price = current_price - bought_price
+                
+                # Calculate investment gain/loss and other financial metrics
+                investment_gain_loss = diff_price * units
+                investment_gain_loss_per = round(investment_gain_loss/transaction_amount*100,2)
+                estimated_annual_income = 0 #order.get('estimatedAnnualIncome', 0)
+                estimated_yield = 0 #(estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
+
+            # Append the transaction details to the portfolio_data array
+            portfolio_data.append({
+                "assetClass": assetClass,
+                "name": name,
+                "symbol": symbol ,
+                "Quantity": units,
+                "Delayed_Price": current_price, # Delayed Price
+                "current_value" : current_value ,
+                "Daily_Price_Change": daily_price_change,
+                "Daily_Value_Change" : daily_value_change,
+                "Amount_Invested_per_Unit" :  bought_price, #transaction_amount/units ,
+                "Amount_Invested": transaction_amount,
+                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per ,
+                "Investment_Gain_or_Loss": investment_gain_loss,
+                "Estimated_Annual_Income": estimated_annual_income,
+                "Estimated_Yield": estimated_yield,
+                "Time_Held": date,
+            })
+            
+            print(f"Portfolio Data is : {portfolio_data}")
+            
+                # "Client ID": client_id,
+                # "Market": market,
+                # "Transaction Type": transaction_type,
+                # "Price Per Unit (Bought)": bought_price, 
+                # "Difference in Price": diff_price,
+                # "Percentage Difference": f"{percentage_diff:.2f}%",
+            
+            portfolio_current_value += current_value
+            porfolio_daily_change += daily_price_change
+            portfolio_daily_value_change += daily_value_change
+            portfolio_investment_gain_loss += investment_gain_loss
         
-        # Calculate percentage difference
-        if bought_price > 0:
-            percentage_diff = (diff_price / bought_price) * 100
-        else:
-            percentage_diff = -1 * (diff_price / bought_price) * 100
-
-        # Create a dataframe with the relevant data
-        data = {
-            "Asset Class": [portfolio_data.get('assetClass')],
-            "Name": [portfolio_data.get('name')],
-            "Market": [portfolio_data.get('market')],
-            "Units": [portfolio_data.get('units')],
-            "Price Per Unit (Bought)": [bought_price],
-            "Current Price": [current_price],
-            "Transaction Type": [portfolio_data.get('transactionType')],
-            "Transaction Amount": [portfolio_data.get('transactionAmount')],
-            "Difference in Price": [diff_price],
-            "Percentage Difference": [f"{percentage_diff:.2f}%"],
-            "Time of Purchase": [portfolio_data.get('date')]
-        }
-        df = pd.DataFrame(data)
-        print(f"Portfolio Data : {df}")
+        portfolio_daily_change_perc = round(porfolio_daily_change/portfolio_current_value *100 ,2)
+        portfolio_investment_gain_loss_perc = round(portfolio_investment_gain_loss/portfolio_current_value*100,4)
         
-        # Save the table as an Excel file with client name and ID
-        file_path = f"data/{client_name}_{client_id}_stock_data.xlsx"
-        df.to_excel(file_path, index=False)
+        # Save the portfolio data as a JSON file
+        portfolio_file_path = f'portfolio_{client_id}.json'
+        with open(portfolio_file_path, 'w') as portfolio_file:
+            json.dump(portfolio_data, portfolio_file, indent=4)
+            
+            portfolio_response = {
+            "portfolio_current_value":portfolio_current_value,
+            "porfolio_daily_change":porfolio_daily_change,
+            "portfolio_daily_change_perc":portfolio_daily_change_perc,
+            "portfolio_investment_gain_loss":portfolio_investment_gain_loss,
+            "portfolio_investment_gain_loss_perc":portfolio_investment_gain_loss_perc,
+            "portfolio_data": portfolio_data }
+            
+        try:
+            s3.put_object(
+                Bucket=S3_bucket_name,
+                # Key=f"responses/{clientId}_response.json",
+                Key=f"{portfolio_list_folder}/{client_id}.json",
+                Body=json.dumps(portfolio_response),
+                ContentType='application/json'
+            )
+            logging.info(f"Response successfully saved to S3 for client_id: {client_id}")
+        except Exception as e:
+            logging.error(f"Error occurred while saving to S3: {e}")
+            return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
+        
 
-        # Convert DataFrame to HTML table
-        table_html = df.to_html(classes='table table-striped', index=False)
-
-        # Send the Excel file and return the HTML table
-        return jsonify({"table_html": table_html, "file_path": file_path})
+        return jsonify(portfolio_response), 200
 
     except Exception as e:
+        print(f"Error occured in portfolio : {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
 
 
 @app.route('/download_excel', methods=['GET'])
@@ -3464,73 +4325,348 @@ def download_excel():
         return jsonify({"message": "File not found"}), 404
 
 
+## Collect live news for stocks in portfolio :
+# Define a function to fetch news for a given query 
+def fetch_news(query):
+    news_url = f'https://newsapi.org/v2/everything?q={query}&apiKey={NEWS_API_KEY}&pageSize=3'
+    news_response = requests.get(news_url)
     
+    if news_response.status_code == 200:
+        news_data = news_response.json()
+        articles = news_data.get('articles', [])
+        if articles:
+            top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+        else:
+            top_news = "No news articles found."
+    else:
+        top_news = "Failed to fetch news articles."
     
+    return top_news
+
+# Function to collect news for each asset in the portfolio
+def collect_portfolio_news(portfolio_data):
+    portfolio_news = {}
+    
+    for asset in portfolio_data:
+        asset_class = asset.get("AssetClass", "Unknown")
+        name = asset.get("Name", "")
+        symbol = asset.get("Symbol", None)
+        
+        # Generate a news query based on the asset class and name/symbol
+        if asset_class == "Stocks" or asset_class == "Bonds":
+            query = symbol if symbol else name
+        elif asset_class == "cryptocurrency":
+            query = asset.get("Name", "")
+        elif asset_class == "Real Estate":
+            query = asset.get("Name", "")
+        else:
+            query = asset.get("Name", "")
+        
+        # Fetch news for the query
+        news = fetch_news(query)
+        portfolio_news[name] = news
+    
+    return portfolio_news
+
+
 @app.route('/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
-        # company = request.json.get('company',None)
+        # Retrieve the requested asset type
+        assetName = request.json.get('assetName', 'all')
         client_name = request.json.get('client_name')
-        funds_available = request.json.get('funds_available')
+        funds = request.json.get('funds')
         client_id = request.json.get('client_id')
-        no_of_stocks = request.json.get('no_of_stocks') # Maybe pass areay of stock Ticker Name
-        tickers = [request.json.get(f'ticker{i}') for i in range(no_of_stocks)]
-        stock_data = [request.json.get(f'stock_data{i}') for i in range(no_of_stocks)] # All stocks data,Stock Buy Price,No. of Units bought
-        query = request.json.get('query')
-        chat_id = request.json.get('chat_id', get_next_chat_id()) 
-        
-    except Exception as e :
-        print(f"Error extracting data from request: {e}")
-        return jsonify({'message': 'Failed to extract data from request'}), 400
-    
-    # If a valid ticker is found, fetch stock data
-    if tickers and not stock_data :
+        investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+        # Initialize economic news to pass to LLM
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+        economic_news = {topic: fetch_news(topic) for topic in topics}
+
+        # Load portfolio data for client (if analyzing the whole portfolio)
+        portfolio_data = {}
+        portfolio_news = {}
+
+        if assetName == 'all':
+            # Load the complete portfolio
+            with open(f'portfolio_{client_id}.json', 'r') as f:
+                portfolio_data = json.load(f)
+            portfolio_news = collect_portfolio_news(portfolio_data)
+
+        else:
+            # Extract specific asset data from request if assetName is specific
+            portfolioList = request.json.get('portfolioList', [])
+            portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
+            
+            # Fetch news for each asset in the specified list
+            portfolio_news = collect_portfolio_news(portfolio_data)
+
+         # Initialize portfolio-level metrics
+        portfolio_current_value = request.json.get('portfolio_current_value') 
+        portfolio_daily_change = request.json.get('porfolio_daily_change')
+        portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
+        portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
+        portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+
+        print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+
+
+        # Task prompt for LLM based on the asset name
+        task = f"""
+                You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
+                Based on the portfolio data provided:
+
+                - The available funds for the client are {funds}.
+                - The current value of the portfolio is {portfolio_current_value}.
+                - The portfolio's daily change is {portfolio_daily_change}.
+                - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+                - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+                - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+                - The risk tolerance of the client based on their investment personality is {investor_personality}.
+
+                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+                and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
+                and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+
+                - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
+                - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
+                - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+
+                Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+
+                Additionally, provide:
+
+                1. A risk assessment of the current portfolio composition.
+                2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+                3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+                4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+                5. Strategies for tax efficiency in the portfolio management.
+                6. Insights on market trends and current economic news that could impact the portfolio.
+                7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+
+                Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+                Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+                """
+
+        # Generate response using LLM
         try:
-            stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
-            user_query = tickers  # Save the tickers as the user query
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(task)
+
+            # Process the response
+            html_suggestions = markdown.markdown(response.text)
+            format_suggestions = markdown_to_text(html_suggestions)
+            
+            # Return response in JSON format
+            return jsonify({
+                    "portfolio_current_value": portfolio_current_value,
+                    "portfolio_daily_change": portfolio_daily_change,
+                    "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+                    "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                    "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+                    "suggestion": format_suggestions,
+                     "assetClass": assetName
+            }), 200
+
         except Exception as e:
-            print("Error getting the stock data")
-            return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-    else:
-        # No valid ticker found, generate generic Portfolio suggestions
-        print("No valid tickers found in the query, generating general Portfolio suggestions.")
-        stock_data = {}  # No specific stock data need to check for news
-        formatted_data = ""  # No financial data
-        
-    if query:
-        task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
-                You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
-                with any queries they might have.
-                If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                Do not answer any questions unrelated to the stocks."""
-    else :
-        task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
-                You are the best Stock recommendations AI and you give the best recommendations for stocks. 
-                Given a list of stocks of a Portfolio, give Analysis of all the stocks 
-                The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                Do not answer any questions unrelated to the stocks."""
-    
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    response = model.generate_content(query)
-    print(response.text)
-        
-    try:
-        html_suggestions = markdown.markdown(response.text)
-        
-        print(f"Html Suggestions : {html_suggestions}")
-        
-        logging.info(f"Suggestions for stock: \n{response.text}")
-        
-        # format_suggestions = markdown_to_text(response)
-        print(f"Html Suggestions : {html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
-        
+            print(f"Error generating suggestions from LLM: {e}")
+            return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
+
     except Exception as e:
-        logging.error(f"Error extracting text from response: {e}")
-        print(f"Error extracting text from response : {e}")
-        return jsonify({"error": "Failed to analyze stock data"}), 500
+        print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
+        return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
+
+
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         assetName = request.json.get('assetName','all')
+#         if assetName == 'all':
+#             try:
+#                 # Extract client information from the request
+#                 client_name = request.json.get('client_name')
+#                 funds = request.json.get('funds')
+#                 client_id = request.json.get('client_id')
+#                 investor_personality = request.json.get('investor_personality','Aggressive Investor Personality')
+                
+                    
+#                 # Load the portfolio data from the client's JSON file
+#                 with open(f'portfolio_{client_id}.json', 'r') as f:
+#                     portfolio_data = json.load(f)
+
+#                 # Fetch news for each asset in the portfolio
+#                 portfolio_news = collect_portfolio_news(portfolio_data)
+
+#                 # Print the collected news for debugging
+#                 for asset, news in portfolio_news.items():
+#                     print(f"News for {asset}:\n{news}\n{'-'*50}")
+                    
+                
+#                 topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions","US Elections","Global Wars"]
+#                 economic_news = {}
+
+#                 for topic in topics:
+#                     news = fetch_news(topic)
+#                     economic_news[topic] = news
+                
+#                 print(economic_news)
+                    
+                # # Initialize portfolio-level metrics
+                # portfolio_current_value = request.json.get('portfolio_current_value') 
+                # portfolio_daily_change = request.json.get('porfolio_daily_change')
+                # portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
+                # portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
+                # portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+
+                # print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+
+#             except Exception as e:
+#                 print(f"Error extracting data from request or portfolio: {e}")
+#                 return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
+
+#             # Create a task prompt for the LLM to generate analysis and suggestions
+#             funds -= portfolio_current_value
+#             print(f" Current funds available : {funds}")
+#             print(f"{portfolio_daily_change}")
+            
+#                 # # Best one so far :
+            
+
+            # task = f"""
+            #     You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
+            #     Based on the portfolio data provided:
+
+            #     - The available funds for the client are {funds}.
+            #     - The current value of the portfolio is {portfolio_current_value}.
+            #     - The portfolio's daily change is {portfolio_daily_change}.
+            #     - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+            #     - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+            #     - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+            #     - The risk tolerance of the client based on their investment personality is {investor_personality}.
+
+            #     Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+            #     and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
+            #     and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+
+            #     - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
+            #     - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
+            #     - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+
+            #     Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+
+            #     Additionally, provide:
+
+            #     1. A risk assessment of the current portfolio composition.
+            #     2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+            #     3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+            #     4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+            #     5. Strategies for tax efficiency in the portfolio management.
+            #     6. Insights on market trends and current economic news that could impact the portfolio.
+            #     7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+
+            #     Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+            #     Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+            #     """
+
+
+#             # Generate response using LLM (Generative AI Model)
+#             try:
+#                 model = genai.GenerativeModel('gemini-1.5-flash')
+#                 response = model.generate_content(task)
+
+#                 # Convert the response to markdown and then extract text
+#                 html_suggestions = markdown.markdown(response.text)
+#                 format_suggestions = markdown_to_text(html_suggestions)
+                # return jsonify({
+                #     "portfolio_current_value": portfolio_current_value,
+                #     "portfolio_daily_change": portfolio_daily_change,
+                #     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+                #     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                #     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+                #     "suggestion": format_suggestions
+                # }), 200
+
+#             except Exception as e:
+#                 print(f"Error generating suggestions from LLM: {e}")
+#                 return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
+        
+#         elif assetName == "stocks":
+#             portfolioList = request.json.get('portfolioList')
+#             pass
+        
+#         elif assetName == "bonds":
+#             pass
+            
+#     except Exception as e:
+#         print(f"Error in getting the correct assetName, passed : {assetName}")
+#         return jsonify({"message": f"Error in getting the correct assetName {assetName}"}),500
+
+
+    
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         # company = request.json.get('company',None)
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         client_id = request.json.get('client_id')
+#         with open(f'portfolio_{client_id}.json', 'r') as f:
+#             portfolio_table = json.load(f)
+       
+        
+#     except Exception as e :
+#         print(f"Error extracting data from request: {e}")
+#         return jsonify({'message': 'Failed to extract data from request'}), 400
+    
+#     # If a valid ticker is found, fetch stock data
+#     if tickers and not stock_data :
+#         try:
+#             stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
+#             user_query = tickers  # Save the tickers as the user query
+#         except Exception as e:
+#             print("Error getting the stock data")
+#             return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+#     else:
+#         # No valid ticker found, generate generic Portfolio suggestions
+#         print("No valid tickers found in the query, generating general Portfolio suggestions.")
+#         stock_data = {}  # No specific stock data need to check for news
+#         formatted_data = ""  # No financial data
+        
+#     if query:
+#         task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
+#                 with any queries they might have.
+#                 If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+#     else :
+#         task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. 
+#                 Given a list of stocks of a Portfolio, give Analysis of all the stocks 
+#                 The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+    
+#     model = genai.GenerativeModel('gemini-1.5-flash')
+#     response = model.generate_content(query)
+#     print(response.text)
+        
+#     try:
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"Html Suggestions : {html_suggestions}")
+        
+#         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+#         # format_suggestions = markdown_to_text(response)
+#         print(f"Html Suggestions : {html_suggestions}")
+#         format_suggestions = markdown_to_text(html_suggestions)
+#         return jsonify({'suggestion' : format_suggestions}),200
+        
+#     except Exception as e:
+#         logging.error(f"Error extracting text from response: {e}")
+#         print(f"Error extracting text from response : {e}")
+#         return jsonify({"error": "Failed to analyze stock data"}), 500
 
 
 # Run the Flask application
@@ -3539,7 +4675,7 @@ if __name__ == '__main__':
 
 
 
-# import streamlit as st
+# # import streamlit as st
 # import pandas as pd
 # import matplotlib.pyplot as plt
 
@@ -4238,10 +5374,12 @@ if __name__ == '__main__':
 #                 (#If the financial is 1 or 2 only then give investment suggestions to the client)
                 
                 
+                
 #                 Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
 
 #                 Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
 
+                
 #                 Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
 
 #                 Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
@@ -4319,11 +5457,9 @@ if __name__ == '__main__':
 #                 {context}
 #                 </context>
 #                 Question: {input}"""
-    
-#         print("Retriever Created ")
-#         print(f"Investment Personality :{investmentPersonality}")
+
         
-#         # Good but inaccurate in terms of assets and liability data calculation
+#         # # Without category and value :
 #         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
 #         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
 #         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
@@ -4337,42 +5473,49 @@ if __name__ == '__main__':
 #         #         You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
 
 #         #         Step-by-Step Guidance:
-#         #         1. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
-#         #         2. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
-#         #         3. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
-#         #         4. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
-#         #         5. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities.
+#         #         1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
+#         #         2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
+#         #         3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
+#         #         4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+#         #         5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+#         #         6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+#         #         7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+#         #         8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
                 
                 
 #         #         Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
                 
-#         #         Investment Suggestions : 
+#         #         Client's Financial Information :(# This is a header line have it in bold) 
                 
                 
-#         #         Client Name: """ + clientName + """
+#         #         Client Name: """ + clientName + """(# have the client name in underline)
 
-#         #         Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data only)
+#         #         (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis.The data below it should be displayed in a table format so make sure of that data.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
                 
-#         #         - Total Assets: (# Consider the data available to you and use it  for display. For ex : $100,000 (cash), $150,000 (home), $12,000 (other assets) )
+#         #         - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
                 
-#         #         - Liabilities: (# Consider the data available to you and use it  for display. For ex : $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%.)
+#         #         - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
                 
-#         #         - Total Monthly Liabilities: (# Consider the data available to you and use it  for display. For ex : $1,650 (Mortgage, Credit Card, Other Loans).)
+                
+#         #         - Monthly Liabilities: (# Monthly payments derived from liabilities)
+                
+#         #         - Total Annual Income : (# Sum of all client's anual income)
                 
 #         #         - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
                 
 #         #         - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+
 
 #         #         Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
 #         #         (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
 #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
 #         #         (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
                 
-#         #         (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a bad income for now but have great assets and manageable debt and liabilities.
+#         #         (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
 #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
 #         #         Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
                 
-#         #         (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a bad income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+#         #         (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
 #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
 #         #         I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
                 
@@ -4460,182 +5603,10 @@ if __name__ == '__main__':
 #         #         {context}
 #         #         </context>
 #         #         Question: {input}"""
+                
+#         print("Retriever Created ")
+#         print(f"Investment Personality :{investmentPersonality}")
         
-        
-                
-#         # # latest version gives some info about the client conditions but not in detail 
-#         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-#         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
-#         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
-#         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
-#         #         should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
-#         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-#         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
-#         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
-#         #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
-#         #         Here's an example for the required Output Format :
-
-#         #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
-
-#         #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
-
-#         #         Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
-
-#         #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
-#         #         How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
-#         #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
-#         #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
-#         #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
-#         #         Consider investing in blue-chip companies or growth sectors like technology. 
-#         #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
-
-
-#         #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
-                
-                
-#         #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
-
-#         #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
-#         #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
-                
-#         #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
-                
-#         #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
-                
-#         #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
-                
-#         #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
-                
-#         #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
-                
-#         #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
-
-#         #         Time Horizon and Expected Returns:
-
-#         #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
-                
-                
-#         #         Minimum Expected Annual Return: 4% - 6% 
-                
-                
-#         #         Maximum Expected Annual Return: 8% - 10% 
-                
-#         #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
-#         #         Minimum Expected Growth in Dollars: 
-                
-#         #         4,000−6,000 (over 10 years) 
-                
-                
-#         #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
-
-                
-#         #         Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
-                   
-                    
-#         #         Rationale for Investment Suggestions:
-
-#         #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
-
-                
-#         #         Important Considerations:
-
-#         #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
-
-#         #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
-
-#         #         Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
-#         #         <context>
-#         #         {context}
-#         #         </context>
-#         #         Question: {input}"""
-        
-        
-        
-        
-#         # # Working code but gives clientname in brackets 
-#         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-#         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality provided to you.
-#         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
-#         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
-#         #         should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
-#         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-#         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
-#         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
-#         #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
-#         #         Here's an example for the required Output Format :
-
-#         #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
-
-#         #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
-
-#         #         Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
-
-#         #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
-#         #         How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
-#         #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
-#         #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
-#         #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
-#         #         Consider investing in blue-chip companies or growth sectors like technology. 
-#         #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
-
-
-#         #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
-                
-                
-#         #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
-
-#         #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
-#         #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
-                
-#         #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
-                
-#         #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
-                
-#         #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
-                
-#         #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
-                
-#         #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
-                
-#         #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
-
-#         #         Time Horizon and Expected Returns:
-
-#         #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
-                
-                
-#         #         Minimum Expected Annual Return: 4% - 6% 
-                
-                
-#         #         Maximum Expected Annual Return: 8% - 10% 
-                
-#         #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
-#         #         Minimum Expected Growth in Dollars: 
-                
-#         #         4,000−6,000 (over 10 years) 
-                
-                
-#         #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
-
-                
-#         #         Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
-                   
-                    
-#         #         Rationale for Investment Suggestions:
-
-#         #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
-
-                
-#         #         Important Considerations:
-
-#         #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
-
-#         #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
-
-#         #         <context>
-#         #         {context}
-#         #         </context>
-#         #         Question: {input}"""
                 
 
 #         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
@@ -4787,39 +5758,100 @@ if __name__ == '__main__':
 #     return client_name, errors
 
 
-# # RUN Button :
-# # async def generate_investment_suggestions(investment_personality, context): # # GET Method for py , for front end its Post API
-    
-# #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
-
-# #     retriever = await load_vector_db("uploaded_file")
-# #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
-
-# #     chain = await make_retrieval_chain(retriever)
-
-# #     # chain = asyncio.run(make_retrieval_chain(retriever))
-    
-# #     if chain is not None:
-# #         # summary = context
-# #         # query = summary + "\n" + investment_personality
-# #         query = str(investment_personality)
-# #         response = chain.invoke({"input": query})
-# #         format_response = markdown_to_text(response['answer'])
-# #         return format_response
-# #         # st.write(format_response)
-
-# #         # handle_graph(response['answer'])
-
-# #     else:
-# #         st.error("Failed to create the retrieval chain. Please upload a valid document.")
-
-
-
-# # Generate Infographics : Best Code so far:
 
 # import re
 # from collections import defaultdict
 # import numpy as np
+# # Updated for Line Chart :
+# import re
+# from collections import defaultdict
+
+# # def extract_numerical_data(response):
+# #     # Define patterns to match different sections and their respective allocations
+# #     patterns = {
+# #         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# #         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# #         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+# #     }
+
+# #     data = defaultdict(dict)
+
+# #     for section, pattern in patterns.items():
+# #         match = pattern.search(response)
+# #         if match:
+# #             investments_text = match.group(1)
+# #             # Extract individual investment types and their allocations
+# #             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+# #             for investment_match in investment_pattern.findall(investments_text):
+# #                 investment_type, min_allocation, max_allocation = investment_match
+# #                 data[section][investment_type.strip()] = {
+# #                     'min': min_allocation,
+# #                     'max': max_allocation
+# #                 }
+
+# #     # Extract time horizon and expected returns
+# #     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+# #     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+# #     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+# #     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+# #     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+
+# #     time_horizon_match = time_horizon_pattern.search(response)
+# #     min_return_match = min_return_pattern.search(response)
+# #     max_return_match = max_return_pattern.search(response)
+# #     min_growth_match = min_growth_pattern.search(response)
+# #     max_growth_match = max_growth_pattern.search(response)
+
+# #     if time_horizon_match:
+# #         data['Time Horizon'] = {
+# #             'min_years': time_horizon_match.group(1),
+# #             'max_years': time_horizon_match.group(2)
+# #         }
+
+# #     if min_return_match:
+# #         data['Expected Annual Return'] = {
+# #             'min': min_return_match.group(1),
+# #             'max': min_return_match.group(2)
+# #         }
+
+# #     if max_return_match:
+# #         data['Expected Annual Return'] = {
+# #             'min': max_return_match.group(1),
+# #             'max': max_return_match.group(2)
+# #         }
+
+# #     if min_growth_match:
+# #         data['Expected Growth in Dollars'] = {
+# #             'min': min_growth_match.group(1),
+# #             'max': min_growth_match.group(2)
+# #         }
+
+# #     if max_growth_match:
+# #         data['Expected Growth in Dollars'] = {
+# #             'min': max_growth_match.group(1),
+# #             'max': max_growth_match.group(2)
+# #         }
+
+# #     # Extract inflation-adjusted returns
+# #     inflation_adjusted_pattern = re.compile(r'Inflation Adjusted Returns:.*?Before Inflation:.*?3 Years: \$(\d+,\d+).*?5 Years: \$(\d+,\d+).*?10 Years: \$(\d+,\d+).*?After Inflation.*?3 Years: \$(\d+,\d+).*?5 Years: \$(\d+,\d+).*?10 Years: \$(\d+,\d+)', re.DOTALL)
+# #     inflation_adjusted_match = inflation_adjusted_pattern.search(response)
+
+# #     if inflation_adjusted_match:
+# #         data['Inflation Adjusted Returns'] = {
+# #             'Before Inflation': {
+# #                 '3 Years': inflation_adjusted_match.group(1),
+# #                 '5 Years': inflation_adjusted_match.group(2),
+# #                 '10 Years': inflation_adjusted_match.group(3)
+# #             },
+# #             'After Inflation': {
+# #                 '3 Years': inflation_adjusted_match.group(4),
+# #                 '5 Years': inflation_adjusted_match.group(5),
+# #                 '10 Years': inflation_adjusted_match.group(6)
+# #             }
+# #         }
+
+# #     print(f"DATA extracted from Responses : {data}")
+# #     return data
 
 
 
@@ -4888,7 +5920,7 @@ if __name__ == '__main__':
 #             'min': max_growth_match.group(1),
 #             'max': max_growth_match.group(2)
 #         }
-
+#     print(f"Data Extracted from Response : {data}")
 #     return data
 
 # def normalize_allocations(allocations):
@@ -4897,9 +5929,10 @@ if __name__ == '__main__':
 #         return allocations
 #     return [round((allocation / total) * 100, 2) for allocation in allocations]
 
-
+# # # Updated Line Chart 
 # import datetime  # Import the datetime module to get the current year
-# # uodated to have current year
+# import datetime  # Import the datetime module to get the current year
+
 # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
 #     try:
 #         # Get the current year
@@ -4911,10 +5944,9 @@ if __name__ == '__main__':
 #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
 #         if 'Expected Annual Return' not in data_extracted:
 #             print("'Expected Annual Return' missing in data_extracted")
-#             data_extracted['Expected Annual Return']['min'] = 6
-#             data_extracted['Expected Annual Return']['max'] = 8
-#             min_return = 6
-#             max_return = 8
+#             data_extracted['Expected Annual Return'] = {'min': '8%', 'max': '20%'}
+#             min_return = 8 #6
+#             max_return = 20 #8
 #         else:
 #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
 #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
@@ -4990,16 +6022,33 @@ if __name__ == '__main__':
 #         print(f"Error occurred while preparing data for combined line chart: {e}")
 #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
 
+#     print(combined_chart_data)
 #     return combined_chart_data
 
 
-
+# # import datetime  # Import the datetime module to get the current year
+# # # uodated to have current year
 # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
 # #     try:
-# #         min_return = float(data_extracted['Expected Annual Return']['min'].strip('%'))
-# #         max_return = float(data_extracted['Expected Annual Return']['max'].strip('%'))
-# #         min_years = int(data_extracted['Time Horizon']['min_years'])
-# #         max_years = int(data_extracted['Time Horizon']['max_years'])
+# #         # Get the current year
+# #         curr_year = datetime.datetime.now().year
+
+# #         # Print data_extracted to debug the structure
+# #         print("Data extracted:", data_extracted)
+
+# #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
+# #         if 'Expected Annual Return' not in data_extracted:
+# #             print("'Expected Annual Return' missing in data_extracted")
+# #             data_extracted['Expected Annual Return']['min'] = 6
+# #             data_extracted['Expected Annual Return']['max'] = 8
+# #             min_return = 6
+# #             max_return = 8
+# #         else:
+# #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
+# #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
+
+# #         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
+# #         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
 
 # #         def calculate_compounded_return(principal, rate, years):
 # #             return principal * (1 + rate / 100) ** years
@@ -5007,13 +6056,15 @@ if __name__ == '__main__':
 # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
 # #             return nominal_return / (1 + inflation_rate / 100) ** years
 
-# #         labels = list(range(1, max_years + 1))  # Years for the x-axis
+# #         # Create labels for the next 10 years starting from the current year
+# #         labels = list(range(curr_year, curr_year + max_years))
+
 # #         min_compounded = []
 # #         max_compounded = []
 # #         min_inflation_adjusted = []
 # #         max_inflation_adjusted = []
 
-# #         for year in labels:
+# #         for year in range(1, max_years + 1):
 # #             # Calculate nominal compounded returns
 # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
 # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
@@ -5030,7 +6081,7 @@ if __name__ == '__main__':
 
 # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
 # #         combined_chart_data = {
-# #             'labels': labels,
+# #             'labels': labels,  # Current year and the next 10 years
 # #             'datasets': [
 # #                 {
 # #                     'label': 'Minimum Compounded Return',
@@ -5060,10 +6111,16 @@ if __name__ == '__main__':
 # #                 }
 # #             ]
 # #         }
+# #     except KeyError as e:
+# #         print(f"KeyError occurred: {e}")
+# #         return jsonify({'message': f'Key Error: {e}'}), 400
 # #     except Exception as e:
 # #         print(f"Error occurred while preparing data for combined line chart: {e}")
 # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
+
 # #     return combined_chart_data
+
+
 
 
 
@@ -5931,6 +6988,7 @@ if __name__ == '__main__':
 # import docx
 # import os
 # # #Curr version :
+# # Financial Form
 # def save_to_word_file(data, file_name):
 #     doc = docx.Document()
 #     doc.add_heading('Client Details', 0)
@@ -6027,6 +7085,7 @@ if __name__ == '__main__':
 #     for income in income_fields:
 #         doc.add_paragraph(f"Income Source: {income.get('sourceIncome', '')} Amount: {income.get('amountIncome', '')}")
 
+#     # funds_investment = data.get('Funds',[]) commented for later use
 #     # Save file
 #     file_name = os.path.join("data", file_name)
 #     doc.save(f"{file_name}.docx")
@@ -6150,12 +7209,12 @@ if __name__ == '__main__':
 #             bar_chart_data = {
 #                 'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
 #                 'datasets': [{
-#                     'label': 'Min Allocation',
+#                     'label': 'Allocation for Min returns',
 #                     'data': min_allocations,
 #                     'backgroundColor': 'skyblue'
 #                 },
 #                 {
-#                     'label': 'Max Allocation',
+#                     'label': 'Allocation for Max returns',
 #                     'data': max_allocations,
 #                     'backgroundColor': 'lightgreen'
 #                 }]
@@ -6265,7 +7324,7 @@ if __name__ == '__main__':
 #             "message": "Success",
 #             "investmentSuggestions": answer, #formatSuggestions,
 #             "pieChartData": pie_chart_data,
-#             "barChartData": None,#bar_chart_data,
+#             "barChartData": bar_chart_data,
 #             "compoundedChartData":combined_chart_data
 #         }), 200
                     
@@ -6309,7 +7368,124 @@ if __name__ == '__main__':
 #         print(f"Error saving file: {e}")
 
 
+# # #Working for both the methods :
+# @app.route('/generate-investment-suggestions', methods=['POST'])
+# def generate_investment_suggestions():
+#     try:
+#         assessment_file = request.files['assessmentFile']
+#         financial_file = request.files['financialFile']
+#         logging.info("Requested files")
+        
+#         responses = extract_responses_from_docx(assessment_file)
+#         if not responses:
+#             raise Exception("Failed to extract responses from assessment file.")
+        
+#         destination_folder = 'data'
+#         file_path = save_file_to_folder(financial_file, destination_folder)
+#         if not file_path:
+#             raise Exception("Failed to save financial file.")
+        
+#         financial_data = asyncio.run(process_document(file_path))
+#         if not financial_data:
+#             raise Exception("Failed to process financial file.")
+        
+#         logging.info(f"Received Responses from the file {responses}")
+        
+#         personality = asyncio.run(determine_investment_personality(responses))
+#         if not personality:
+#             raise Exception("Failed to determine personality.")
+        
+#         logging.info(f"Personality of the user is: {personality}")
+        
+#         clientName = "Emilly Watts"
+#         suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, clientName, financial_data, file_path))
+#         if "Error" in suggestions:
+#             raise Exception(suggestions)
+        
+#         htmlSuggestions = markdown.markdown(suggestions)
+#         logging.info(f"Suggestions for investor: \n{suggestions}")
+        
+#         formatSuggestions = markdown_to_text(htmlSuggestions)
+#         answer = markdown_table_to_html(formatSuggestions)
+#         print(answer)
+#         data_extracted = extract_numerical_data(suggestions)
+        
+#         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+#                           [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+#         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+#                           [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
 
+#         # Normalize allocations
+#         min_allocations = normalize_allocations(min_allocations)
+#         max_allocations = normalize_allocations(max_allocations)
+
+#         # Update Bar Chart Data
+        
+#         bar_chart_data = {
+#             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+#             'datasets': [{
+#                 'label': 'Allocation for Min returns',
+#                 'data': min_allocations,
+#                 'backgroundColor': 'skyblue'
+#             },
+#             {
+#                 'label': 'Allocation for Max returns',
+#                 'data': max_allocations,
+#                 'backgroundColor': 'lightgreen'
+#             }]
+#         }
+
+#         # Similar changes can be made for the Pie Chart Data:
+#         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+#         num_labels = len(all_labels)
+#         max_allocations_for_pie = normalize_allocations(
+#             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+#             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+#         )
+        
+#         # Generate colors based on the number of labels
+#         dynamic_colors = generate_colors(num_labels)
+
+#         # Update Pie Chart Data
+#         pie_chart_data = {
+#             'labels': all_labels,
+#             'datasets': [{
+#                 'label': 'Investment Allocation',
+#                 'data': max_allocations_for_pie,
+#                 'backgroundColor': dynamic_colors,
+#                 'hoverOffset': 4
+#             }]
+#         }
+        
+#         print(f"Pie Chart Data is : {pie_chart_data}")
+#         # Prepare the data for the line chart with inflation adjustment
+#         initial_investment = 10000
+#         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+#         print(f"\nThe combined chart data is: {combined_chart_data}")
+        
+#         return jsonify({
+#             "status": 200,
+#             "message": "Success",
+#             "investmentSuggestions":  answer, #formatSuggestions,
+#             "pieChartData": pie_chart_data,
+#             "barChartData": bar_chart_data,
+#             "compoundedChartData": combined_chart_data
+#         }), 200
+        
+#         # return jsonify({
+#         #     "status": 200,
+#         #     "message": "Success",
+#         #     "investmentSuggestions": htmlSuggestions,
+#         #     "pieChartData": pie_chart_data,
+#         #     "barChartData": bar_chart_data,
+#         #     "compoundedChartData": combined_chart_data
+#         # }), 200
+
+#     except Exception as e:
+#         logging.info(f"Error in generating investment suggestions: {e}")
+#         return jsonify({'message': f'Internal Server Error in Generating responses : {e}'}), 500
+
+# ################################################################-------------------- Stocks Analysis -------------------------------- #################################
 # # #Stock analysis code :
 
 # from flask import Flask, request, jsonify
@@ -6455,7 +7631,7 @@ if __name__ == '__main__':
 #         # Step 4: Perform Analysis
 #         avg_close = hist['Close'].mean()
 #         formatted_data = extract_excel_data(file_path)
-#         return data,formatted_data,avg_close
+#         return data,formatted_data,avg_close,file_path
 #     except Exception as e:
 #         logging.info(f"Error occurred while performing analysis: {e}")
 #         print(f"Error occurred while performing analysis :\n{e}")
@@ -6517,6 +7693,8 @@ if __name__ == '__main__':
     
 #     return conversation
 
+# from flask import jsonify, send_file, make_response
+
 # @app.route('/analyze_stock', methods=['POST'])
 # def analyze_stock():
 #     try:
@@ -6538,7 +7716,7 @@ if __name__ == '__main__':
 #         # If a valid ticker is found, fetch stock data
 #         if ticker:
 #             try:
-#                 data, formatted_data, avg_close = get_stock_data(ticker)
+#                 data, formatted_data, avg_close,file_path = get_stock_data(ticker)
 #                 user_query = ticker  # Save the ticker as the user query
 #             except Exception as e:
 #                 print("Error getting the stock data")
@@ -6664,6 +7842,33 @@ if __name__ == '__main__':
 #     data['Company'] = company if company else None
       
 #     # Return all collected and analyzed data
+#       # Create a response dictionary # gave responses in headers :
+#     # response_dict = {
+#     #     "data": data,
+#     #     "average_closing_price": f"${avg_close:.2f}",
+#     #     "analysis": format_suggestions,  # Use the response text here
+#     #     "news": data.get('Top_News'),
+#     #     "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+#     # }
+#     # # If the Excel file exists, send it as an attachment along with the response
+#     # if os.path.exists(file_path):
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         file_response.headers['X-Stock-Metadata'] = json.dumps(response_dict)  # Add metadata as a custom header
+#     #         return file_response
+#     # else:
+#     #     return jsonify(response_dict)
+    
+#     # if os.path.exists(file_path): # works for either file or response
+#     #         # Combine the file response and JSON response
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         print("File is passed as attachment")
+#     #         return file_response
+#     # else:
+#     #     print("Data is passed")
+#     #     return jsonify(response_dict)
+    
 #     return jsonify({
 #         # "Company": company,
 #         "data": data,
@@ -6672,7 +7877,7 @@ if __name__ == '__main__':
 #         "news": data['Top_News'],
 #         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
 #     }) # "chat_history" : chat_history
-#     # "new_chat_id" : new_chat_id
+#     # # "new_chat_id" : new_chat_id
 
 # def extract_excel_data(file_path):
 #     financial_data = ""
@@ -6681,126 +7886,328 @@ if __name__ == '__main__':
 #         df = pd.read_excel(xls, sheet_name=sheet_name)
 #         financial_data += f"\n\nSheet: {sheet_name}\n"
 #         financial_data += df.to_string()
+    
+#     print(f"Financial data of excel file : {financial_data}")
 #     return financial_data
 
+# #########------------------- Portfolio Analysis --------------------------------################
 
-
-# # #Working for both the methods :
-# @app.route('/generate-investment-suggestions', methods=['POST'])
-# def generate_investment_suggestions():
+# @app.route('/current_stock_price', methods=['POST'])
+# def current_stock_price():
 #     try:
-#         assessment_file = request.files['assessmentFile']
-#         financial_file = request.files['financialFile']
-#         logging.info("Requested files")
+#         ticker = request.json.get('ticker')
+#         stock = yf.Ticker(ticker)
+#         # Fetch the current stock price using the 'regularMarketPrice' field
+#         current_price = stock.info.get('regularMarketPrice')
         
-#         responses = extract_responses_from_docx(assessment_file)
-#         if not responses:
-#             raise Exception("Failed to extract responses from assessment file.")
+#         if not current_price:
+#             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+#             current_price = stock.history(period='1d')['Close'].iloc[-1]
         
-#         destination_folder = 'data'
-#         file_path = save_file_to_folder(financial_file, destination_folder)
-#         if not file_path:
-#             raise Exception("Failed to save financial file.")
-        
-#         financial_data = asyncio.run(process_document(file_path))
-#         if not financial_data:
-#             raise Exception("Failed to process financial file.")
-        
-#         logging.info(f"Received Responses from the file {responses}")
-        
-#         personality = asyncio.run(determine_investment_personality(responses))
-#         if not personality:
-#             raise Exception("Failed to determine personality.")
-        
-#         logging.info(f"Personality of the user is: {personality}")
-        
-#         clientName = "Emilly Watts"
-#         suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, clientName, financial_data, file_path))
-#         if "Error" in suggestions:
-#             raise Exception(suggestions)
-        
-#         htmlSuggestions = markdown.markdown(suggestions)
-#         logging.info(f"Suggestions for investor: \n{suggestions}")
-        
-#         formatSuggestions = markdown_to_text(htmlSuggestions)
-#         answer = markdown_table_to_html(formatSuggestions)
-#         print(answer)
-#         data_extracted = extract_numerical_data(suggestions)
-        
-#         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-#                           [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-#         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-#                           [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+#         return jsonify({"current_price":current_price})
+    
+#     except Exception as e:
+#         print(f"Failed to retrieve the current price for {ticker} : {e}")
+#         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
-#         # Normalize allocations
-#         min_allocations = normalize_allocations(min_allocations)
-#         max_allocations = normalize_allocations(max_allocations)
+# # # Global dictionary to store transaction data by client_id
+# # client_transactions = {}
 
-#         # Update Bar Chart Data
+# # @app.route('/order_placed', methods=['POST'])
+# # def order_placed():
+# #     try:
+# #         # Extract form data from frontend
+# #         order_data = request.json.get('order_data')
+# #         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
+# #         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
+# #         funds = request.json.get('funds')  # Example extra data if needed
         
-#         # bar_chart_data = {
-#         #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-#         #     'datasets': [{
-#         #         'label': 'Min Allocation',
-#         #         'data': min_allocations,
-#         #         'backgroundColor': 'skyblue'
-#         #     },
-#         #     {
-#         #         'label': 'Max Allocation',
-#         #         'data': max_allocations,
-#         #         'backgroundColor': 'lightgreen'
-#         #     }]
-#         # }
+# #         # Assign default values if necessary
+# #         if not order_data.get('date'):
+# #             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-#         # Similar changes can be made for the Pie Chart Data:
-#         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-#         num_labels = len(all_labels)
-#         max_allocations_for_pie = normalize_allocations(
-#             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-#             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-#         )
+# #         units = order_data.get('units')
+# #         # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
+# #         buy_or_sell = order_data.get('buy_or_sell')
+
+# #         # Create a dataframe with the relevant data
+# #         data = {
+# #             "Market": [order_data.get('market')],
+# #             "AssetClass": [order_data.get('assetClass')],
+# #             "Date": [order_data.get('date')],
+# #             "Action": [order_data.get('buy_or_sell')],
+# #             "Name": [order_data.get('name')],
+# #             "Units": [order_data.get('units')],
+# #             "Unit_Price": [order_data.get('unit_price')],
+# #             "TransactionAmount": [order_data.get('transactionAmount')],
+# #         }
+# #         new_transaction = pd.DataFrame(data)
         
-#         # Generate colors based on the number of labels
-#         dynamic_colors = generate_colors(num_labels)
+# #         # If the client_id exists in our global dictionary, append the new transaction
+# #         if client_id in client_transactions:
+# #             client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
+# #         else:
+# #             # Create a new entry for the client_id if it doesn't exist
+# #             client_transactions[client_id] = new_transaction
+        
+# #         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
 
-#         # Update Pie Chart Data
-#         pie_chart_data = {
-#             'labels': all_labels,
-#             'datasets': [{
-#                 'label': 'Investment Allocation',
-#                 'data': max_allocations_for_pie,
-#                 'backgroundColor': dynamic_colors,
-#                 'hoverOffset': 4
-#             }]
+# #         return jsonify({"message": "Order placed successfully", "status": 200})
+
+# #     except Exception as e:
+# #         print(f"Error occurred while placing order: {e}")
+# #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+# # @app.route('/show_order_list', methods=['POST'])
+# # def show_order_list():
+# #     try:
+# #         # Get client_id from the request
+# #         client_id = request.json.get('clientId')
+        
+# #         # If client_id is not provided or not found in the stored transactions
+# #         if not client_id or client_id not in client_transactions:
+# #             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+
+# #         # Retrieve the transactions for the given client_id
+# #         transactions_df = client_transactions[client_id]
+        
+# #         # Convert the DataFrame to a JSON object and return it
+# #         transactions_json = transactions_df.to_dict(orient='records')
+# #         return jsonify({"transaction_data": transactions_json, "status": 200})
+
+# #     except Exception as e:
+# #         print(f"Error occurred while retrieving the order list: {e}")
+# #         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
+
+
+
+# # Path to the JSON file to store transaction data
+# order_list_file = 'order_list.json'
+
+# # Load existing transaction data from the JSON file (if it exists)
+# if os.path.exists(order_list_file):
+#     with open(order_list_file, 'r') as f:
+#         client_transactions = json.load(f)
+# else:
+#     client_transactions = {}
+
+# @app.route('/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract form data from frontend
+#         order_data = request.json.get('order_data')
+#         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
+#         funds = request.json.get('funds')  # Example extra data if needed
+        
+#         # Path to the JSON file to store transaction data
+#         order_list_file = 'order_list.json'
+
+#         # Load existing transaction data from the JSON file (if it exists)
+#         if os.path.exists(order_list_file):
+#             with open(order_list_file, 'r') as f:
+#                 client_transactions = json.load(f)
+#         else:
+#             client_transactions = {}
+            
+#         # Assign default values if necessary
+#         if not order_data.get('date'):
+#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         units = order_data.get('units')
+#         buy_or_sell = order_data.get('buy_or_sell')
+
+#         # Create a dictionary with the relevant data
+#         new_transaction = {
+#             "Market": order_data.get('market'),
+#             "AssetClass": order_data.get('assetClass'),
+#             "Date": order_data.get('date'),
+#             "Action": order_data.get('buy_or_sell'),
+#             "Name": order_data.get('name'),
+#             "Symbol": order_data.get('symbol'),
+#             "Units": order_data.get('units'),
+#             "UnitPrice": order_data.get('unit_price'),
+#             "TransactionAmount": order_data.get('transactionAmount'),
 #         }
+
+#         # If the client_id exists in the JSON file, append the new transaction
+#         if client_id in client_transactions:
+#             client_transactions[client_id].append(new_transaction)
+#         else:
+#             # Create a new entry for the client_id if it doesn't exist
+#             client_transactions[client_id] = [new_transaction]
         
-#         # Prepare the data for the line chart with inflation adjustment
-#         initial_investment = 10000
-#         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-#         print(f"\nThe combined chart data is: {combined_chart_data}")
-        
-#         return jsonify({
-#             "status": 200,
-#             "message": "Success",
-#             "investmentSuggestions":  answer, #formatSuggestions,
-#             "pieChartData": pie_chart_data,
-#             "barChartData": None, #bar_chart_data,
-#             "compoundedChartData": combined_chart_data
-#         }), 200
-        
-#         # return jsonify({
-#         #     "status": 200,
-#         #     "message": "Success",
-#         #     "investmentSuggestions": htmlSuggestions,
-#         #     "pieChartData": pie_chart_data,
-#         #     "barChartData": bar_chart_data,
-#         #     "compoundedChartData": combined_chart_data
-#         # }), 200
+#         # Save the updated transactions back to the JSON file
+#         with open(order_list_file, 'w') as f:
+#             json.dump(client_transactions, f, indent=4)
+
+#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+
+#         return jsonify({"message": "Order placed successfully", "status": 200})
 
 #     except Exception as e:
-#         logging.info(f"Error in generating investment suggestions: {e}")
-#         return jsonify({'message': f'Internal Server Error in Generating responses : {e}'}), 500
+#         print(f"Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
+# @app.route('/show_order_list', methods=['POST'])
+# def show_order_list():
+#     try:
+#         # Get client_id from the request
+#         client_id = request.json.get('client_id')
+        
+#         # If client_id is not provided or not found in the stored transactions
+#         if not client_id or client_id not in client_transactions:
+#             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+
+#         # Retrieve the transactions for the given client_id
+#         transactions_list = client_transactions[client_id]
+#         print(transactions_list)
+#         return jsonify({"transaction_data": transactions_list, "status": 200})
+
+#     except Exception as e:
+#         print(f"Error occurred while retrieving the order list: {e}")
+#         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
+
+
+
+# @app.route('/portfolio', methods=['POST'])
+# def portfolio():
+   
+#     try:
+#         # Extract form data from frontend
+#         portfolio_data = request.json.get('portfolio_data')
+#         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
+#         client_id = request.json.get('clientId','RS4603')  # Get client ID
+#         funds = request.json.get('funds')  
+        
+#         # Assign default values if necessary
+#         if not portfolio_data.get('date'):
+#             portfolio_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         # Get current stock price if not provided in the form
+#         stock_ticker = portfolio_data.get('name')
+#         if stock_ticker == 'apple' : stock_ticker = 'AAPL'
+#         if current_price is None:
+#             stock_data = yf.Ticker(stock_ticker)
+#             current_price = stock_data.history(period='1d')['Close'].iloc[-1]
+
+#         # Calculate the difference between bought price and current price
+#         bought_price = portfolio_data.get('pricePerUnit', 0)
+#         diff_price = current_price - bought_price
+        
+#         # Calculate percentage difference
+#         if bought_price > 0:
+#             percentage_diff = (diff_price / bought_price) * 100
+#         else:
+#             percentage_diff = -1 * (diff_price / bought_price) * 100
+
+#         # Create a dataframe with the relevant data
+#         data = {
+#             "Asset Class": [portfolio_data.get('assetClass')],
+#             "Name": [portfolio_data.get('name')],
+#             "Market": [portfolio_data.get('market')],
+#             "Units": [portfolio_data.get('units')],
+#             "Price Per Unit (Bought)": [bought_price],
+#             "Current Price": [current_price],
+#             "Transaction Type": [portfolio_data.get('transactionType')],
+#             "Transaction Amount": [portfolio_data.get('transactionAmount')],
+#             "Difference in Price": [diff_price],
+#             "Percentage Difference": [f"{percentage_diff:.2f}%"],
+#             "Time of Purchase": [portfolio_data.get('date')]
+#         }
+#         df = pd.DataFrame(data)
+#         print(f"Portfolio Data : {df}")
+        
+#         # Save the table as an Excel file with client name and ID
+#         file_path = f"data/{client_name}_{client_id}_stock_data.xlsx"
+#         df.to_excel(file_path, index=False)
+
+#         # Convert DataFrame to HTML table
+#         table_html = df.to_html(classes='table table-striped', index=False)
+
+#         # Send the Excel file and return the HTML table
+#         return jsonify({"table_html": table_html, "file_path": file_path})
+
+#     except Exception as e:
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+# @app.route('/download_excel', methods=['GET'])
+# def download_excel():
+#     file_path = request.args.get('file_path')
+#     if os.path.exists(file_path):
+#         return send_file(file_path, as_attachment=True)
+#     else:
+#         return jsonify({"message": "File not found"}), 404
+
+
+    
+    
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         # company = request.json.get('company',None)
+#         client_name = request.json.get('client_name')
+#         funds_available = request.json.get('funds_available')
+#         client_id = request.json.get('client_id')
+#         no_of_stocks = request.json.get('no_of_stocks') # Maybe pass areay of stock Ticker Name
+#         tickers = [request.json.get(f'ticker{i}') for i in range(no_of_stocks)]
+#         stock_data = [request.json.get(f'stock_data{i}') for i in range(no_of_stocks)] # All stocks data,Stock Buy Price,No. of Units bought
+#         query = request.json.get('query')
+#         chat_id = request.json.get('chat_id', get_next_chat_id()) 
+        
+#     except Exception as e :
+#         print(f"Error extracting data from request: {e}")
+#         return jsonify({'message': 'Failed to extract data from request'}), 400
+    
+#     # If a valid ticker is found, fetch stock data
+#     if tickers and not stock_data :
+#         try:
+#             stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
+#             user_query = tickers  # Save the tickers as the user query
+#         except Exception as e:
+#             print("Error getting the stock data")
+#             return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+#     else:
+#         # No valid ticker found, generate generic Portfolio suggestions
+#         print("No valid tickers found in the query, generating general Portfolio suggestions.")
+#         stock_data = {}  # No specific stock data need to check for news
+#         formatted_data = ""  # No financial data
+        
+#     if query:
+#         task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
+#                 with any queries they might have.
+#                 If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+#     else :
+#         task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
+#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. 
+#                 Given a list of stocks of a Portfolio, give Analysis of all the stocks 
+#                 The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                 Do not answer any questions unrelated to the stocks."""
+    
+#     model = genai.GenerativeModel('gemini-1.5-flash')
+#     response = model.generate_content(query)
+#     print(response.text)
+        
+#     try:
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"Html Suggestions : {html_suggestions}")
+        
+#         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+#         # format_suggestions = markdown_to_text(response)
+#         print(f"Html Suggestions : {html_suggestions}")
+#         format_suggestions = markdown_to_text(html_suggestions)
+        
+#     except Exception as e:
+#         logging.error(f"Error extracting text from response: {e}")
+#         print(f"Error extracting text from response : {e}")
+#         return jsonify({"error": "Failed to analyze stock data"}), 500
 
 
 # # Run the Flask application
@@ -6809,8 +8216,6 @@ if __name__ == '__main__':
 
 
 
-
-# # # Latest Code : added queries 
 # # import streamlit as st
 # # import pandas as pd
 # # import matplotlib.pyplot as plt
@@ -6867,6 +8272,7 @@ if __name__ == '__main__':
 
 # # #     return html
 
+
 # # def markdown_table_to_html(md_table):
 # #     # Split the markdown table by lines
 # #     lines = md_table.strip().split("\n")
@@ -6894,6 +8300,58 @@ if __name__ == '__main__':
 # #     html_table += "  </tbody>\n</table>"
 
 # #     return html_table
+
+# # def process_client_info_and_analysis(content):
+# #     # Identify and extract the client's financial info markdown table part
+# #     client_info_section_start = content.find("| Category | Value |")
+# #     client_info_section_end = content.find("</p>", client_info_section_start) + 4
+    
+# #     if client_info_section_start != -1 and client_info_section_end != -1:
+# #         # Extract markdown table
+# #         md_table = content[client_info_section_start:client_info_section_end]
+# #         # Convert only the markdown table portion into an HTML table
+# #         html_table = markdown_table_to_html(md_table)
+# #         # Replace the markdown table part with the generated HTML table
+# #         content = content[:client_info_section_start] + html_table + content[client_info_section_end:]
+    
+# #     # Return the rest of the content unchanged
+# #     return content
+
+# # def generate_final_html(content):
+# #     # Process the content to convert financial info to HTML table while leaving other sections untouched
+# #     html_content = process_client_info_and_analysis(content)
+    
+# #     # Any other HTML processing can be done here if needed
+# #     return html_content
+
+
+# # # def markdown_table_to_html(md_table):
+# # #     # Split the markdown table by lines
+# # #     lines = md_table.strip().split("\n")
+    
+# # #     # Extract headers and rows
+# # #     headers = lines[0].strip('|').split('|')
+# # #     rows = [line.strip('|').split('|') for line in lines[2:]]  # Skip the separator line
+
+# # #     # Start creating the HTML table
+# # #     html_table = "<table>\n"
+    
+# # #     # Add headers
+# # #     html_table += "  <thead>\n    <tr>\n"
+# # #     for header in headers:
+# # #         html_table += f"      <th>{header.strip()}</th>\n"
+# # #     html_table += "    </tr>\n  </thead>\n"
+    
+# # #     # Add rows
+# # #     html_table += "  <tbody>\n"
+# # #     for row in rows:
+# # #         html_table += "    <tr>\n"
+# # #         for col in row:
+# # #             html_table += f"      <td>{col.strip()}</td>\n"
+# # #         html_table += "    </tr>\n"
+# # #     html_table += "  </tbody>\n</table>"
+
+# # #     return html_table
 
 
 
@@ -8391,7 +9849,7 @@ if __name__ == '__main__':
 # #     return colors
 
 
-# # import plotly.graph_objects as go
+# # # import plotly.graph_objects as go
 # # import numpy as np
 
  
@@ -9484,7 +10942,7 @@ if __name__ == '__main__':
 # #             "message": "Success",
 # #             "investmentSuggestions": answer, #formatSuggestions,
 # #             "pieChartData": pie_chart_data,
-# #             "barChartData": bar_chart_data,
+# #             "barChartData": None,#bar_chart_data,
 # #             "compoundedChartData":combined_chart_data
 # #         }), 200
                     
@@ -9541,168 +10999,45 @@ if __name__ == '__main__':
 
 # # NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 
+# # # Simulate memory using a file
+# # CHAT_HISTORY_FILE = "chat_history.json"
+# # CHAT_ID_TRACKER_FILE = "chat_id_tracker.json"  # File to track chat_id
 
-# # # # Best version : Not Proper Query Handling done
-# # # @app.route('/analyze_stock', methods=['POST'])
-# # # def analyze_stock():
-# # #     try:
-# # #         ticker = request.json.get('ticker')
-        
-# # #         if not ticker:
-# # #             print("Ticker is required")
-# # #             # return jsonify({"error": "Ticker is required"}), 400
+# # # Helper to save chat history to a file
+# # def save_chat_history(chat_id, history):
+# #     if os.path.exists(CHAT_HISTORY_FILE):
+# #         with open(CHAT_HISTORY_FILE, 'r') as f:
+# #             chat_data = json.load(f)
+# #     else:
+# #         chat_data = {}
 
-# # #         query = request.json.get('query')
-# # #         if not query:
-# # #             query = "Generate Stock Analysis and give some predictions on its price "
-# # #         # Step 1: Fetch Stock Data
-# # #         stock = yf.Ticker(ticker)
-        
-# # #         data = {}
+# #     chat_data[chat_id] = history
 
-# # #         company_details = stock.info.get('longBusinessSummary', 'No details available')
-# # #         data['Company_Details'] = company_details
-# # #         sector = stock.info.get('sector', 'No sector information available')
-# # #         data['Sector'] = sector
-# # #         prev_close = stock.info.get('previousClose', 'No previous close price available')
-# # #         data['Previous_Closing_Price'] = prev_close
-# # #         open_price = stock.info.get('open', 'No opening price available')
-# # #         data['Today_Opening_Price'] = open_price
-         
-# # #         hist = stock.history(period="5d")
-# # #         if not hist.empty and 'Close' in hist.columns:
-# # #             if hist.index[-1].date() == yf.download(ticker, period="1d").index[-1].date():
-# # #                 close_price = hist['Close'].iloc[-1]
-# # #                 data['Todays_Closing_Price'] = close_price
-# # #             else:
-# # #                 data['Todays_Closing_Price'] = "Market is open, no closing price available yet."
-# # #         else:
-# # #             data['Todays_Closing_Price'] = "No historical data available for closing price."
+# #     with open(CHAT_HISTORY_FILE, 'w') as f:
+# #         json.dump(chat_data, f, indent=4)
 
-# # #         day_high = stock.info.get('dayHigh', 'No high price available')
-# # #         data['Today_High_Price'] = day_high
-# # #         day_low = stock.info.get('dayLow', 'No low price available')
-# # #         data['Today_Low_Price'] = day_low
-# # #         volume = stock.info.get('volume', 'No volume information available')
-# # #         data['Today_Volume'] = volume
-# # #         dividends = stock.info.get('dividendRate', 'No dividend information available')
-# # #         data['Today_Dividends'] = dividends
-# # #         splits = stock.info.get('lastSplitFactor', 'No stock split information available')
-# # #         data['Today_Stock_Splits'] = splits
-# # #         pe_ratio = stock.info.get('trailingPE', 'No P/E ratio available')
-# # #         data['PE_Ratio'] = pe_ratio
-# # #         market_cap = stock.info.get('marketCap', 'No market cap available')
-# # #         data['Market_Cap'] = market_cap
+# # # Helper to load chat history from a file
+# # def load_chat_history(chat_id):
+# #     if os.path.exists(CHAT_HISTORY_FILE):
+# #         with open(CHAT_HISTORY_FILE, 'r') as f:
+# #             chat_data = json.load(f)
+# #         return chat_data.get(str(chat_id), [])
+# #     return []
 
-# # #         # Additional KPIs
-# # #         data['EPS'] = stock.info.get('trailingEps', 'No EPS information available')
-# # #         data['Book_Value'] = stock.info.get('bookValue', 'No book value available')
-# # #         data['ROE'] = stock.info.get('returnOnEquity', 'No ROE information available')
-# # #         data['ROCE'] = stock.info.get('returnOnAssets', 'No ROCE information available')  # ROCE is not available directly
-        
-# # #         # Revenue Growth (CAGR) and Earnings Growth would need to be calculated based on historical data
-# # #         earnings_growth = stock.info.get('earningsGrowth', 'No earnings growth available')
-# # #         revenue_growth = stock.info.get('revenueGrowth', 'No revenue growth available')
+# # # Helper to track chat_id and increment it
+# # def get_next_chat_id():
+# #     if os.path.exists(CHAT_ID_TRACKER_FILE):
+# #         with open(CHAT_ID_TRACKER_FILE, 'r') as f:
+# #             chat_id_data = json.load(f)
+# #         chat_id = chat_id_data.get("chat_id", 1)
+# #     else:
+# #         chat_id = 1
 
-# # #         data['Earnings_Growth'] = earnings_growth
-# # #         data['Revenue_Growth'] = revenue_growth
-        
-        
-# # #         income_statement = stock.financials
-# # #         balance_sheet = stock.balance_sheet
-# # #         cashflow = stock.cashflow
+# #     chat_id_data = {"chat_id": chat_id + 1}
+# #     with open(CHAT_ID_TRACKER_FILE, 'w') as f:
+# #         json.dump(chat_id_data, f, indent=4)
 
-# # #         # Step 2: Get News Related to Stock
-# # #         news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
-# # #         news_response = requests.get(news_url)
-# # #         if news_response.status_code == 200:
-# # #             news_data = news_response.json()
-# # #             articles = news_data.get('articles', [])
-# # #             if articles:
-# # #                 top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
-# # #                 data['Top_News'] = top_news
-# # #             else:
-# # #                 data['Top_News'] = "No news articles found."
-# # #         else:
-# # #             data['Top_News'] = "Failed to fetch news articles."
-# # #     except Exception as e:
-# # #         logging.info(f"Error occurred while collecting stock data: {e}")
-# # #         print(f"Error occurred while collecting stock data: :\n{e}")
-# # #         return jsonify({'message': 'Internal Server Error in Stock Data Collection'}), 500
-    
-# # #     print(data['Top_News'])
-    
-# # #     try:
-            
-# # #         # Step 3: Save Financial Data to Excel
-# # #         file_path = os.path.join('data', f'{ticker}_financial_data.xlsx')
-# # #         with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-# # #             income_statement.to_excel(writer, sheet_name='Income Statement')
-# # #             balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
-# # #             cashflow.to_excel(writer, sheet_name='Cashflow')
-
-# # #         # Step 4: Perform Analysis
-# # #         avg_close = hist['Close'].mean()
-# # #         formatted_data = extract_excel_data(file_path)
-    
-# # #     except Exception as e:
-# # #         logging.info(f"Error occurred while performing analysis: {e}")
-# # #         print(f"Error occurred while performing analysis :\n{e}")
-# # #         return jsonify({'message': 'Internal Server Error in Stock Analysis'}), 500
-
-# # #     try:
-        
-# # #         task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
-# # #                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-# # #                     Predict the stock price range for the next week and provide reasons for your prediction.
-# # #                     Advise whether to buy this stock now or not, with reasons for your advice."""
-
-# # #         query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data
-
-# # #         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
-# # #         model = genai.GenerativeModel('gemini-1.5-flash')
-# # #         response = model.generate_content(query)
-# # #         print(response.text)
-# # #         print(data)
-    
-# # #     except Exception as e:
-# # #         logging.error(f"Error performing analysis with generative AI: {e}")
-# # #         return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
-    
-# # #     # Extract response from the model
-# # #     try:
-# # #         html_suggestions = markdown.markdown(response.text)
-        
-# # #         print(f"Html Suggestions : {html_suggestions}")
-        
-# # #         logging.info(f"Suggestions for stock: \n{response.text}")
-        
-# # #         # format_suggestions = markdown_to_text(response)
-# # #         print(f"Html Suggestions : {html_suggestions}")
-# # #         format_suggestions = markdown_to_text(html_suggestions)
-        
-# # #     except Exception as e:
-# # #         logging.error(f"Error extracting text from response: {e}")
-# # #         print(f"Error extracting text from response : {e}")
-# # #         return jsonify({"error": "Failed to analyze stock data"}), 500
-
-# # #     # Return all collected and analyzed data
-# # #     return jsonify({
-# # #         "data": data,
-# # #         "average_closing_price": f"${avg_close:.2f}",
-# # #         "analysis": format_suggestions,
-# # #         "news": data['Top_News'],
-# # #         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-# # #     })
-
-# # # def extract_excel_data(file_path):
-# # #     financial_data = ""
-# # #     xls = pd.ExcelFile(file_path)
-# # #     for sheet_name in xls.sheet_names:
-# # #         df = pd.read_excel(xls, sheet_name=sheet_name)
-# # #         financial_data += f"\n\nSheet: {sheet_name}\n"
-# # #         financial_data += df.to_string()
-# # #     return financial_data
+# #     return chat_id
 
 
 # # # # Fetch Stock Data :
@@ -9804,7 +11139,10 @@ if __name__ == '__main__':
 # #         return jsonify({'message': 'Internal Server Error in Stock Analysis'}), 500
 
 
+
 # # # Helper function to extract a ticker from the query
+
+# # # # Best Code answers the queries properly :)
 # # def extract_ticker(query):
 # #     # Mapping of popular company names to tickers for demonstration (you can expand this)
 # #     companies_to_tickers = {
@@ -9815,84 +11153,109 @@ if __name__ == '__main__':
 # #         "google": "GOOGL",
 # #         "nvidia": "NVDA"
 # #     }
+
 # #     # Split the query into words
 # #     words = query.lower().split()
     
 # #     # Check for known company names or tickers
 # #     for word in words:
 # #         if word in companies_to_tickers:
-# #             return companies_to_tickers[word]
+# #             # word[0] = word[0].upper()
+# #             # word[1:] = word[1:].lower()
+# #             return companies_to_tickers[word] ,word.capitalize() #word.upper() #word 
     
-            
+# #     # Try to find a valid stock ticker by querying Yahoo Finance
 # #     for word in words:
 # #         if word:  # Ensure the word is not None or empty
 # #             try:
 # #                 ticker = yf.Ticker(word.upper())
 # #                 if ticker.info.get('regularMarketPrice') is not None:
-# #                     print(word)
-# #                     print(ticker.info.get('regularMarketPrice'))
-# #                     return word.upper()
+# #                     return ticker ,word.upper()  # Return the valid ticker
 # #             except Exception as e:
 # #                 continue
     
 # #     # Default fallback if no ticker is found
-# #     print("No ticker found in the query")
-# #     return None
+# #     print("No valid ticker found in the query.")
+# #     return None,None
 
-# # # def extract_ticker(query):
-# #     # # Mapping of popular company names to tickers for demonstration (you can expand this)
-# #     # companies_to_tickers = {
-# #     #     "apple": "AAPL",
-# #     #     "microsoft": "MSFT",
-# #     #     "amazon": "AMZN",
-# #     #     "tesla": "TSLA",
-# #     #     "google": "GOOGL",
-# #     #     "nvidia": "NVDA"
-# #     # }
-    
-# # #     # Split the query into words
-# # #     words = query.lower().split()
-    
-# #     # # Check for known company names or tickers
-# #     # for word in words:
-# #     #     if word in companies_to_tickers:
-# #     #         return companies_to_tickers[word]
-    
-# # #     # Default fallback if no ticker is found
-# # #     print("No ticker found in the query")
-# # #     return None
 
+# # def format_chat_history_for_llm(chat_history, new_query):
+# #     # Format chat history as a readable conversation for the model
+# #     conversation = ""
+# #     for entry in chat_history:
+# #         user_query = entry.get('user_query', '')
+# #         message = entry.get('message', '')
+        
+# #         # Append user query and model's response to the conversation
+# #         conversation += f"User Query: {user_query}\nResponse: {message}\n\n"
+    
+# #     # Append the new query
+# #     conversation += f"User Query: {new_query}\n"
+    
+# #     return conversation
 
 # # @app.route('/analyze_stock', methods=['POST'])
 # # def analyze_stock():
 # #     try:
 # #         ticker = request.json.get('ticker')
-        
-# #         if ticker :
-# #             try:
-# #                 data,formatted_data,avg_close = get_stock_data(ticker)
-# #             except Exception as e:
-# #                 print("Error getting the stock data")
-# #                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-            
+# #         company = request.json.get('company',None)
 # #         query = request.json.get('query')
-# #         if query:
-# #             ticker = extract_ticker(query)
+# #         chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
+# #         # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
+        
+# #         # Load chat history
+# #         chat_history = load_chat_history(chat_id)
+
+# #         # If no ticker provided in the request, try to extract it from the query
+# #         if not ticker and query:
+# #             # ticker = extract_ticker(query)
+            
+# #             ticker,company = extract_ticker(query)
+        
+# #         # If a valid ticker is found, fetch stock data
+# #         if ticker:
 # #             try:
-# #                 data,formatted_data,avg_close = get_stock_data(ticker)
+# #                 data, formatted_data, avg_close = get_stock_data(ticker)
+# #                 user_query = ticker  # Save the ticker as the user query
 # #             except Exception as e:
 # #                 print("Error getting the stock data")
 # #                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+# #         else:
+# #             # No valid ticker found, generate generic suggestions
+# #             print("No valid ticker found in the query, generating general stock suggestions.")
+# #             data = {}  # No specific stock data need to check for news
+# #             formatted_data = ""  # No financial data
+# #             avg_close = 0
+# #             user_query = query  # Save the original user query if no ticker is found
+
+# #         # If query is empty, set a default query for stock analysis
+# #         # if not query:
+# #         #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
         
-# #         if not ticker and not query :
-# #             print('No ticker provided')
-# #             return jsonify({'message': 'No ticker provided'}), 400
         
-# #         if not query:
-# #             query = "Generate Stock Analysis and give some predictions on its price "
+
         
-# #         if not ticker :
-# #             data = [] # fail safe to not generate any errors
+# #          # Save the user's query (ticker or original query) to chat history
+# #         if user_query:
+# #             chat_history.append({"user_query": user_query, "message": query})
+        
+# #         # Detect if this is a follow-up query based on previous history
+# #         if chat_history:
+# #             print("This is a follow-up query. Checking previous chat history.")
+# #             # The logic here could vary; you might compare the current query with past responses or check patterns
+# #             query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
+
+# #         # Save the user's query (ticker or original query) to chat history
+# #         chat_history.append({"user_query": user_query, "message": query})
+        
+      
+            
+# #         # Format the chat history for the LLM
+# #         try :
+# #             formatted_history = format_chat_history_for_llm(chat_history, query)
+# #         except Exception as e:
+# #             logging.error(f"Error while formatting chat history for LLM: {e}")
+# #             return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
         
         
 # #     except Exception as e :
@@ -9900,24 +11263,44 @@ if __name__ == '__main__':
 # #         return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
     
 # #     try:
-        
-# #         task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+# #         if ticker:
+# #             # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+# #             #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+# #             #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+# #             #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+# #             #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+# #             #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
+# #             #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
+# #             #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
+# #             #             Do not answer any questions unrelated to the stocks."""
+                        
+# #             task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
 # #                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
 # #                     Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
 # #                     Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
 # #                     Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
-# #                     Advise whether to buy this stock now or not, with reasons for your advice.
-# #                     If the query asks for some stock suggestions then provide them a list of stock suggestions based on the query.
-# #                     If the user has asked a follow up question then provide them a good response by also considering their previous queries
-# #                     Do not answer any questions unrelated to the stocks."""
-                    
-# #         # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+# #                     Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+
+# #             query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
+        
+# #         else:
+# #             task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
+# #                         You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
+# #                         with any queries they might have.
+# #                         If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+# #                         If the user has asked a follow up question then provide them a good response by also considering their previous queries
+# #                         Do not answer any questions unrelated to the stocks."""
+            
+# #             query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
+# #             print(f"The formatted chat history passed to llm is : {formatted_history}")
+# #             print(f"The query passed to llm is : {query}")
+# #          # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
 # #         #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
 # #         #             Predict the stock price range for the next week and provide reasons for your prediction.
 # #         #             Advise whether to buy this stock now or not, with reasons for your advice."""
-
-# #         query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data
-
+        
+        
 # #         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
 # #         model = genai.GenerativeModel('gemini-1.5-flash')
 # #         response = model.generate_content(query)
@@ -9945,14 +11328,28 @@ if __name__ == '__main__':
 # #         print(f"Error extracting text from response : {e}")
 # #         return jsonify({"error": "Failed to analyze stock data"}), 500
 
+# #     # Save the assistant's response to chat history
+# #     chat_history.append({"user_query": user_query, "message": format_suggestions})
+# #     save_chat_history(chat_id, chat_history)
+
+# #     # Increment chat_id for the next follow-up question
+# #     new_chat_id = get_next_chat_id()
+    
+# #     if data == {}:
+# #         data['Top_News'] = None
+        
+# #     data['Company'] = company if company else None
+      
 # #     # Return all collected and analyzed data
 # #     return jsonify({
+# #         # "Company": company,
 # #         "data": data,
 # #         "average_closing_price": f"${avg_close:.2f}",
 # #         "analysis": format_suggestions,
 # #         "news": data['Top_News'],
 # #         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-# #     })
+# #     }) # "chat_history" : chat_history
+# #     # "new_chat_id" : new_chat_id
 
 # # def extract_excel_data(file_path):
 # #     financial_data = ""
@@ -10017,19 +11414,20 @@ if __name__ == '__main__':
 # #         max_allocations = normalize_allocations(max_allocations)
 
 # #         # Update Bar Chart Data
-# #         bar_chart_data = {
-# #             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-# #             'datasets': [{
-# #                 'label': 'Min Allocation',
-# #                 'data': min_allocations,
-# #                 'backgroundColor': 'skyblue'
-# #             },
-# #             {
-# #                 'label': 'Max Allocation',
-# #                 'data': max_allocations,
-# #                 'backgroundColor': 'lightgreen'
-# #             }]
-# #         }
+        
+# #         # bar_chart_data = {
+# #         #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# #         #     'datasets': [{
+# #         #         'label': 'Min Allocation',
+# #         #         'data': min_allocations,
+# #         #         'backgroundColor': 'skyblue'
+# #         #     },
+# #         #     {
+# #         #         'label': 'Max Allocation',
+# #         #         'data': max_allocations,
+# #         #         'backgroundColor': 'lightgreen'
+# #         #     }]
+# #         # }
 
 # #         # Similar changes can be made for the Pie Chart Data:
 # #         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
@@ -10063,7 +11461,7 @@ if __name__ == '__main__':
 # #             "message": "Success",
 # #             "investmentSuggestions":  answer, #formatSuggestions,
 # #             "pieChartData": pie_chart_data,
-# #             "barChartData": bar_chart_data,
+# #             "barChartData": None, #bar_chart_data,
 # #             "compoundedChartData": combined_chart_data
 # #         }), 200
         
@@ -10088,8 +11486,8 @@ if __name__ == '__main__':
 
 
 
-# # # # Latest version of the code : 
 
+# # # # Latest Code : added queries 
 # # # import streamlit as st
 # # # import pandas as pd
 # # # import matplotlib.pyplot as plt
@@ -10146,6 +11544,35 @@ if __name__ == '__main__':
 
 # # # #     return html
 
+# # # def markdown_table_to_html(md_table):
+# # #     # Split the markdown table by lines
+# # #     lines = md_table.strip().split("\n")
+    
+# # #     # Extract headers and rows
+# # #     headers = lines[0].strip('|').split('|')
+# # #     rows = [line.strip('|').split('|') for line in lines[2:]]  # Skip the separator line
+
+# # #     # Start creating the HTML table
+# # #     html_table = "<table>\n"
+    
+# # #     # Add headers
+# # #     html_table += "  <thead>\n    <tr>\n"
+# # #     for header in headers:
+# # #         html_table += f"      <th>{header.strip()}</th>\n"
+# # #     html_table += "    </tr>\n  </thead>\n"
+    
+# # #     # Add rows
+# # #     html_table += "  <tbody>\n"
+# # #     for row in rows:
+# # #         html_table += "    <tr>\n"
+# # #         for col in row:
+# # #             html_table += f"      <td>{col.strip()}</td>\n"
+# # #         html_table += "    </tr>\n"
+# # #     html_table += "  </tbody>\n</table>"
+
+# # #     return html_table
+
+
 
 # # # import markdown2
 # # # from bs4 import BeautifulSoup
@@ -10178,18 +11605,65 @@ if __name__ == '__main__':
 # # #                 for idx, li in enumerate(element.find_all("li"), 1):
 # # #                     formatted_text += f"\n {idx}. {li.text}"
 # # #             elif element.name == "table":
+# # #                 # Convert markdown table to HTML table
+# # #                 formatted_text += "<table>\n"
 # # #                 rows = element.find_all("tr")
 # # #                 for row in rows:
+# # #                     formatted_text += "<tr>\n"
 # # #                     cols = row.find_all(["th", "td"])
-# # #                     row_text = ' | '.join(col.text.strip() for col in cols)
-# # #                     formatted_text += f"{row_text}\n"
-# # #                 formatted_text += "\n"
+# # #                     for col in cols:
+# # #                         tag = 'th' if col.name == "th" else 'td'
+# # #                         formatted_text += f"<{tag}>{col.text.strip()}</{tag}>\n"
+# # #                     formatted_text += "</tr>\n"
+# # #                 formatted_text += "</table>\n"
 # # #             else:
 # # #                 formatted_text += element.text
 
 # # #         return formatted_text.strip()
 
 # # #     return format_text_from_html(soup)
+
+
+# # # # def markdown_to_readable_text(md_text):
+# # # #     # Convert markdown to HTML
+# # # #     html = markdown2.markdown(md_text)
+
+# # # #     # Parse the HTML
+# # # #     soup = BeautifulSoup(html, "html.parser")
+
+# # # #     # Function to format plain text from tags
+# # # #     def format_text_from_html(soup):
+# # # #         formatted_text = ''
+# # # #         for element in soup:
+# # # #             if element.name == "h1":
+# # # #                 formatted_text += f"\n\n# {element.text.upper()} #\n\n"
+# # # #             elif element.name == "h2":
+# # # #                 formatted_text += f"\n\n## {element.text} ##\n\n"
+# # # #             elif element.name == "h3":
+# # # #                 formatted_text += f"\n\n### {element.text} ###\n\n"
+# # # #             elif element.name == "strong":
+# # # #                 formatted_text += f"**{element.text}**"
+# # # #             elif element.name == "em":
+# # # #                 formatted_text += f"_{element.text}_"
+# # # #             elif element.name == "ul":
+# # # #                 for li in element.find_all("li"):
+# # # #                     formatted_text += f"\n - {li.text}"
+# # # #             elif element.name == "ol":
+# # # #                 for idx, li in enumerate(element.find_all("li"), 1):
+# # # #                     formatted_text += f"\n {idx}. {li.text}"
+# # # #             elif element.name == "table":
+# # # #                 rows = element.find_all("tr")
+# # # #                 for row in rows:
+# # # #                     cols = row.find_all(["th", "td"])
+# # # #                     row_text = ' | '.join(col.text.strip() for col in cols)
+# # # #                     formatted_text += f"{row_text}\n"
+# # # #                 formatted_text += "\n"
+# # # #             else:
+# # # #                 formatted_text += element.text
+
+# # # #         return formatted_text.strip()
+
+# # # #     return format_text_from_html(soup)
 
 # # # def markdown_to_text(md): # og solution code 
 # # #     # Simple conversion for markdown to plain text
@@ -10584,7 +12058,8 @@ if __name__ == '__main__':
 # # #         llm = ChatGoogleGenerativeAI(
 # # #             #model="gemini-pro",
 # # #             model = "gemini-1.5-flash",
-# # #             temperature=0.7,
+# # #             temperature = 0.45,
+# # #             # temperature=0.7,
 # # #             top_p=0.85,
 # # #             google_api_key=GOOGLE_API_KEY
 # # #         )
@@ -10622,12 +12097,12 @@ if __name__ == '__main__':
                 
 # # #                 Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
                 
-# # #                 Investment Suggestions : 
+# # #                 Client's Financial Information :(# This is a header line have it in bold) 
                 
                 
-# # #                 Client Name: """ + clientName + """
+# # #                 Client Name: """ + clientName + """(# have the client name in underline)
 
-# # #                 Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis)
+# # #                 Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis, This is a header line have it in bold. The data below it should be displayed in a table format so make sure of that data.There must be 2 columns 1 for Category and second for Value.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
                 
 # # #                 - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
                 
@@ -10642,16 +12117,17 @@ if __name__ == '__main__':
                 
 # # #                 - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
 
+
 # # #                 Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
 # # #                 (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
 # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
 # # #                 (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
                 
-# # #                 (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a bad income for now but have great assets and manageable debt and liabilities.
+# # #                 (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
 # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
 # # #                 Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
                 
-# # #                 (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a bad income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+# # #                 (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
 # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
 # # #                 I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
                 
@@ -12215,7 +13691,8 @@ if __name__ == '__main__':
 # # #         return jsonify("Error : Failed to load vector database and to generate suggestions : {e}"),400
     
 # # #     if not retriever:
-# # #         await load_vector_db("data\Financial_Investment_new.docx")
+# # #         # await load_vector_db("data\Financial_Investment_new.docx")
+# # #         await load_vector_db("data\EW2400.docx")
 # # #         # await load_vector_db("data\Financial_Investment_1_new.docx") # doesnt works
 # # #         # await load_vector_db("data\Financial_Investment_1.docx")
 # # #         if not retriever:
@@ -12535,10 +14012,21 @@ if __name__ == '__main__':
             
             
 # # #             # print(f"Finished processing the suggestions : {suggestions}")
-            
+           
 # # #             htmlSuggestions = markdown.markdown(suggestions)
+# # #             # ans = markdown_to_readable_text(htmlSuggestions)
+# # #             # formatSuggestions = ans
+# # #             # formatSuggestions = markdown_to_text(htmlSuggestions)
+# # #             # print(f"HTML Suggestions: {htmlSuggestions}")
+# # #             formatSuggestions = markdown.markdown(htmlSuggestions)
             
-# # #             formatSuggestions = markdown_to_text(suggestions)
+# # #             # ---------------------------------=----------
+# # #             # htmlSuggestions = markdown.markdown(suggestions)
+# # #             # htmlSuggestions = markdown2.markdown(suggestions)
+            
+# # #             # print(f"HTML Suggestions: {htmlSuggestions}")
+            
+# # #             # formatSuggestions = markdown_to_text(suggestions)
             
 # # #             # print(f"The suggestions generated for the client are :\n {formatSuggestions}")
             
@@ -12598,12 +14086,17 @@ if __name__ == '__main__':
 # # #             combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
 # # #             print(f"\nThe combined chart data is : {combined_chart_data}")
             
-# # #             return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+# # #             # return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+            
+# # #             print(f"Format suggestions : {formatSuggestions}")
+            
+# # #             return formatSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+            
             
 # # #         except Exception as e:
 # # #             logging.info(f"Error occurred while generating investment suggestions: {e}")
 # # #             return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
-        
+    
 
         
 # # #         # return jsonify({
@@ -12644,7 +14137,10 @@ if __name__ == '__main__':
 # # #             # investment_period= data.get('investment_period')  #3
 # # #             monthly_investment= 10000
 # # #             investment_period= 3
-# # #             htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
+# # #             formatSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
+# # #             answer = markdown_table_to_html(formatSuggestions)
+# # #             print(answer)
+# # #             # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
             
 # # #         except Exception as e:
 # # #             logging.info(f"Error occurred while processing investment data: {e}")
@@ -12652,10 +14148,18 @@ if __name__ == '__main__':
         
 # # #         # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName))
         
+# # #         # return jsonify({
+# # #         #     "status": 200,
+# # #         #     "message": "Success",
+# # #         #     "investmentSuggestions": htmlSuggestions,
+# # #         #     "pieChartData": pie_chart_data,
+# # #         #     "barChartData": bar_chart_data,
+# # #         #     "compoundedChartData":combined_chart_data
+# # #         # }), 200
 # # #         return jsonify({
 # # #             "status": 200,
 # # #             "message": "Success",
-# # #             "investmentSuggestions": htmlSuggestions,
+# # #             "investmentSuggestions": answer, #formatSuggestions,
 # # #             "pieChartData": pie_chart_data,
 # # #             "barChartData": bar_chart_data,
 # # #             "compoundedChartData":combined_chart_data
@@ -12676,7 +14180,6 @@ if __name__ == '__main__':
 
 # # # # Route to handle generating investment suggestions
 # # # import shutil
-# # # import os
 # # # import os
 
 # # # def save_file_to_folder(file_storage, destination_folder):
@@ -12702,6 +14205,444 @@ if __name__ == '__main__':
 # # #         print(f"Error saving file: {e}")
 
 
+
+# # # # #Stock analysis code :
+
+# # # from flask import Flask, request, jsonify
+# # # import yfinance as yf
+# # # import pandas as pd
+# # # import requests
+# # # import os
+# # # import logging
+
+
+# # # NEWS_API_KEY = os.getenv('NEWS_API_KEY')
+
+
+# # # # # Best version : Not Proper Query Handling done
+# # # # @app.route('/analyze_stock', methods=['POST'])
+# # # # def analyze_stock():
+# # # #     try:
+# # # #         ticker = request.json.get('ticker')
+        
+# # # #         if not ticker:
+# # # #             print("Ticker is required")
+# # # #             # return jsonify({"error": "Ticker is required"}), 400
+
+# # # #         query = request.json.get('query')
+# # # #         if not query:
+# # # #             query = "Generate Stock Analysis and give some predictions on its price "
+# # # #         # Step 1: Fetch Stock Data
+# # # #         stock = yf.Ticker(ticker)
+        
+# # # #         data = {}
+
+# # # #         company_details = stock.info.get('longBusinessSummary', 'No details available')
+# # # #         data['Company_Details'] = company_details
+# # # #         sector = stock.info.get('sector', 'No sector information available')
+# # # #         data['Sector'] = sector
+# # # #         prev_close = stock.info.get('previousClose', 'No previous close price available')
+# # # #         data['Previous_Closing_Price'] = prev_close
+# # # #         open_price = stock.info.get('open', 'No opening price available')
+# # # #         data['Today_Opening_Price'] = open_price
+         
+# # # #         hist = stock.history(period="5d")
+# # # #         if not hist.empty and 'Close' in hist.columns:
+# # # #             if hist.index[-1].date() == yf.download(ticker, period="1d").index[-1].date():
+# # # #                 close_price = hist['Close'].iloc[-1]
+# # # #                 data['Todays_Closing_Price'] = close_price
+# # # #             else:
+# # # #                 data['Todays_Closing_Price'] = "Market is open, no closing price available yet."
+# # # #         else:
+# # # #             data['Todays_Closing_Price'] = "No historical data available for closing price."
+
+# # # #         day_high = stock.info.get('dayHigh', 'No high price available')
+# # # #         data['Today_High_Price'] = day_high
+# # # #         day_low = stock.info.get('dayLow', 'No low price available')
+# # # #         data['Today_Low_Price'] = day_low
+# # # #         volume = stock.info.get('volume', 'No volume information available')
+# # # #         data['Today_Volume'] = volume
+# # # #         dividends = stock.info.get('dividendRate', 'No dividend information available')
+# # # #         data['Today_Dividends'] = dividends
+# # # #         splits = stock.info.get('lastSplitFactor', 'No stock split information available')
+# # # #         data['Today_Stock_Splits'] = splits
+# # # #         pe_ratio = stock.info.get('trailingPE', 'No P/E ratio available')
+# # # #         data['PE_Ratio'] = pe_ratio
+# # # #         market_cap = stock.info.get('marketCap', 'No market cap available')
+# # # #         data['Market_Cap'] = market_cap
+
+# # # #         # Additional KPIs
+# # # #         data['EPS'] = stock.info.get('trailingEps', 'No EPS information available')
+# # # #         data['Book_Value'] = stock.info.get('bookValue', 'No book value available')
+# # # #         data['ROE'] = stock.info.get('returnOnEquity', 'No ROE information available')
+# # # #         data['ROCE'] = stock.info.get('returnOnAssets', 'No ROCE information available')  # ROCE is not available directly
+        
+# # # #         # Revenue Growth (CAGR) and Earnings Growth would need to be calculated based on historical data
+# # # #         earnings_growth = stock.info.get('earningsGrowth', 'No earnings growth available')
+# # # #         revenue_growth = stock.info.get('revenueGrowth', 'No revenue growth available')
+
+# # # #         data['Earnings_Growth'] = earnings_growth
+# # # #         data['Revenue_Growth'] = revenue_growth
+        
+        
+# # # #         income_statement = stock.financials
+# # # #         balance_sheet = stock.balance_sheet
+# # # #         cashflow = stock.cashflow
+
+# # # #         # Step 2: Get News Related to Stock
+# # # #         news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+# # # #         news_response = requests.get(news_url)
+# # # #         if news_response.status_code == 200:
+# # # #             news_data = news_response.json()
+# # # #             articles = news_data.get('articles', [])
+# # # #             if articles:
+# # # #                 top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+# # # #                 data['Top_News'] = top_news
+# # # #             else:
+# # # #                 data['Top_News'] = "No news articles found."
+# # # #         else:
+# # # #             data['Top_News'] = "Failed to fetch news articles."
+# # # #     except Exception as e:
+# # # #         logging.info(f"Error occurred while collecting stock data: {e}")
+# # # #         print(f"Error occurred while collecting stock data: :\n{e}")
+# # # #         return jsonify({'message': 'Internal Server Error in Stock Data Collection'}), 500
+    
+# # # #     print(data['Top_News'])
+    
+# # # #     try:
+            
+# # # #         # Step 3: Save Financial Data to Excel
+# # # #         file_path = os.path.join('data', f'{ticker}_financial_data.xlsx')
+# # # #         with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+# # # #             income_statement.to_excel(writer, sheet_name='Income Statement')
+# # # #             balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
+# # # #             cashflow.to_excel(writer, sheet_name='Cashflow')
+
+# # # #         # Step 4: Perform Analysis
+# # # #         avg_close = hist['Close'].mean()
+# # # #         formatted_data = extract_excel_data(file_path)
+    
+# # # #     except Exception as e:
+# # # #         logging.info(f"Error occurred while performing analysis: {e}")
+# # # #         print(f"Error occurred while performing analysis :\n{e}")
+# # # #         return jsonify({'message': 'Internal Server Error in Stock Analysis'}), 500
+
+# # # #     try:
+        
+# # # #         task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+# # # #                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+# # # #                     Predict the stock price range for the next week and provide reasons for your prediction.
+# # # #                     Advise whether to buy this stock now or not, with reasons for your advice."""
+
+# # # #         query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data
+
+# # # #         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+# # # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # # #         response = model.generate_content(query)
+# # # #         print(response.text)
+# # # #         print(data)
+    
+# # # #     except Exception as e:
+# # # #         logging.error(f"Error performing analysis with generative AI: {e}")
+# # # #         return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
+    
+# # # #     # Extract response from the model
+# # # #     try:
+# # # #         html_suggestions = markdown.markdown(response.text)
+        
+# # # #         print(f"Html Suggestions : {html_suggestions}")
+        
+# # # #         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+# # # #         # format_suggestions = markdown_to_text(response)
+# # # #         print(f"Html Suggestions : {html_suggestions}")
+# # # #         format_suggestions = markdown_to_text(html_suggestions)
+        
+# # # #     except Exception as e:
+# # # #         logging.error(f"Error extracting text from response: {e}")
+# # # #         print(f"Error extracting text from response : {e}")
+# # # #         return jsonify({"error": "Failed to analyze stock data"}), 500
+
+# # # #     # Return all collected and analyzed data
+# # # #     return jsonify({
+# # # #         "data": data,
+# # # #         "average_closing_price": f"${avg_close:.2f}",
+# # # #         "analysis": format_suggestions,
+# # # #         "news": data['Top_News'],
+# # # #         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+# # # #     })
+
+# # # # def extract_excel_data(file_path):
+# # # #     financial_data = ""
+# # # #     xls = pd.ExcelFile(file_path)
+# # # #     for sheet_name in xls.sheet_names:
+# # # #         df = pd.read_excel(xls, sheet_name=sheet_name)
+# # # #         financial_data += f"\n\nSheet: {sheet_name}\n"
+# # # #         financial_data += df.to_string()
+# # # #     return financial_data
+
+
+# # # # # Fetch Stock Data :
+# # # def get_stock_data(ticker):
+# # #     try:
+# # #         # Step 1: Fetch Stock Data :
+# # #         stock = yf.Ticker(ticker)
+        
+# # #         data = {}
+
+# # #         company_details = stock.info.get('longBusinessSummary', 'No details available')
+# # #         data['Company_Details'] = company_details
+# # #         sector = stock.info.get('sector', 'No sector information available')
+# # #         data['Sector'] = sector
+# # #         prev_close = stock.info.get('previousClose', 'No previous close price available')
+# # #         data['Previous_Closing_Price'] = prev_close
+# # #         open_price = stock.info.get('open', 'No opening price available')
+# # #         data['Today_Opening_Price'] = open_price
+         
+# # #         hist = stock.history(period="5d")
+# # #         if not hist.empty and 'Close' in hist.columns:
+# # #             if hist.index[-1].date() == yf.download(ticker, period="1d").index[-1].date():
+# # #                 close_price = hist['Close'].iloc[-1]
+# # #                 data['Todays_Closing_Price'] = close_price
+# # #             else:
+# # #                 data['Todays_Closing_Price'] = "Market is open, no closing price available yet."
+# # #         else:
+# # #             data['Todays_Closing_Price'] = "No historical data available for closing price."
+
+# # #         day_high = stock.info.get('dayHigh', 'No high price available')
+# # #         data['Today_High_Price'] = day_high
+# # #         day_low = stock.info.get('dayLow', 'No low price available')
+# # #         data['Today_Low_Price'] = day_low
+# # #         volume = stock.info.get('volume', 'No volume information available')
+# # #         data['Today_Volume'] = volume
+# # #         dividends = stock.info.get('dividendRate', 'No dividend information available')
+# # #         data['Today_Dividends'] = dividends
+# # #         splits = stock.info.get('lastSplitFactor', 'No stock split information available')
+# # #         data['Today_Stock_Splits'] = splits
+# # #         pe_ratio = stock.info.get('trailingPE', 'No P/E ratio available')
+# # #         data['PE_Ratio'] = pe_ratio
+# # #         market_cap = stock.info.get('marketCap', 'No market cap available')
+# # #         data['Market_Cap'] = market_cap
+
+# # #         # Additional KPIs
+# # #         data['EPS'] = stock.info.get('trailingEps', 'No EPS information available')
+# # #         data['Book_Value'] = stock.info.get('bookValue', 'No book value available')
+# # #         data['ROE'] = stock.info.get('returnOnEquity', 'No ROE information available')
+# # #         data['ROCE'] = stock.info.get('returnOnAssets', 'No ROCE information available')  # ROCE is not available directly
+        
+# # #         # Revenue Growth (CAGR) and Earnings Growth would need to be calculated based on historical data
+# # #         earnings_growth = stock.info.get('earningsGrowth', 'No earnings growth available')
+# # #         revenue_growth = stock.info.get('revenueGrowth', 'No revenue growth available')
+
+# # #         data['Earnings_Growth'] = earnings_growth
+# # #         data['Revenue_Growth'] = revenue_growth
+        
+        
+# # #         income_statement = stock.financials
+# # #         balance_sheet = stock.balance_sheet
+# # #         cashflow = stock.cashflow
+
+# # #         # Step 2: Get News Related to Stock
+# # #         news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+# # #         news_response = requests.get(news_url)
+# # #         if news_response.status_code == 200:
+# # #             news_data = news_response.json()
+# # #             articles = news_data.get('articles', [])
+# # #             if articles:
+# # #                 top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+# # #                 data['Top_News'] = top_news
+# # #             else:
+# # #                 data['Top_News'] = "No news articles found."
+# # #         else:
+# # #             data['Top_News'] = "Failed to fetch news articles."
+# # #     except Exception as e:
+# # #         logging.info(f"Error occurred while collecting stock data: {e}")
+# # #         print(f"Error occurred while collecting stock data: :\n{e}")
+# # #         return jsonify({'message': 'Internal Server Error in Stock Data Collection'}), 500
+    
+# # #     print(data['Top_News'])
+    
+# # #     try:
+            
+# # #         # Step 3: Save Financial Data to Excel
+# # #         file_path = os.path.join('data', f'{ticker}_financial_data.xlsx')
+# # #         with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+# # #             income_statement.to_excel(writer, sheet_name='Income Statement')
+# # #             balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
+# # #             cashflow.to_excel(writer, sheet_name='Cashflow')
+
+# # #         # Step 4: Perform Analysis
+# # #         avg_close = hist['Close'].mean()
+# # #         formatted_data = extract_excel_data(file_path)
+# # #         return data,formatted_data,avg_close
+# # #     except Exception as e:
+# # #         logging.info(f"Error occurred while performing analysis: {e}")
+# # #         print(f"Error occurred while performing analysis :\n{e}")
+# # #         return jsonify({'message': 'Internal Server Error in Stock Analysis'}), 500
+
+
+# # # # Helper function to extract a ticker from the query
+# # # def extract_ticker(query):
+# # #     # Mapping of popular company names to tickers for demonstration (you can expand this)
+# # #     companies_to_tickers = {
+# # #         "apple": "AAPL",
+# # #         "microsoft": "MSFT",
+# # #         "amazon": "AMZN",
+# # #         "tesla": "TSLA",
+# # #         "google": "GOOGL",
+# # #         "nvidia": "NVDA"
+# # #     }
+# # #     # Split the query into words
+# # #     words = query.lower().split()
+    
+# # #     # Check for known company names or tickers
+# # #     for word in words:
+# # #         if word in companies_to_tickers:
+# # #             return companies_to_tickers[word]
+    
+            
+# # #     for word in words:
+# # #         if word:  # Ensure the word is not None or empty
+# # #             try:
+# # #                 ticker = yf.Ticker(word.upper())
+# # #                 if ticker.info.get('regularMarketPrice') is not None:
+# # #                     print(word)
+# # #                     print(ticker.info.get('regularMarketPrice'))
+# # #                     return word.upper()
+# # #             except Exception as e:
+# # #                 continue
+    
+# # #     # Default fallback if no ticker is found
+# # #     print("No ticker found in the query")
+# # #     return None
+
+# # # # def extract_ticker(query):
+# # #     # # Mapping of popular company names to tickers for demonstration (you can expand this)
+# # #     # companies_to_tickers = {
+# # #     #     "apple": "AAPL",
+# # #     #     "microsoft": "MSFT",
+# # #     #     "amazon": "AMZN",
+# # #     #     "tesla": "TSLA",
+# # #     #     "google": "GOOGL",
+# # #     #     "nvidia": "NVDA"
+# # #     # }
+    
+# # # #     # Split the query into words
+# # # #     words = query.lower().split()
+    
+# # #     # # Check for known company names or tickers
+# # #     # for word in words:
+# # #     #     if word in companies_to_tickers:
+# # #     #         return companies_to_tickers[word]
+    
+# # # #     # Default fallback if no ticker is found
+# # # #     print("No ticker found in the query")
+# # # #     return None
+
+
+# # # @app.route('/analyze_stock', methods=['POST'])
+# # # def analyze_stock():
+# # #     try:
+# # #         ticker = request.json.get('ticker')
+        
+# # #         if ticker :
+# # #             try:
+# # #                 data,formatted_data,avg_close = get_stock_data(ticker)
+# # #             except Exception as e:
+# # #                 print("Error getting the stock data")
+# # #                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+            
+# # #         query = request.json.get('query')
+# # #         if query:
+# # #             ticker = extract_ticker(query)
+# # #             try:
+# # #                 data,formatted_data,avg_close = get_stock_data(ticker)
+# # #             except Exception as e:
+# # #                 print("Error getting the stock data")
+# # #                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+        
+# # #         if not ticker and not query :
+# # #             print('No ticker provided')
+# # #             return jsonify({'message': 'No ticker provided'}), 400
+        
+# # #         if not query:
+# # #             query = "Generate Stock Analysis and give some predictions on its price "
+        
+# # #         if not ticker :
+# # #             data = [] # fail safe to not generate any errors
+        
+        
+# # #     except Exception as e :
+# # #         logging.error(f"Error while fetching stock data: {e}")
+# # #         return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
+    
+# # #     try:
+        
+# # #         task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+# # #                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+# # #                     Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+# # #                     Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+# # #                     Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+# # #                     Advise whether to buy this stock now or not, with reasons for your advice.
+# # #                     If the query asks for some stock suggestions then provide them a list of stock suggestions based on the query.
+# # #                     If the user has asked a follow up question then provide them a good response by also considering their previous queries
+# # #                     Do not answer any questions unrelated to the stocks."""
+                    
+# # #         # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+# # #         #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+# # #         #             Predict the stock price range for the next week and provide reasons for your prediction.
+# # #         #             Advise whether to buy this stock now or not, with reasons for your advice."""
+
+# # #         query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data
+
+# # #         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+# # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # #         response = model.generate_content(query)
+# # #         print(response.text)
+# # #         print(data)
+    
+# # #     except Exception as e:
+# # #         logging.error(f"Error performing analysis with generative AI: {e}")
+# # #         return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
+    
+# # #     # Extract response from the model
+# # #     try:
+# # #         html_suggestions = markdown.markdown(response.text)
+        
+# # #         print(f"Html Suggestions : {html_suggestions}")
+        
+# # #         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+# # #         # format_suggestions = markdown_to_text(response)
+# # #         print(f"Html Suggestions : {html_suggestions}")
+# # #         format_suggestions = markdown_to_text(html_suggestions)
+        
+# # #     except Exception as e:
+# # #         logging.error(f"Error extracting text from response: {e}")
+# # #         print(f"Error extracting text from response : {e}")
+# # #         return jsonify({"error": "Failed to analyze stock data"}), 500
+
+# # #     # Return all collected and analyzed data
+# # #     return jsonify({
+# # #         "data": data,
+# # #         "average_closing_price": f"${avg_close:.2f}",
+# # #         "analysis": format_suggestions,
+# # #         "news": data['Top_News'],
+# # #         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+# # #     })
+
+# # # def extract_excel_data(file_path):
+# # #     financial_data = ""
+# # #     xls = pd.ExcelFile(file_path)
+# # #     for sheet_name in xls.sheet_names:
+# # #         df = pd.read_excel(xls, sheet_name=sheet_name)
+# # #         financial_data += f"\n\nSheet: {sheet_name}\n"
+# # #         financial_data += df.to_string()
+# # #     return financial_data
+
+
+
+# # # # #Working for both the methods :
 # # # @app.route('/generate-investment-suggestions', methods=['POST'])
 # # # def generate_investment_suggestions():
 # # #     try:
@@ -12738,7 +14679,9 @@ if __name__ == '__main__':
 # # #         htmlSuggestions = markdown.markdown(suggestions)
 # # #         logging.info(f"Suggestions for investor: \n{suggestions}")
         
-# # #         formatSuggestions = markdown_to_text(suggestions)
+# # #         formatSuggestions = markdown_to_text(htmlSuggestions)
+# # #         answer = markdown_table_to_html(formatSuggestions)
+# # #         print(answer)
 # # #         data_extracted = extract_numerical_data(suggestions)
         
 # # #         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
@@ -12795,159 +14738,24 @@ if __name__ == '__main__':
 # # #         return jsonify({
 # # #             "status": 200,
 # # #             "message": "Success",
-# # #             "investmentSuggestions": htmlSuggestions,
+# # #             "investmentSuggestions":  answer, #formatSuggestions,
 # # #             "pieChartData": pie_chart_data,
 # # #             "barChartData": bar_chart_data,
 # # #             "compoundedChartData": combined_chart_data
 # # #         }), 200
+        
+# # #         # return jsonify({
+# # #         #     "status": 200,
+# # #         #     "message": "Success",
+# # #         #     "investmentSuggestions": htmlSuggestions,
+# # #         #     "pieChartData": pie_chart_data,
+# # #         #     "barChartData": bar_chart_data,
+# # #         #     "compoundedChartData": combined_chart_data
+# # #         # }), 200
 
 # # #     except Exception as e:
 # # #         logging.info(f"Error in generating investment suggestions: {e}")
 # # #         return jsonify({'message': f'Internal Server Error in Generating responses : {e}'}), 500
-
-
-# # # # #Current error code
-# # # # @app.route('/generate-investment-suggestions', methods=['POST'])
-# # # # def generate_investment_suggestions():
-# # # #     try:
-# # # #         try :
-# # # #             assessment_file = request.files['assessmentFile']
-# # # #             financial_file = request.files['financialFile']
-# # # #             logging.info(" Requested files")
-# # # #         except Exception as e:
-# # # #             logging.info(" Requested files not passed")
-# # # #             return jsonify({'message': f'Error occurred while retrieving files12: {e}'}), 400
-                   
-# # # #         try :
-# # # #             try:
-# # # #                 responses = extract_responses_from_docx(assessment_file)
-# # # #             except Exception as e:
-# # # #                 logging.info(f"Failed to extract responses from assessment file: {e}")
-# # # #                 return jsonify({'message': 'Failed to extract responses from assessment file.'}), 400
-            
-# # # #             try:
-# # # #                 financial_data = asyncio.run(process_document(financial_file))
-# # # #                 print(financial_data)
-# # # #                 print(f"The Financial Data is of type : {type(financial_data)}")
-# # # #                 print(financial_file)
-# # # #                 destination_folder = 'data'
-# # # #                 file_path = save_file_to_folder(financial_file, destination_folder)
-# # # #                 print(file_path)
-# # # #             except Exception as e:
-# # # #                 logging.info(f"Failed to process financial file: {e}")
-# # # #                 return jsonify({'message': 'Failed to process financial file.'}), 400
-
-# # # #             logging.info(f"Received Responses from the file {responses}")
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to process files")
-# # # #             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
-
-# # # #         try:
-# # # #             # Determine investment personality
-# # # #             # monthly_investment= 10000
-# # # #             # investment_period= 3
-# # # #             # personality,monthly_investment,investment_period = asyncio.run(determine_investment_personality(responses))
-            
-# # # #             personality= asyncio.run(determine_investment_personality(responses))
-            
-# # # #             logging.info(f"\nPersonality of the user is : {personality}")
-# # # #             print(f"\nPersonality of the user is : {personality}")
-# # # #             print(f"Type of Investment Personality is : {type(personality)}")
-            
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to determine personality")
-# # # #             return jsonify({'message': f'Error occurred while determining personality: {e}'}), 400
-        
-# # # #         try:
-# # # #             # Generate investment suggestions based on personality and financial data
-# # # #             clientName = "Emilly Watts"
-# # # #             print(f"{type(personality)} \n {type(financial_data)} \n {type(financial_file)} \n {type(file_path)}")
-# # # #             try:
-# # # #                 suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,file_path)) #monthly_investment,investment_period))
-# # # #             except Exception as e:
-# # # #                 logging.info(f"Failed to generate investment suggestions for investor: {e}")
-# # # #                 print(f"Failed to generate investment suggestions for investor: {e}")
-# # # #                 return jsonify({'message': f'Failed to generate investment suggestions for investor. : {e}'}), 400
-            
-# # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,monthly_investment,investment_period))
-# # # #             htmlSuggestions = markdown.markdown(suggestions)
-# # # #             logging.info(f"\Suggestions for investor : \n{suggestions}")
-            
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to generate suggestions")
-# # # #             return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 400
-
-
-# # # #         logging.info("Successfully generated")
-# # # #         formatSuggestions = markdown_to_text(suggestions)
-# # # #         data_extracted = extract_numerical_data(suggestions)
-        
-# # # #         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                         [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-# # # #         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                         [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
-
-# # # #         # Normalize allocations
-# # # #         min_allocations = normalize_allocations(min_allocations)
-# # # #         max_allocations = normalize_allocations(max_allocations)
-
-# # # #         # Update Bar Chart Data
-# # # #         bar_chart_data = {
-# # # #             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-# # # #             'datasets': [{
-# # # #                 'label': 'Min Allocation',
-# # # #                 'data': min_allocations,
-# # # #                 'backgroundColor': 'skyblue'
-# # # #             },
-# # # #             {
-# # # #                 'label': 'Max Allocation',
-# # # #                 'data': max_allocations,
-# # # #                 'backgroundColor': 'lightgreen'
-# # # #             }]
-# # # #         }
-
-# # # #         # Similar changes can be made for the Pie Chart Data:
-# # # #         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-# # # #         num_labels = len(all_labels)
-# # # #         max_allocations_for_pie = normalize_allocations(
-# # # #             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# # # #             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-# # # #         )
-        
-# # # #         # Generate colors based on the number of labels
-# # # #         dynamic_colors = generate_colors(num_labels)
-
-# # # #         # Update Pie Chart Data
-# # # #         pie_chart_data = {
-# # # #             'labels': all_labels,
-# # # #             'datasets': [{
-# # # #                 'label': 'Investment Allocation',
-# # # #                 'data': max_allocations_for_pie,
-# # # #                 'backgroundColor': dynamic_colors,
-# # # #                 'hoverOffset': 4
-# # # #             }]
-# # # #         }
-        
-        
-# # # #         # Prepare the data for the line chart with inflation adjustment
-# # # #         initial_investment = 10000
-# # # #         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
-# # # #         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-# # # #         print(f"\nThe combined chart data is : {combined_chart_data}")
-        
-# # # #         return jsonify({
-# # # #             "status": 200,
-# # # #             "message": "Success",
-# # # #             "investmentSuggestions": htmlSuggestions,
-# # # #             "pieChartData": pie_chart_data,
-# # # #             "barChartData": bar_chart_data,
-# # # #             "compoundedChartData":combined_chart_data
-# # # #         }), 200
-
-# # # #     except Exception as e:
-# # # #         logging.info(f"Error in generating investment suggestions: {e}")
-# # # #         return jsonify({'message': 'Internal Server Error in Generating responses'}), 500
-
 
 
 
@@ -12956,7 +14764,9 @@ if __name__ == '__main__':
 # # #     app.run(host='0.0.0.0',debug=True)
 
 
-# # # # # Investment suggestion template needs to be updated  :
+
+# # # # # Latest version of the code : 
+
 # # # # import streamlit as st
 # # # # import pandas as pd
 # # # # import matplotlib.pyplot as plt
@@ -13348,10 +15158,25 @@ if __name__ == '__main__':
 
 
 
-# # # # # #Load the Vector DataBase :
+
+# # # # #Load the Vector DataBase : # current version :
 # # # # async def load_vector_db(file_path): # # GET Method 
 # # # #     try:
 # # # #         print("Loading vector database...")
+# # # #         # file_path = os.path.basename(file_path)
+        
+# # # #         # Verify the file path
+# # # #         if not os.path.isfile(file_path):
+# # # #             raise FileNotFoundError(f"File not found: {file_path}")
+        
+# # # #         print(f"File path: {file_path}")
+        
+# # # #         # Check file permissions
+# # # #         if not os.access(file_path, os.R_OK):
+# # # #             raise PermissionError(f"File is not readable: {file_path}")
+        
+# # # #         # print(file_path)
+        
 # # # #         loader = Docx2txtLoader(file_path)
 # # # #         documents = loader.load()
 # # # #         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
@@ -13375,19 +15200,31 @@ if __name__ == '__main__':
 # # # #         print(f"Error loading vector database: {e}")
 # # # #         return None
 
+# # # # # import os
 
-# # # # # async def load_vector_db(file_path="client_data.txt"):
+# # # # # async def load_vector_db(file_storage): 
 # # # # #     try:
+# # # # #         # Define the destination folder and ensure it exists
+# # # # #         destination_folder = 'path/to/your/destination/folder'
+# # # # #         if not os.path.exists(destination_folder):
+# # # # #             os.makedirs(destination_folder)
+        
+# # # # #         # Construct the destination file path
+# # # # #         file_path = os.path.join(destination_folder, file_storage.filename)
+        
+# # # # #         # Save the file to the destination folder
+# # # # #         file_storage.save(file_path)
+        
 # # # # #         print("Loading vector database...")
-# # # # #         with open(file_path, "r") as file:
-# # # # #             text = file.read()
+# # # # #         print(f"File path: {file_path}")
         
 # # # # #         loader = Docx2txtLoader(file_path)
 # # # # #         documents = loader.load()
-# # # # #         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-# # # # #         text_chunks = text_splitter.split_documents(documents) #([Document(text=text)])
-# # # # #         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
         
+# # # # #         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+# # # # #         text_chunks = text_splitter.split_documents(documents)
+        
+# # # # #         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
 # # # # #         vector_store = FAISS.from_documents(documents=text_chunks, embedding=embeddings)
         
 # # # # #         print("Vector database loaded successfully.") 
@@ -13395,6 +15232,7 @@ if __name__ == '__main__':
 # # # # #     except Exception as e:
 # # # # #         print(f"Error loading vector database: {e}")
 # # # # #         return None
+
 
 
 # # # # # investment_personality = "Moderate Investor"
@@ -13410,8 +15248,16 @@ if __name__ == '__main__':
 # # # #     """
 # # # #     try:
 # # # #         # global investment_personality #,summary
-# # # #         print(investmentPersonality)
-# # # #         print(clientName)
+        
+# # # #         print(f"{retriever}\n {investmentPersonality}\n {clientName}\n {monthly_investment}")
+# # # #         # try:
+# # # #         #     print(type(investmentPersonality))
+# # # #         # except Exception as e:
+# # # #         #     print(f"Error in personality: {e}")
+# # # #         #     return None
+        
+# # # #         # print(clientName)
+        
 # # # #         llm = ChatGoogleGenerativeAI(
 # # # #             #model="gemini-pro",
 # # # #             model = "gemini-1.5-flash",
@@ -13420,10 +15266,13 @@ if __name__ == '__main__':
 # # # #             google_api_key=GOOGLE_API_KEY
 # # # #         )
 # # # #         # New Template 
-# # # #         monthly_investment = str(monthly_investment)
 # # # #         investment_period = str(investment_period)
+# # # #         print(investmentPersonality)
+# # # #         monthly_investment = str(monthly_investment)
 # # # #         print(monthly_investment)
 # # # #         print(investment_period)
+        
+# # # #         # New Prompt Template :
         
 # # # #         prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
 # # # #                 Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
@@ -13435,24 +15284,17 @@ if __name__ == '__main__':
 # # # #                 Also give the user minimum and maximum expected growth in dollars for the time horizon .
 # # # #                 Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
                 
-# # # #                 Client Name: """ + clientName + """
-
-# # # #                 Financial Overview:
-# # # #                 - Total Assets: $100,000 (cash), $150,000 (home), $12,000 (other assets).
-                
-# # # #                 - Liabilities: $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%.
-                
-# # # #                 - Total Monthly Liabilities: $1,650 (Mortgage, Credit Card, Other Loans).
-                
-
 # # # #                 You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
 
 # # # #                 Step-by-Step Guidance:
-# # # #                 1. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
-# # # #                 2. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
-# # # #                 3. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
-# # # #                 4. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
-# # # #                 5. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities.
+# # # #                 1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
+# # # #                 2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
+# # # #                 3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
+# # # #                 4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+# # # #                 5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+# # # #                 6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+# # # #                 7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+# # # #                 8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
                 
                 
 # # # #                 Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
@@ -13462,13 +15304,16 @@ if __name__ == '__main__':
                 
 # # # #                 Client Name: """ + clientName + """
 
-# # # #                 Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data only)
+# # # #                 Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis)
                 
-# # # #                 - Total Assets: (# For ex : $100,000 (cash), $150,000 (home), $12,000 (other assets) display data available to you.)
+# # # #                 - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
                 
-# # # #                 - Liabilities: (# For ex : $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%. display data available to you)
+# # # #                 - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
                 
-# # # #                 - Total Monthly Liabilities: (# For ex : $1,650 (Mortgage, Credit Card, Other Loans). display data available to you)
+                
+# # # #                 - Monthly Liabilities: (# Monthly payments derived from liabilities)
+                
+# # # #                 - Total Annual Income : (# Sum of all client's anual income)
                 
 # # # #                 - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
                 
@@ -13488,6 +15333,8 @@ if __name__ == '__main__':
 # # # #                 I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
                 
 # # # #                 (#If the financial is 1 or 2 only then give investment suggestions to the client)
+                
+                
 # # # #                 Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
 
 # # # #                 Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
@@ -13569,6 +15416,149 @@ if __name__ == '__main__':
 # # # #                 {context}
 # # # #                 </context>
 # # # #                 Question: {input}"""
+    
+# # # #         print("Retriever Created ")
+# # # #         print(f"Investment Personality :{investmentPersonality}")
+        
+# # # #         # Good but inaccurate in terms of assets and liability data calculation
+# # # #         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # #         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
+# # # #         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
+# # # #         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
+# # # #         #         should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # #         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+# # # #         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
+# # # #         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
+# # # #         #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
+                
+# # # #         #         You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+
+# # # #         #         Step-by-Step Guidance:
+# # # #         #         1. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+# # # #         #         2. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+# # # #         #         3. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+# # # #         #         4. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+# # # #         #         5. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities.
+                
+                
+# # # #         #         Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
+                
+# # # #         #         Investment Suggestions : 
+                
+                
+# # # #         #         Client Name: """ + clientName + """
+
+# # # #         #         Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data only)
+                
+# # # #         #         - Total Assets: (# Consider the data available to you and use it  for display. For ex : $100,000 (cash), $150,000 (home), $12,000 (other assets) )
+                
+# # # #         #         - Liabilities: (# Consider the data available to you and use it  for display. For ex : $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%.)
+                
+# # # #         #         - Total Monthly Liabilities: (# Consider the data available to you and use it  for display. For ex : $1,650 (Mortgage, Credit Card, Other Loans).)
+                
+# # # #         #         - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
+                
+# # # #         #         - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+
+# # # #         #         Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
+# # # #         #         (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
+# # # #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
+# # # #         #         (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
+                
+# # # #         #         (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a bad income for now but have great assets and manageable debt and liabilities.
+# # # #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
+# # # #         #         Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
+                
+# # # #         #         (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a bad income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+# # # #         #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
+# # # #         #         I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
+                
+# # # #         #         (#If the financial is 1 or 2 only then give investment suggestions to the client)
+                
+                
+# # # #         #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+
+# # # #         #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+
+# # # #         #         Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+# # # #         #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+# # # #         #         How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
+                
+# # # #         #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+                
+# # # #         #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+                
+# # # #         #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+                
+# # # #         #         Consider investing in blue-chip companies or growth sectors like technology. 
+                
+                
+# # # #         #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+
+
+# # # #         #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+# # # #         #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+# # # #         #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+# # # #         #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+# # # #         #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+# # # #         #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+# # # #         #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+# # # #         #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+# # # #         #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+# # # #         #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+
+# # # #         #         Time Horizon and Expected Returns:
+
+# # # #         #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
+# # # #         #         Minimum Expected Annual Return: 4% - 6% 
+                
+                
+# # # #         #         Maximum Expected Annual Return: 8% - 10% 
+                
+                
+# # # #         #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
+# # # #         #         Minimum Expected Growth in Dollars: 
+                
+# # # #         #         4,000−6,000 (over 10 years) 
+                
+                
+# # # #         #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+# # # #         #         Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+                   
+                    
+# # # #         #         Rationale for Investment Suggestions:
+
+# # # #         #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+
+                
+# # # #         #         Important Considerations:
+
+# # # #         #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+
+# # # #         #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+
+# # # #         #         Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
+# # # #         #         <context>
+# # # #         #         {context}
+# # # #         #         </context>
+# # # #         #         Question: {input}"""
+        
+        
                 
 # # # #         # # latest version gives some info about the client conditions but not in detail 
 # # # #         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
@@ -13753,7 +15743,7 @@ if __name__ == '__main__':
 
 # # # #         if retriever is not None :  
 # # # #             retriever_chain = create_retrieval_chain(retriever,document_chain) 
-# # # #             print(retriever_chain)
+# # # #             # print(retriever_chain)
 # # # #             return retriever_chain
 # # # #         else:
 # # # #             print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
@@ -13763,9 +15753,8 @@ if __name__ == '__main__':
 # # # #         print(f"Error in creating chain: {e}")
 # # # #         return None
 
-# # # # import streamlit as st
+
 # # # # import json
-# # # # import matplotlib.pyplot as plt
 # # # # import io
 
 
@@ -13896,109 +15885,39 @@ if __name__ == '__main__':
 
 
 # # # # # RUN Button :
-# # # # async def generate_investment_suggestions(investment_personality, context): # # GET Method for py , for front end its Post API
+# # # # # async def generate_investment_suggestions(investment_personality, context): # # GET Method for py , for front end its Post API
     
-# # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
+# # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
 
-# # # #     retriever = await load_vector_db("uploaded_file")
-# # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
+# # # # #     retriever = await load_vector_db("uploaded_file")
+# # # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
 
-# # # #     chain = await make_retrieval_chain(retriever)
+# # # # #     chain = await make_retrieval_chain(retriever)
 
-# # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
+# # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
     
-# # # #     if chain is not None:
-# # # #         # summary = context
-# # # #         # query = summary + "\n" + investment_personality
-# # # #         query = str(investment_personality)
-# # # #         response = chain.invoke({"input": query})
-# # # #         format_response = markdown_to_text(response['answer'])
-# # # #         return format_response
-# # # #         # st.write(format_response)
+# # # # #     if chain is not None:
+# # # # #         # summary = context
+# # # # #         # query = summary + "\n" + investment_personality
+# # # # #         query = str(investment_personality)
+# # # # #         response = chain.invoke({"input": query})
+# # # # #         format_response = markdown_to_text(response['answer'])
+# # # # #         return format_response
+# # # # #         # st.write(format_response)
 
-# # # #         # handle_graph(response['answer'])
+# # # # #         # handle_graph(response['answer'])
 
-# # # #     else:
-# # # #         st.error("Failed to create the retrieval chain. Please upload a valid document.")
+# # # # #     else:
+# # # # #         st.error("Failed to create the retrieval chain. Please upload a valid document.")
 
 
 
 # # # # # Generate Infographics : Best Code so far:
 
-
-# # # # import seaborn as sns
 # # # # import re
 # # # # from collections import defaultdict
-# # # # import matplotlib.pyplot as plt
-# # # # import streamlit as st
 # # # # import numpy as np
 
-# # # # # def extract_numerical_data(response):
-# # # # #     # Define patterns to match different sections and their respective allocations
-# # # # #     patterns = {
-# # # # #         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-# # # # #         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-# # # # #         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
-# # # # #     }
-
-# # # # #     data = defaultdict(dict)
-
-# # # # #     for section, pattern in patterns.items():
-# # # # #         match = pattern.search(response)
-# # # # #         if match:
-# # # # #             investments_text = match.group(1)
-# # # # #             # Extract individual investment types and their allocations
-# # # # #             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
-# # # # #             for investment_match in investment_pattern.findall(investments_text):
-# # # # #                 investment_type, min_allocation, max_allocation = investment_match
-# # # # #                 data[section][investment_type.strip()] = {
-# # # # #                     'min': min_allocation,
-# # # # #                     'max': max_allocation
-# # # # #                 }
-
-# # # # #     # Update: Extracting time horizon and expected returns using a more flexible pattern
-# # # # #     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
-# # # # #     expected_return_pattern = re.compile(r'(Minimum|Maximum) Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-# # # # #     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-# # # # #     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-
-# # # # #     time_horizon_match = time_horizon_pattern.search(response)
-# # # # #     expected_return_matches = expected_return_pattern.findall(response)
-# # # # #     min_growth_match = min_growth_pattern.search(response)
-# # # # #     max_growth_match = max_growth_pattern.search(response)
-
-# # # # #     if time_horizon_match:
-# # # # #         data['Time Horizon'] = {
-# # # # #             'min_years': time_horizon_match.group(1),
-# # # # #             'max_years': time_horizon_match.group(2)
-# # # # #         }
-
-# # # # #     # Correct extraction for both Minimum and Maximum Expected Annual Return
-# # # # #     for match in expected_return_matches:
-# # # # #         if match[0].lower() == "minimum":
-# # # # #             data['Expected Annual Return'] = {
-# # # # #                 'min': match[1],
-# # # # #                 'max': match[2]  # Extract min and max for minimum expected return
-# # # # #             }
-# # # # #         elif match[0].lower() == "maximum":
-# # # # #             data['Expected Annual Return'].update({
-# # # # #                 'min': match[1],
-# # # # #                 'max': match[2]  # Update for maximum expected return
-# # # # #             })
-
-# # # # #     if min_growth_match:
-# # # # #         data['Expected Growth in Dollars'] = {
-# # # # #             'min': min_growth_match.group(1),
-# # # # #             'max': min_growth_match.group(2)
-# # # # #         }
-
-# # # # #     if max_growth_match:
-# # # # #         data['Expected Growth in Dollars'] = {
-# # # # #             'min': max_growth_match.group(1),
-# # # # #             'max': max_growth_match.group(2)
-# # # # #         }
-
-# # # # #     return data
 
 
 # # # # def extract_numerical_data(response): # curr version but cant capture annual return 
@@ -14074,95 +15993,6 @@ if __name__ == '__main__':
 # # # #     if total == 100:
 # # # #         return allocations
 # # # #     return [round((allocation / total) * 100, 2) for allocation in allocations]
-
-
-
-# # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4): # previous version
-# # # # #     try:
-# # # # #         # Print data_extracted to debug the structure
-# # # # #         print("Data extracted:", data_extracted)
-
-# # # # #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
-# # # # #         if 'Expected Annual Return' not in data_extracted :
-# # # # #             print("'Expected Annual Return' missing in data_extracted")
-# # # # #             data_extracted['Expected Annual Return']['min'] = 6
-# # # # #             data_extracted['Expected Annual Return']['max'] = 8
-# # # # #             min_return = 6
-# # # # #             max_return = 8
-# # # # #         else :
-# # # # #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
-# # # # #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
-                
-# # # # #         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
-# # # # #         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
-
-# # # # #         def calculate_compounded_return(principal, rate, years):
-# # # # #             return principal * (1 + rate / 100) ** years
-
-# # # # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
-# # # # #             return nominal_return / (1 + inflation_rate / 100) ** years
-
-# # # # #         labels = list(range(1, max_years + 1))  # Years for the x-axis
-# # # # #         min_compounded = []
-# # # # #         max_compounded = []
-# # # # #         min_inflation_adjusted = []
-# # # # #         max_inflation_adjusted = []
-
-# # # # #         for year in labels:
-# # # # #             # Calculate nominal compounded returns
-# # # # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
-# # # # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
-
-# # # # #             # Calculate inflation-adjusted compounded returns
-# # # # #             min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
-# # # # #             max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
-
-# # # # #             # Append results
-# # # # #             min_compounded.append(min_compounded_value)
-# # # # #             max_compounded.append(max_compounded_value)
-# # # # #             min_inflation_adjusted.append(min_inflation_value)
-# # # # #             max_inflation_adjusted.append(max_inflation_value)
-
-# # # # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
-# # # # #         combined_chart_data = {
-# # # # #             'labels': labels,
-# # # # #             'datasets': [
-# # # # #                 {
-# # # # #                     'label': 'Minimum Compounded Return',
-# # # # #                     'data': min_compounded,
-# # # # #                     'borderColor': 'rgb(255, 99, 132)',  # Red color
-# # # # #                     'fill': False
-# # # # #                 },
-# # # # #                 {
-# # # # #                     'label': 'Maximum Compounded Return',
-# # # # #                     'data': max_compounded,
-# # # # #                     'borderColor': 'rgb(54, 162, 235)',  # Blue color
-# # # # #                     'fill': False
-# # # # #                 },
-# # # # #                 {
-# # # # #                     'label': 'Min Inflation Adjusted Return',
-# # # # #                     'data': min_inflation_adjusted,
-# # # # #                     'borderColor': 'rgb(75, 192, 192)',  # Light blue
-# # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
-# # # # #                     'fill': False
-# # # # #                 },
-# # # # #                 {
-# # # # #                     'label': 'Max Inflation Adjusted Return',
-# # # # #                     'data': max_inflation_adjusted,
-# # # # #                     'borderColor': 'rgb(153, 102, 255)',  # Light purple
-# # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
-# # # # #                     'fill': False
-# # # # #                 }
-# # # # #             ]
-# # # # #         }
-# # # # #     except KeyError as e:
-# # # # #         print(f"KeyError occurred: {e}")
-# # # # #         return jsonify({'message': f'Key Error: {e}'}), 400
-# # # # #     except Exception as e:
-# # # # #         print(f"Error occurred while preparing data for combined line chart: {e}")
-# # # # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
-
-# # # # #     return combined_chart_data
 
 
 # # # # import datetime  # Import the datetime module to get the current year
@@ -14632,6 +16462,7 @@ if __name__ == '__main__':
 # # # #     plot_pie(assets, 'Distribution of Assets')
 # # # #     plot_pie(liabilities, 'Distribution of Liabilities')
 
+
 # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):# properly plots a big and 1 small pie chart for both assets and liability
 # # # # #     # Filter and convert values to float, handle non-numeric or empty inputs
 # # # # #     filtered_assets = {k: float(v) for k, v in assets.items() if v and is_float(v) and float(v) > 0 and 'interest' not in k.lower() and 'time' not in k.lower()}
@@ -15049,21 +16880,53 @@ if __name__ == '__main__':
 # # # #         trie.insert(name.lower(), client_id)  # Insert in lowercase for case-insensitive search
 # # # #     return trie
 
-# # # # async def generate_investment_suggestions_for_investor(investment_personality,clientName ,context,monthly_investment=10000,investment_period=3): # # GET Method for py , for front end its Post API
+# # # # async def generate_investment_suggestions_for_investor(investment_personality,clientName,financial_data,financial_file,monthly_investment=10000,investment_period=3): # # GET Method for py , for front end its Post API
     
 # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
 
-# # # #     retriever =  await load_vector_db("uploaded_file")
+# # # #     # retriever =  await load_vector_db("uploaded_file")
+# # # #     try:
+# # # #         retriever =  await load_vector_db(financial_file)
+# # # #     except Exception as e :
+# # # #         print(f"Error : {e}")
+# # # #         return jsonify("Error : Failed to load vector database and to generate suggestions : {e}"),400
+    
+# # # #     if not retriever:
+# # # #         await load_vector_db("data\Financial_Investment_new.docx")
+# # # #         # await load_vector_db("data\Financial_Investment_1_new.docx") # doesnt works
+# # # #         # await load_vector_db("data\Financial_Investment_1.docx")
+# # # #         if not retriever:
+# # # #             raise Exception("Failed to load vector database.")
+    
+# # # #     print("VectorDB is created successfully")
 # # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
-
-# # # #     chain = await make_retrieval_chain(retriever,investmentPersonality,clientName,monthly_investment,investment_period)
-
+    
+# # # #     try:
+# # # #         chain = await make_retrieval_chain(retriever,investment_personality,clientName,monthly_investment,investment_period)
+# # # #     except Exception as e :
+# # # #         print(f"Error : {e}")
+# # # #         return jsonify("Error : Failed to create retrieval chain and generate suggestions : {e}"),400
+    
+# # # #     if not chain:
+# # # #         raise Exception("Failed to create retrieval chain.")
+# # # #     print("Chain is created to generate suggestions ")
+    
 # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
+    
+# # # #     print(f"Financial Data : {financial_data}")
+# # # #     try :
+# # # #         print(type(financial_data))
+# # # #         query = f"The Investment Personality of {clientName} is : {investment_personality}" + f"Consider the Monthly Investment as {monthly_investment} and Investment period as {investment_period}" + f"Financial Data of client is : {financial_data[0]}"
+# # # #         print(query)
+# # # #     except Exception as e :
+# # # #         print(f"Error : {e}")
+# # # #         return "Error : Failed to load financial data"
     
 # # # #     if chain is not None:
 # # # #         # summary = context
 # # # #         # query = summary + "\n" + investment_personality
-# # # #         query = str(investment_personality)
+        
+# # # #         # query = str(investment_personality)
 # # # #         response = chain.invoke({"input": query})
         
 # # # #         # format_response = markdown_to_text(response['answer'])
@@ -15148,21 +17011,150 @@ if __name__ == '__main__':
 
 
 
-# # # # # @app.route('/upload-personal-details', methods=['POST']) # not necessary
-# # # # # def upload_personal_details():
-# # # # #     file = request.files['file']
+# # # # import random
 
-# # # # #     if file:
-# # # # #         # Process the uploaded file (personal details document)
-# # # # #         document_data = asyncio.run(process_document(file))
-        
-# # # # #         if isinstance(document_data, tuple) and len(document_data) == 2:
-# # # # #             extracted_text, tables_content = document_data
-# # # # #             return jsonify({"message": "File processed", "extracted_text": extracted_text})
-        
-# # # # #         return jsonify({"message": "Unexpected data format returned from document processing."})
+# # # # # Generate unique client ID
+
+# # # # # def generate_unique_id(name):
+# # # # #     name_parts = name.split(" ")
+# # # # #     first_initial = name_parts[0][0] if len(name_parts) > 0 else ""
+# # # # #     last_initial = name_parts[1][0] if len(name_parts) > 1 else ""
+# # # # #     random_number = random.randint(1000, 9999)
+# # # # #     unique_id = f"{first_initial}{last_initial}{random_number}"
+# # # # #     return unique_id
+
+# # # # # # Save details in a Word file
+# # # # import docx
+# # # # import os
+# # # # # #Curr version :
+# # # # def save_to_word_file(data, file_name):
+# # # #     doc = docx.Document()
+# # # #     doc.add_heading('Client Details', 0)
+
+# # # #     # Adding client details
+# # # #     client_details = data.get('clientDetail', {})
+# # # #     doc.add_paragraph(f"Client Name: {client_details.get('clientName', '')}")
+# # # #     doc.add_paragraph(f"Client Mobile: {client_details.get('clientMoNo', '')}")
+# # # #     doc.add_paragraph(f"Client Age: {client_details.get('clientAge', '')}")
+# # # #     doc.add_paragraph(f"Co-Client Name: {client_details.get('coClientName', '')}")
+# # # #     doc.add_paragraph(f"Co-Client Mobile: {client_details.get('coMobileNo', '')}")
+# # # #     doc.add_paragraph(f"Co-Client Age: {client_details.get('coClientAge', '')}")
+
+# # # #     # Retirement Plan
+# # # #     retirement_goal = data.get('retirementGoal', {})
+# # # #     retirement_plan = retirement_goal.get('retirementPlan', {})
+# # # #     doc.add_paragraph(f"Retirement Plan Client Age: {retirement_plan.get('retirementAgeClient', '')}")
+# # # #     doc.add_paragraph(f"Retirement Plan Co-Client Age: {retirement_plan.get('retirementAgeCoClient', '')}")
     
-# # # # #     return jsonify({"message": "No file uploaded."})
+# # # #     social_benefit = retirement_goal.get('socialBenefit', {})
+# # # #     doc.add_paragraph(f"Social Benefit Client: {social_benefit.get('socialBenefitClient', '')}")
+# # # #     doc.add_paragraph(f"Social Benefit Co-Client: {social_benefit.get('socialBenefitCoClient', '')}")
+    
+# # # #     pension_benefit = retirement_goal.get('pensionBenefit', {})
+# # # #     doc.add_paragraph(f"Pension Benefit Client: {pension_benefit.get('pensionBenefitClient', '')}")
+# # # #     doc.add_paragraph(f"Pension Benefit Co-Client: {pension_benefit.get('pensionBenefitCoClient', '')}")
+    
+# # # #     otherIncome = retirement_goal.get('otherIncome', {})
+# # # #     doc.add_paragraph(f"Other IncomeClient Client: {otherIncome.get('otherIncomeClient', '')}")
+# # # #     doc.add_paragraph(f"Other IncomeClient Co-Client: {otherIncome.get('otherIncomeCoClient', '')}")
+   
+# # # #     # Estimated Annual Retirement Expense ($ or % of current salary)
+# # # #     annualRetirement = retirement_goal.get('annualRetirement', {})
+# # # #     doc.add_paragraph(f"Estimated Annual Retirement Expense ($ or % of current salary) Client: {annualRetirement.get('annualRetireClient', '')}")
+# # # #     doc.add_paragraph(f"Estimated Annual Retirement Expense ($ or % of current salary) Co-Client: {annualRetirement.get('annualRetireCoClient', '')}")
+    
+
+# # # #     # Assets and Liabilities
+# # # #     assets_liabilities = data.get('assetsLiabilities', {})
+    
+# # # #     # Assets
+    
+# # # #     for asset_key, asset_info in assets_liabilities.items():
+# # # #         current_value_key = [key for key in asset_info.keys() if key.startswith("current")][0]
+# # # #         annual_value_key = [key for key in asset_info.keys() if key.startswith("annual")][0]
+# # # #         assets_name_key = "assetsName"
+# # # #         doc.add_paragraph(f"Assets - {asset_info[assets_name_key]} : Current Value - {asset_info[current_value_key]} , Annual Contributions - {asset_info[annual_value_key]}")
+        
+# # # #     # Liabilities
+# # # #     myLiabilities = data.get('myLiabilities', {})
+# # # #     for liability_key, liability_info in myLiabilities.items():
+# # # #         balance_key = [key for key in liability_info.keys() if key.endswith("Balance")][0]
+# # # #         interest_key = [key for key in liability_info.keys() if key.endswith("Interest")][0]
+# # # #         monthly_key = [key for key in liability_info.keys() if key.endswith("Monthly")][0]
+# # # #         liability_name_key = "liabilityName"
+# # # #         doc.add_paragraph(f"Liabilities - {liability_info[liability_name_key]} : Balance - {liability_info[balance_key]} , Interest - {liability_info[interest_key]} , Monthly - {liability_info[monthly_key]}")
+        
+# # # #     # my_liabilities = data.get('myLiabilities', {})
+# # # #     # for liability_type, liability_info in my_liabilities.items():
+# # # #     #     doc.add_paragraph(f"Liabilities - {liability_info.get('liabilityName', '')}: Balance - {liability_info.get('mortgageBalance', '')} Interest - {liability_info.get('mortgageInterest', '')} Monthly - {liability_info.get('mortgageMonthly', '')}")
+
+# # # #     # Protection Plan
+# # # #     protection_plan = data.get('protectionPlan', {})
+# # # #     doc.add_paragraph(f"Check Will: {protection_plan.get('checkWill', False)}")
+# # # #     doc.add_paragraph(f"Check Healthcare: {protection_plan.get('checkHealthCare', False)}")
+# # # #     doc.add_paragraph(f"Check Attorney: {protection_plan.get('checkAttorney', False)}")
+# # # #     doc.add_paragraph(f"Check Trust: {protection_plan.get('checkTrust', False)}")
+
+# # # #     # Insurance Coverage
+# # # #     insurance_coverage = data.get('insuranceCoverage', {})
+# # # #     life_insurance_client = insurance_coverage.get('lifeInsuranceClient', {})
+# # # #     doc.add_paragraph(f"Life Insurance Client: Benefit - {life_insurance_client.get('benefitLIClient', '')} Monthly Pay - {life_insurance_client.get('monthlyPayLIClient', '')}")
+    
+# # # #     life_insurance_co_client = insurance_coverage.get('lifeInsuranceCoClient', {})
+# # # #     doc.add_paragraph(f"Life Insurance Co-Client: Benefit - {life_insurance_co_client.get('benefitLICoClient', '')} Monthly Pay - {life_insurance_co_client.get('monthlyPayLICoClient', '')}")
+ 
+# # # #     disableIncome = insurance_coverage.get('disableIncomeClient', {})
+# # # #     disableIncomeClient = insurance_coverage.get('disableIncomeClient',{})
+# # # #     doc.add_paragraph(f"Disable Income Client - {disableIncomeClient.get('benefitDisableClient', '')}")
+    
+# # # #     disableIncomeCoClient = insurance_coverage.get('disableIncomeCoClient', {})
+# # # #     doc.add_paragraph(f"Disable Income Co-Client - {disableIncomeCoClient.get('benefitDisableCoClient', '')}")
+    
+# # # #     longTermCoClient = insurance_coverage.get('longTermCoClient')
+# # # #     doc.add_paragraph(f"Long Term Client: Benefit - {longTermCoClient.get('benefitLongTermClient', '')} Monthly Pay - {longTermCoClient.get('monthlyPayLongTermClient', '')}")
+    
+# # # #     # Goal Fields
+# # # #     goal_fields = data.get('goalFields', [])
+# # # #     for goal in goal_fields:
+# # # #         doc.add_paragraph(f"Goal: {goal.get('goal', '')} Cost: {goal.get('cost', '')} When: {goal.get('when', '')}")
+
+# # # #     # Income Fields
+# # # #     income_fields = data.get('incomeFields', [])
+# # # #     for income in income_fields:
+# # # #         doc.add_paragraph(f"Income Source: {income.get('sourceIncome', '')} Amount: {income.get('amountIncome', '')}")
+
+# # # #     # Save file
+# # # #     file_name = os.path.join("data", file_name)
+# # # #     doc.save(f"{file_name}.docx")
+
+
+# # # # @app.route('/submit-client-data', methods=['POST'])
+# # # # def submit_client_data():
+# # # #     try:
+# # # #         data = request.get_json()
+# # # #         print(data)
+# # # #         # Generate the unique ID
+# # # #         client_name = data['clientDetail']['clientName']
+        
+# # # #         # unique_id = generate_unique_id(client_name)
+# # # #         # unique_id = data['clientDetail']['uniqueId']
+        
+# # # #         unique_id = data['uniqueId']
+# # # #         print(unique_id)
+        
+# # # #         data['uniqueId'] = unique_id
+        
+# # # #         # Save the data to a Word file
+        
+# # # #         file_name = unique_id
+# # # #         # save_to_word_file(data, file_name)
+# # # #         save_to_word_file(data, file_name)
+        
+# # # #         return jsonify({
+# # # #             'message': 'Client data received and saved successfully.'
+# # # #         }), 200
+# # # #     except Exception as e:
+# # # #         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
 # # # # # Determine Investment personality through the investor assesmnet tab : 
@@ -15196,21 +17188,38 @@ if __name__ == '__main__':
     
 
 # # # # import logging
-# # # # global investmentPersonality  # Global Variable
-# # # # investmentPersonality = ""
+# # # # # global investmentPersonality  # Global Variable
+# # # # # investmentPersonality = ""
 
-# # # # async def make_suggestions(investmentPersonality,clientName,finacial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
+# # # # async def make_suggestions(investmentPersonality,clientName,financial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
 # # # #     try:
 # # # #         try:
-# # # #             financial_file = "data\Financial_Investment_1.docx"
+# # # #             # financial_file = financial_file
+# # # #             print(f"Processing the File for the client: {clientName} and the file : {financial_file}")
 # # # #             # financial_data = asyncio.run(process_document(financial_file))
-# # # #             financial_data = await process_document(financial_file)
-# # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_data))
-# # # #             suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_data,monthly_investment,investment_period)
+            
+# # # #             financial_data = await process_document(f"data\{financial_file}")
+            
+# # # #             print(f"Data passed : {financial_data}")
+            
+# # # #             financial_file = f"data\{financial_file}"
+            
+# # # #             print(f"Finished processing the File for the client : {financial_file}")
+            
+# # # #             # suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_file,monthly_investment,investment_period)
+            
+# # # #             suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName,financial_data,financial_file,monthly_investment,investment_period)
+            
+            
+# # # #             # print(f"Finished processing the suggestions : {suggestions}")
             
 # # # #             htmlSuggestions = markdown.markdown(suggestions)
             
 # # # #             formatSuggestions = markdown_to_text(suggestions)
+            
+# # # #             # print(f"The suggestions generated for the client are :\n {formatSuggestions}")
+            
+# # # #             # need to change the data extraction process : 
 # # # #             data_extracted = extract_numerical_data(suggestions)
             
 # # # #             min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
@@ -15294,10 +17303,15 @@ if __name__ == '__main__':
 # # # #         data = request.json
 # # # #         clientName = data.get('clientName')
 # # # #         try :
-# # # #             clientId = data.get('client_id')
+# # # #             # clientId = data.get('client_id')
+# # # #             clientId = data.get('clientId')
 # # # #             investmentPersonality = data.get('investmentPersonality') # investment_personality
-# # # #             print(f"InvestmentPersonality is : {investmentPersonality}")
+# # # #             financial_file = f"{clientId}.docx"
+# # # #             # financial_file = f"data\{clientId}.docx" # data\EW2400.docx
+# # # #             print(f"The clients ClientName is : {clientName} and their ClientId is : {clientId}")
+# # # #             print(f"InvestmentPersonality received is : {investmentPersonality}")
 # # # #             logging.info('Recieved Values')
+            
 # # # #         except Exception as e:
 # # # #             logging.info(f"Error occurred while retrieving client id: {e}")
 # # # #             return jsonify({'message': f'Error occurred while retrieving client id: {e}'}), 400
@@ -15307,7 +17321,7 @@ if __name__ == '__main__':
 # # # #             # investment_period= data.get('investment_period')  #3
 # # # #             monthly_investment= 10000
 # # # #             investment_period= 3
-# # # #             htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,monthly_investment,investment_period))
+# # # #             htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
             
 # # # #         except Exception as e:
 # # # #             logging.info(f"Error occurred while processing investment data: {e}")
@@ -15338,142 +17352,76 @@ if __name__ == '__main__':
 
 
 # # # # # Route to handle generating investment suggestions
+# # # # import shutil
+# # # # import os
+# # # # import os
+
+# # # # def save_file_to_folder(file_storage, destination_folder):
+# # # #     try:
+# # # #         # Ensure the destination folder exists
+# # # #         if not os.path.exists(destination_folder):
+# # # #             os.makedirs(destination_folder)
+        
+# # # #         # Construct the destination file path
+# # # #         destination_file_path = os.path.join(destination_folder, file_storage.filename)
+        
+# # # #         # Check if the file already exists
+# # # #         if not os.path.exists(destination_file_path):
+# # # #             # Save the file
+# # # #             file_storage.save(destination_file_path)
+# # # #             print(f"File saved to {destination_file_path}")
+# # # #             return destination_file_path
+# # # #         else:
+# # # #             print(f"File already exists at {destination_file_path}")
+# # # #             return destination_file_path
+        
+# # # #     except Exception as e:
+# # # #         print(f"Error saving file: {e}")
+
+
 # # # # @app.route('/generate-investment-suggestions', methods=['POST'])
 # # # # def generate_investment_suggestions():
 # # # #     try:
-# # # #         try :
-# # # #             if investmentPersonality:
-# # # #                 try:
-# # # #                     financial_file = "data\Financial_Investment_1.docx"
-# # # #                     financial_data = asyncio.run(process_document(financial_file))
-# # # #                     suggestions = asyncio.run(generate_investment_suggestions_for_investor(investmentPersonality, financial_data))
-# # # #                 except Exception as e:
-# # # #                     logging.info(f"Error occurred while generating investment suggestions: {e}")
-# # # #                     return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
-# # # #                 htmlSuggestions = markdown.markdown(suggestions)
-                
-# # # #                 formatSuggestions = markdown_to_text(suggestions)
-# # # #                 data_extracted = extract_numerical_data(suggestions)
-                
-# # # #                 min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                                 [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-# # # #                 max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                                 [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
-
-# # # #                 # Normalize allocations
-# # # #                 min_allocations = normalize_allocations(min_allocations)
-# # # #                 max_allocations = normalize_allocations(max_allocations)
-
-# # # #                 # Update Bar Chart Data
-# # # #                 bar_chart_data = {
-# # # #                     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-# # # #                     'datasets': [{
-# # # #                         'label': 'Min Allocation',
-# # # #                         'data': min_allocations,
-# # # #                         'backgroundColor': 'skyblue'
-# # # #                     },
-# # # #                     {
-# # # #                         'label': 'Max Allocation',
-# # # #                         'data': max_allocations,
-# # # #                         'backgroundColor': 'lightgreen'
-# # # #                     }]
-# # # #                 }
-
-# # # #                 # Similar changes can be made for the Pie Chart Data:
-# # # #                 all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-# # # #                 num_labels = len(all_labels)
-# # # #                 max_allocations_for_pie = normalize_allocations(
-# # # #                     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# # # #                     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-# # # #                 )
-                
-# # # #                 # Generate colors based on the number of labels
-# # # #                 dynamic_colors = generate_colors(num_labels)
-
-# # # #                 # Update Pie Chart Data
-# # # #                 pie_chart_data = {
-# # # #                     'labels': all_labels,
-# # # #                     'datasets': [{
-# # # #                         'label': 'Investment Allocation',
-# # # #                         'data': max_allocations_for_pie,
-# # # #                         'backgroundColor': dynamic_colors,
-# # # #                         'hoverOffset': 4
-# # # #                     }]
-# # # #                 }
-                
-                
-# # # #                 # Prepare the data for the line chart with inflation adjustment
-# # # #                 initial_investment = 10000
-# # # #                 # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
-# # # #                 combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-# # # #                 print(f"\nThe combined chart data is : {combined_chart_data}")
-                
-# # # #                 return jsonify({
-# # # #                     "status": 200,
-# # # #                     "message": "Success",
-# # # #                     "investmentSuggestions": htmlSuggestions,
-# # # #                     "pieChartData": pie_chart_data,
-# # # #                     "barChartData": bar_chart_data,
-# # # #                     "compoundedChartData":combined_chart_data
-# # # #                 }), 200
-            
-# # # #             assessment_file = request.files['assessmentFile']
-# # # #             financial_file = request.files['financialFile']
-# # # #             logging.info(" Requested files")
-# # # #         except Exception as e:
-# # # #             logging.info(" Requested files not passed")
-# # # #             return jsonify({'message': f'Error occurred while retrieving files12: {e}'}), 400
-            
+# # # #         assessment_file = request.files['assessmentFile']
+# # # #         financial_file = request.files['financialFile']
+# # # #         logging.info("Requested files")
         
-# # # #         try :
-# # # #             try:
-# # # #                 responses = extract_responses_from_docx(assessment_file)
-# # # #             except Exception as e:
-# # # #                 logging.info(f"Failed to extract responses from assessment file: {e}")
-# # # #                 return jsonify({'message': 'Failed to extract responses from assessment file.'}), 400
-# # # #             try:
-# # # #                 financial_data = asyncio.run(process_document(financial_file))
-# # # #             except Exception as e:
-# # # #                 logging.info(f"Failed to process financial file: {e}")
-# # # #                 return jsonify({'message': 'Failed to process financial file.'}), 400
-
-# # # #             logging.info(f"Received Responses from the file {responses}")
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to process files")
-# # # #             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
-
-# # # #         try:
-# # # #             # Determine investment personality
-# # # #             # monthly_investment= 10000
-# # # #             # investment_period= 3
-# # # #             # personality,monthly_investment,investment_period = asyncio.run(determine_investment_personality(responses))
-            
-# # # #             personality= asyncio.run(determine_investment_personality(responses))
-            
-# # # #             logging.info(f"\nPersonality of the user is : {personality}")
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to determine personality")
-# # # #             return jsonify({'message': f'Error occurred while determining personality: {e}'}), 400
+# # # #         responses = extract_responses_from_docx(assessment_file)
+# # # #         if not responses:
+# # # #             raise Exception("Failed to extract responses from assessment file.")
         
-# # # #         try:
-# # # #             # Generate investment suggestions based on personality and financial data
-# # # #             clientName = "Harshal Gidh"
-# # # #             suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data))
-# # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,monthly_investment,investment_period))
-# # # #             htmlSuggestions = markdown.markdown(suggestions)
-# # # #             logging.info(f"\Suggestions for investor : \n{suggestions}")
-# # # #         except Exception as e:
-# # # #             logging.info("Failed to generate suggestions")
-# # # #             return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 400
-
-# # # #         logging.info("Successfully generated")
+# # # #         destination_folder = 'data'
+# # # #         file_path = save_file_to_folder(financial_file, destination_folder)
+# # # #         if not file_path:
+# # # #             raise Exception("Failed to save financial file.")
+        
+# # # #         financial_data = asyncio.run(process_document(file_path))
+# # # #         if not financial_data:
+# # # #             raise Exception("Failed to process financial file.")
+        
+# # # #         logging.info(f"Received Responses from the file {responses}")
+        
+# # # #         personality = asyncio.run(determine_investment_personality(responses))
+# # # #         if not personality:
+# # # #             raise Exception("Failed to determine personality.")
+        
+# # # #         logging.info(f"Personality of the user is: {personality}")
+        
+# # # #         clientName = "Emilly Watts"
+# # # #         suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, clientName, financial_data, file_path))
+# # # #         if "Error" in suggestions:
+# # # #             raise Exception(suggestions)
+        
+# # # #         htmlSuggestions = markdown.markdown(suggestions)
+# # # #         logging.info(f"Suggestions for investor: \n{suggestions}")
+        
 # # # #         formatSuggestions = markdown_to_text(suggestions)
 # # # #         data_extracted = extract_numerical_data(suggestions)
         
 # # # #         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                         [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # #                           [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
 # # # #         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# # # #                         [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # #                           [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
 
 # # # #         # Normalize allocations
 # # # #         min_allocations = normalize_allocations(min_allocations)
@@ -15516,12 +17464,10 @@ if __name__ == '__main__':
 # # # #             }]
 # # # #         }
         
-        
 # # # #         # Prepare the data for the line chart with inflation adjustment
 # # # #         initial_investment = 10000
-# # # #         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
 # # # #         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-# # # #         print(f"\nThe combined chart data is : {combined_chart_data}")
+# # # #         print(f"\nThe combined chart data is: {combined_chart_data}")
         
 # # # #         return jsonify({
 # # # #             "status": 200,
@@ -15529,12 +17475,155 @@ if __name__ == '__main__':
 # # # #             "investmentSuggestions": htmlSuggestions,
 # # # #             "pieChartData": pie_chart_data,
 # # # #             "barChartData": bar_chart_data,
-# # # #             "compoundedChartData":combined_chart_data
+# # # #             "compoundedChartData": combined_chart_data
 # # # #         }), 200
 
 # # # #     except Exception as e:
 # # # #         logging.info(f"Error in generating investment suggestions: {e}")
-# # # #         return jsonify({'message': 'Internal Server Error in Generating responses'}), 500
+# # # #         return jsonify({'message': f'Internal Server Error in Generating responses : {e}'}), 500
+
+
+# # # # # #Current error code
+# # # # # @app.route('/generate-investment-suggestions', methods=['POST'])
+# # # # # def generate_investment_suggestions():
+# # # # #     try:
+# # # # #         try :
+# # # # #             assessment_file = request.files['assessmentFile']
+# # # # #             financial_file = request.files['financialFile']
+# # # # #             logging.info(" Requested files")
+# # # # #         except Exception as e:
+# # # # #             logging.info(" Requested files not passed")
+# # # # #             return jsonify({'message': f'Error occurred while retrieving files12: {e}'}), 400
+                   
+# # # # #         try :
+# # # # #             try:
+# # # # #                 responses = extract_responses_from_docx(assessment_file)
+# # # # #             except Exception as e:
+# # # # #                 logging.info(f"Failed to extract responses from assessment file: {e}")
+# # # # #                 return jsonify({'message': 'Failed to extract responses from assessment file.'}), 400
+            
+# # # # #             try:
+# # # # #                 financial_data = asyncio.run(process_document(financial_file))
+# # # # #                 print(financial_data)
+# # # # #                 print(f"The Financial Data is of type : {type(financial_data)}")
+# # # # #                 print(financial_file)
+# # # # #                 destination_folder = 'data'
+# # # # #                 file_path = save_file_to_folder(financial_file, destination_folder)
+# # # # #                 print(file_path)
+# # # # #             except Exception as e:
+# # # # #                 logging.info(f"Failed to process financial file: {e}")
+# # # # #                 return jsonify({'message': 'Failed to process financial file.'}), 400
+
+# # # # #             logging.info(f"Received Responses from the file {responses}")
+# # # # #         except Exception as e:
+# # # # #             logging.info("Failed to process files")
+# # # # #             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
+
+# # # # #         try:
+# # # # #             # Determine investment personality
+# # # # #             # monthly_investment= 10000
+# # # # #             # investment_period= 3
+# # # # #             # personality,monthly_investment,investment_period = asyncio.run(determine_investment_personality(responses))
+            
+# # # # #             personality= asyncio.run(determine_investment_personality(responses))
+            
+# # # # #             logging.info(f"\nPersonality of the user is : {personality}")
+# # # # #             print(f"\nPersonality of the user is : {personality}")
+# # # # #             print(f"Type of Investment Personality is : {type(personality)}")
+            
+# # # # #         except Exception as e:
+# # # # #             logging.info("Failed to determine personality")
+# # # # #             return jsonify({'message': f'Error occurred while determining personality: {e}'}), 400
+        
+# # # # #         try:
+# # # # #             # Generate investment suggestions based on personality and financial data
+# # # # #             clientName = "Emilly Watts"
+# # # # #             print(f"{type(personality)} \n {type(financial_data)} \n {type(financial_file)} \n {type(file_path)}")
+# # # # #             try:
+# # # # #                 suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,file_path)) #monthly_investment,investment_period))
+# # # # #             except Exception as e:
+# # # # #                 logging.info(f"Failed to generate investment suggestions for investor: {e}")
+# # # # #                 print(f"Failed to generate investment suggestions for investor: {e}")
+# # # # #                 return jsonify({'message': f'Failed to generate investment suggestions for investor. : {e}'}), 400
+            
+# # # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,monthly_investment,investment_period))
+# # # # #             htmlSuggestions = markdown.markdown(suggestions)
+# # # # #             logging.info(f"\Suggestions for investor : \n{suggestions}")
+            
+# # # # #         except Exception as e:
+# # # # #             logging.info("Failed to generate suggestions")
+# # # # #             return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 400
+
+
+# # # # #         logging.info("Successfully generated")
+# # # # #         formatSuggestions = markdown_to_text(suggestions)
+# # # # #         data_extracted = extract_numerical_data(suggestions)
+        
+# # # # #         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                         [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                         [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+# # # # #         # Normalize allocations
+# # # # #         min_allocations = normalize_allocations(min_allocations)
+# # # # #         max_allocations = normalize_allocations(max_allocations)
+
+# # # # #         # Update Bar Chart Data
+# # # # #         bar_chart_data = {
+# # # # #             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# # # # #             'datasets': [{
+# # # # #                 'label': 'Min Allocation',
+# # # # #                 'data': min_allocations,
+# # # # #                 'backgroundColor': 'skyblue'
+# # # # #             },
+# # # # #             {
+# # # # #                 'label': 'Max Allocation',
+# # # # #                 'data': max_allocations,
+# # # # #                 'backgroundColor': 'lightgreen'
+# # # # #             }]
+# # # # #         }
+
+# # # # #         # Similar changes can be made for the Pie Chart Data:
+# # # # #         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+# # # # #         num_labels = len(all_labels)
+# # # # #         max_allocations_for_pie = normalize_allocations(
+# # # # #             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # #             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #         )
+        
+# # # # #         # Generate colors based on the number of labels
+# # # # #         dynamic_colors = generate_colors(num_labels)
+
+# # # # #         # Update Pie Chart Data
+# # # # #         pie_chart_data = {
+# # # # #             'labels': all_labels,
+# # # # #             'datasets': [{
+# # # # #                 'label': 'Investment Allocation',
+# # # # #                 'data': max_allocations_for_pie,
+# # # # #                 'backgroundColor': dynamic_colors,
+# # # # #                 'hoverOffset': 4
+# # # # #             }]
+# # # # #         }
+        
+        
+# # # # #         # Prepare the data for the line chart with inflation adjustment
+# # # # #         initial_investment = 10000
+# # # # #         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
+# # # # #         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+# # # # #         print(f"\nThe combined chart data is : {combined_chart_data}")
+        
+# # # # #         return jsonify({
+# # # # #             "status": 200,
+# # # # #             "message": "Success",
+# # # # #             "investmentSuggestions": htmlSuggestions,
+# # # # #             "pieChartData": pie_chart_data,
+# # # # #             "barChartData": bar_chart_data,
+# # # # #             "compoundedChartData":combined_chart_data
+# # # # #         }), 200
+
+# # # # #     except Exception as e:
+# # # # #         logging.info(f"Error in generating investment suggestions: {e}")
+# # # # #         return jsonify({'message': 'Internal Server Error in Generating responses'}), 500
 
 
 
@@ -15544,11 +17633,7 @@ if __name__ == '__main__':
 # # # #     app.run(host='0.0.0.0',debug=True)
 
 
-
-
-
-# # # # # # Flask Code of APP.py
-
+# # # # # # Investment suggestion template needs to be updated  :
 # # # # # import streamlit as st
 # # # # # import pandas as pd
 # # # # # import matplotlib.pyplot as plt
@@ -15989,8 +18074,8 @@ if __name__ == '__main__':
 # # # # # #         return None
 
 
-# # # # # investment_personality = "Moderate Investor"
-# # # # # async def make_retrieval_chain(retriever): # GET Method
+# # # # # # investment_personality = "Moderate Investor"
+# # # # # async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthly_investment=10000,investment_period=3): # GET Method
 # # # # #     """
 # # # # #     Create a retrieval chain using the provided retriever.
 
@@ -16001,7 +18086,9 @@ if __name__ == '__main__':
 # # # # #         RetrievalQA: A retrieval chain object.
 # # # # #     """
 # # # # #     try:
-# # # # #         global investment_personality #,summary
+# # # # #         # global investment_personality #,summary
+# # # # #         print(investmentPersonality)
+# # # # #         print(clientName)
 # # # # #         llm = ChatGoogleGenerativeAI(
 # # # # #             #model="gemini-pro",
 # # # # #             model = "gemini-1.5-flash",
@@ -16009,29 +18096,93 @@ if __name__ == '__main__':
 # # # # #             top_p=0.85,
 # # # # #             google_api_key=GOOGLE_API_KEY
 # # # # #         )
-# # # # #                                                     # \n + summary 
-# # # # #         prompt_template = investment_personality +  "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-# # # # #                 Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality.
+# # # # #         # New Template 
+# # # # #         monthly_investment = str(monthly_investment)
+# # # # #         investment_period = str(investment_period)
+# # # # #         print(monthly_investment)
+# # # # #         print(investment_period)
+        
+# # # # #         prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # # #                 Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
+# # # # #                 Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
 # # # # #                 Also give the user detailed information about the investment how to invest,where to invest and how much they
-# # # # #                 should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # # #                 should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
 # # # # #                 Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-# # # # #                 investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
+# # # # #                 investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
 # # # # #                 Also give the user minimum and maximum expected growth in dollars for the time horizon .
-# # # # #                 Also explain the user why you are giving them that particular investment suggestion.
-# # # # #                 Here's an example for the required Output Format :
+# # # # #                 Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
+                
+# # # # #                 Client Name: """ + clientName + """
 
-# # # # #                 Investment Suggestions for a Moderate Investor(This is for a Moderate Investor but you need to generate for any investor)
+# # # # #                 Financial Overview:
+# # # # #                 - Total Assets: $100,000 (cash), $150,000 (home), $12,000 (other assets).
+                
+# # # # #                 - Liabilities: $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%.
+                
+# # # # #                 - Total Monthly Liabilities: $1,650 (Mortgage, Credit Card, Other Loans).
+                
+
+# # # # #                 You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+
+# # # # #                 Step-by-Step Guidance:
+# # # # #                 1. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+# # # # #                 2. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+# # # # #                 3. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+# # # # #                 4. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+# # # # #                 5. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities.
+                
+                
+# # # # #                 Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
+                
+# # # # #                 Investment Suggestions : 
+                
+                
+# # # # #                 Client Name: """ + clientName + """
+
+# # # # #                 Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data only)
+                
+# # # # #                 - Total Assets: (# For ex : $100,000 (cash), $150,000 (home), $12,000 (other assets) display data available to you.)
+                
+# # # # #                 - Liabilities: (# For ex : $200,000 mortgage at 12% interest, $400 credit card debt at 3.5%, $15,000 other loans at 10%. display data available to you)
+                
+# # # # #                 - Total Monthly Liabilities: (# For ex : $1,650 (Mortgage, Credit Card, Other Loans). display data available to you)
+                
+# # # # #                 - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
+                
+# # # # #                 - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+
+# # # # #                 Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
+# # # # #                 (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
+# # # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
+# # # # #                 (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
+                
+# # # # #                 (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a bad income for now but have great assets and manageable debt and liabilities.
+# # # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
+# # # # #                 Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
+                
+# # # # #                 (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a bad income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+# # # # #                 Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
+# # # # #                 I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
+                
+# # # # #                 (#If the financial is 1 or 2 only then give investment suggestions to the client)
+# # # # #                 Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
 
 # # # # #                 Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
 
-# # # # #                 Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+# # # # #                 Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
 
 # # # # #                 Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
-# # # # #                 How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
+# # # # #                 How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
+                
 # # # # #                 Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+                
 # # # # #                 ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+                
 # # # # #                 Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+                
 # # # # #                 Consider investing in blue-chip companies or growth sectors like technology. 
+                
+                
 # # # # #                 Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
 
 
@@ -16055,6 +18206,7 @@ if __name__ == '__main__':
                 
 # # # # #                 Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
 
+
 # # # # #                 Time Horizon and Expected Returns:
 
 # # # # #                 Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
@@ -16063,9 +18215,10 @@ if __name__ == '__main__':
 # # # # #                 Minimum Expected Annual Return: 4% - 6% 
                 
                 
-# # # # #                 \nMaximum Expected Annual Return: 8% - 10% 
+# # # # #                 Maximum Expected Annual Return: 8% - 10% 
                 
-# # # # #                 Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
+                
+# # # # #                 Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
 # # # # #                 Minimum Expected Growth in Dollars: 
                 
 # # # # #                 4,000−6,000 (over 10 years) 
@@ -16074,6 +18227,9 @@ if __name__ == '__main__':
 # # # # #                 Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
 
                 
+# # # # #                 Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+                   
+                    
 # # # # #                 Rationale for Investment Suggestions:
 
 # # # # #                 This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
@@ -16083,14 +18239,188 @@ if __name__ == '__main__':
 
 # # # # #                 Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
 
-# # # # #                 Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation )
-
 # # # # #                 Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
 
+# # # # #                 Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
 # # # # #                 <context>
 # # # # #                 {context}
 # # # # #                 </context>
 # # # # #                 Question: {input}"""
+                
+# # # # #         # # latest version gives some info about the client conditions but not in detail 
+# # # # #         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # # #         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
+# # # # #         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
+# # # # #         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
+# # # # #         #         should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # # #         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+# # # # #         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
+# # # # #         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
+# # # # #         #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
+# # # # #         #         Here's an example for the required Output Format :
+
+# # # # #         #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+
+# # # # #         #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+
+# # # # #         #         Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+# # # # #         #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+# # # # #         #         How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
+# # # # #         #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+# # # # #         #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+# # # # #         #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+# # # # #         #         Consider investing in blue-chip companies or growth sectors like technology. 
+# # # # #         #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+
+
+# # # # #         #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+# # # # #         #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+# # # # #         #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+# # # # #         #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+# # # # #         #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+# # # # #         #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+# # # # #         #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+# # # # #         #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+# # # # #         #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+# # # # #         #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+# # # # #         #         Time Horizon and Expected Returns:
+
+# # # # #         #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
+# # # # #         #         Minimum Expected Annual Return: 4% - 6% 
+                
+                
+# # # # #         #         Maximum Expected Annual Return: 8% - 10% 
+                
+# # # # #         #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
+# # # # #         #         Minimum Expected Growth in Dollars: 
+                
+# # # # #         #         4,000−6,000 (over 10 years) 
+                
+                
+# # # # #         #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+# # # # #         #         Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+                   
+                    
+# # # # #         #         Rationale for Investment Suggestions:
+
+# # # # #         #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+
+                
+# # # # #         #         Important Considerations:
+
+# # # # #         #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+
+# # # # #         #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+
+# # # # #         #         Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
+# # # # #         #         <context>
+# # # # #         #         {context}
+# # # # #         #         </context>
+# # # # #         #         Question: {input}"""
+        
+        
+        
+        
+# # # # #         # # Working code but gives clientname in brackets 
+# # # # #         # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # # #         #         Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality provided to you.
+# # # # #         #         Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
+# # # # #         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
+# # # # #         #         should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # # #         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+# # # # #         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
+# # # # #         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
+# # # # #         #         Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
+# # # # #         #         Here's an example for the required Output Format :
+
+# # # # #         #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+
+# # # # #         #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+
+# # # # #         #         Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+# # # # #         #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+# # # # #         #         How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
+# # # # #         #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+# # # # #         #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+# # # # #         #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+# # # # #         #         Consider investing in blue-chip companies or growth sectors like technology. 
+# # # # #         #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+
+
+# # # # #         #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+# # # # #         #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+# # # # #         #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+# # # # #         #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+# # # # #         #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+# # # # #         #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+# # # # #         #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+# # # # #         #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+# # # # #         #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+# # # # #         #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+# # # # #         #         Time Horizon and Expected Returns:
+
+# # # # #         #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
+# # # # #         #         Minimum Expected Annual Return: 4% - 6% 
+                
+                
+# # # # #         #         Maximum Expected Annual Return: 8% - 10% 
+                
+# # # # #         #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
+# # # # #         #         Minimum Expected Growth in Dollars: 
+                
+# # # # #         #         4,000−6,000 (over 10 years) 
+                
+                
+# # # # #         #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+# # # # #         #         Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+                   
+                    
+# # # # #         #         Rationale for Investment Suggestions:
+
+# # # # #         #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+
+                
+# # # # #         #         Important Considerations:
+
+# # # # #         #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+
+# # # # #         #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+
+# # # # #         #         <context>
+# # # # #         #         {context}
+# # # # #         #         </context>
+# # # # #         #         Question: {input}"""
+                
 
 # # # # #         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
 
@@ -16280,7 +18610,75 @@ if __name__ == '__main__':
 # # # # # import streamlit as st
 # # # # # import numpy as np
 
-# # # # # def extract_numerical_data(response):
+# # # # # # def extract_numerical_data(response):
+# # # # # #     # Define patterns to match different sections and their respective allocations
+# # # # # #     patterns = {
+# # # # # #         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# # # # # #         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# # # # # #         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+# # # # # #     }
+
+# # # # # #     data = defaultdict(dict)
+
+# # # # # #     for section, pattern in patterns.items():
+# # # # # #         match = pattern.search(response)
+# # # # # #         if match:
+# # # # # #             investments_text = match.group(1)
+# # # # # #             # Extract individual investment types and their allocations
+# # # # # #             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+# # # # # #             for investment_match in investment_pattern.findall(investments_text):
+# # # # # #                 investment_type, min_allocation, max_allocation = investment_match
+# # # # # #                 data[section][investment_type.strip()] = {
+# # # # # #                     'min': min_allocation,
+# # # # # #                     'max': max_allocation
+# # # # # #                 }
+
+# # # # # #     # Update: Extracting time horizon and expected returns using a more flexible pattern
+# # # # # #     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+# # # # # #     expected_return_pattern = re.compile(r'(Minimum|Maximum) Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+# # # # # #     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+# # # # # #     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+
+# # # # # #     time_horizon_match = time_horizon_pattern.search(response)
+# # # # # #     expected_return_matches = expected_return_pattern.findall(response)
+# # # # # #     min_growth_match = min_growth_pattern.search(response)
+# # # # # #     max_growth_match = max_growth_pattern.search(response)
+
+# # # # # #     if time_horizon_match:
+# # # # # #         data['Time Horizon'] = {
+# # # # # #             'min_years': time_horizon_match.group(1),
+# # # # # #             'max_years': time_horizon_match.group(2)
+# # # # # #         }
+
+# # # # # #     # Correct extraction for both Minimum and Maximum Expected Annual Return
+# # # # # #     for match in expected_return_matches:
+# # # # # #         if match[0].lower() == "minimum":
+# # # # # #             data['Expected Annual Return'] = {
+# # # # # #                 'min': match[1],
+# # # # # #                 'max': match[2]  # Extract min and max for minimum expected return
+# # # # # #             }
+# # # # # #         elif match[0].lower() == "maximum":
+# # # # # #             data['Expected Annual Return'].update({
+# # # # # #                 'min': match[1],
+# # # # # #                 'max': match[2]  # Update for maximum expected return
+# # # # # #             })
+
+# # # # # #     if min_growth_match:
+# # # # # #         data['Expected Growth in Dollars'] = {
+# # # # # #             'min': min_growth_match.group(1),
+# # # # # #             'max': min_growth_match.group(2)
+# # # # # #         }
+
+# # # # # #     if max_growth_match:
+# # # # # #         data['Expected Growth in Dollars'] = {
+# # # # # #             'min': max_growth_match.group(1),
+# # # # # #             'max': max_growth_match.group(2)
+# # # # # #         }
+
+# # # # # #     return data
+
+
+# # # # # def extract_numerical_data(response): # curr version but cant capture annual return 
 # # # # #     # Define patterns to match different sections and their respective allocations
 # # # # #     patterns = {
 # # # # #         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
@@ -16355,96 +18753,116 @@ if __name__ == '__main__':
 # # # # #     return [round((allocation / total) * 100, 2) for allocation in allocations]
 
 
-# # # # # # def prepare_line_chart_data_with_inflation(data_extracted, initial_investment=10000, inflation_rate=4):
-# # # # # #     min_return = data_extracted['Expected Annual Return']['min']
-# # # # # #     max_return = data_extracted['Expected Annual Return']['max']
-# # # # # #     min_years = data_extracted['Time Horizon']['min_years']
-# # # # # #     max_years = data_extracted['Time Horizon']['max_years']
 
-# # # # # #     def calculate_compounded_return(principal, rate, years):
-# # # # # #         return principal * (1 + rate / 100) ** years
+# # # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4): # previous version
+# # # # # #     try:
+# # # # # #         # Print data_extracted to debug the structure
+# # # # # #         print("Data extracted:", data_extracted)
 
-# # # # # #     def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
-# # # # # #         return nominal_return / (1 + inflation_rate / 100) ** years
+# # # # # #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
+# # # # # #         if 'Expected Annual Return' not in data_extracted :
+# # # # # #             print("'Expected Annual Return' missing in data_extracted")
+# # # # # #             data_extracted['Expected Annual Return']['min'] = 6
+# # # # # #             data_extracted['Expected Annual Return']['max'] = 8
+# # # # # #             min_return = 6
+# # # # # #             max_return = 8
+# # # # # #         else :
+# # # # # #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
+# # # # # #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
+                
+# # # # # #         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
+# # # # # #         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
 
-# # # # # #     labels = list(range(1, max_years + 1))  # Years for the x-axis
-# # # # # #     min_compounded = []
-# # # # # #     max_compounded = []
-# # # # # #     min_inflation_adjusted = []
-# # # # # #     max_inflation_adjusted = []
+# # # # # #         def calculate_compounded_return(principal, rate, years):
+# # # # # #             return principal * (1 + rate / 100) ** years
 
-# # # # # #     for year in labels:
-# # # # # #         # Calculate compounded returns (nominal)
-# # # # # #         min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
-# # # # # #         max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
+# # # # # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
+# # # # # #             return nominal_return / (1 + inflation_rate / 100) ** years
 
-# # # # # #         # Calculate inflation-adjusted returns
-# # # # # #         min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
-# # # # # #         max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
+# # # # # #         labels = list(range(1, max_years + 1))  # Years for the x-axis
+# # # # # #         min_compounded = []
+# # # # # #         max_compounded = []
+# # # # # #         min_inflation_adjusted = []
+# # # # # #         max_inflation_adjusted = []
 
-# # # # # #         # Append results
-# # # # # #         min_compounded.append(min_compounded_value)
-# # # # # #         max_compounded.append(max_compounded_value)
-# # # # # #         min_inflation_adjusted.append(min_inflation_value)
-# # # # # #         max_inflation_adjusted.append(max_inflation_value)
+# # # # # #         for year in labels:
+# # # # # #             # Calculate nominal compounded returns
+# # # # # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
+# # # # # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
 
-# # # # # #     # Line Chart Data for Compounded Returns
-# # # # # #     compounded_return_chart_data = {
-# # # # # #         'labels': labels,
-# # # # # #         'datasets': [
-# # # # # #             {
-# # # # # #                 'label': 'Minimum Compounded Return',
-# # # # # #                 'data': min_compounded,
-# # # # # #                 'borderColor': 'rgb(255, 99, 132)',  # Red color
-# # # # # #                 'fill': False
-# # # # # #             },
-# # # # # #             {
-# # # # # #                 'label': 'Maximum Compounded Return',
-# # # # # #                 'data': max_compounded,
-# # # # # #                 'borderColor': 'rgb(54, 162, 235)',  # Blue color
-# # # # # #                 'fill': False
-# # # # # #             }
-# # # # # #         ]
-# # # # # #     }
+# # # # # #             # Calculate inflation-adjusted compounded returns
+# # # # # #             min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
+# # # # # #             max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
 
-# # # # # #     # Line Chart Data for Inflation-Adjusted Returns
-# # # # # #     inflation_adjusted_chart_data = {
-# # # # # #         'labels': labels,
-# # # # # #         'datasets': [
-# # # # # #             {
-# # # # # #                 'label': 'Min Inflation Adjusted Return',
-# # # # # #                 'data': min_inflation_adjusted,
-# # # # # #                 'borderColor': 'rgb(75, 192, 192)',  # Light blue
-# # # # # #                 'fill': False
-# # # # # #             },
-# # # # # #             {
-# # # # # #                 'label': 'Max Inflation Adjusted Return',
-# # # # # #                 'data': max_inflation_adjusted,
-# # # # # #                 'borderColor': 'rgb(153, 102, 255)',  # Light purple
-# # # # # #                 'fill': False
-# # # # # #             }
-# # # # # #         ]
-# # # # # #     }
+# # # # # #             # Append results
+# # # # # #             min_compounded.append(min_compounded_value)
+# # # # # #             max_compounded.append(max_compounded_value)
+# # # # # #             min_inflation_adjusted.append(min_inflation_value)
+# # # # # #             max_inflation_adjusted.append(max_inflation_value)
 
-# # # # # #     return compounded_return_chart_data, inflation_adjusted_chart_data
+# # # # # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
+# # # # # #         combined_chart_data = {
+# # # # # #             'labels': labels,
+# # # # # #             'datasets': [
+# # # # # #                 {
+# # # # # #                     'label': 'Minimum Compounded Return',
+# # # # # #                     'data': min_compounded,
+# # # # # #                     'borderColor': 'rgb(255, 99, 132)',  # Red color
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Maximum Compounded Return',
+# # # # # #                     'data': max_compounded,
+# # # # # #                     'borderColor': 'rgb(54, 162, 235)',  # Blue color
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Min Inflation Adjusted Return',
+# # # # # #                     'data': min_inflation_adjusted,
+# # # # # #                     'borderColor': 'rgb(75, 192, 192)',  # Light blue
+# # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Max Inflation Adjusted Return',
+# # # # # #                     'data': max_inflation_adjusted,
+# # # # # #                     'borderColor': 'rgb(153, 102, 255)',  # Light purple
+# # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # #                     'fill': False
+# # # # # #                 }
+# # # # # #             ]
+# # # # # #         }
+# # # # # #     except KeyError as e:
+# # # # # #         print(f"KeyError occurred: {e}")
+# # # # # #         return jsonify({'message': f'Key Error: {e}'}), 400
+# # # # # #     except Exception as e:
+# # # # # #         print(f"Error occurred while preparing data for combined line chart: {e}")
+# # # # # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
+
+# # # # # #     return combined_chart_data
 
 
+# # # # # import datetime  # Import the datetime module to get the current year
+# # # # # # uodated to have current year
 # # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
 # # # # #     try:
+# # # # #         # Get the current year
+# # # # #         curr_year = datetime.datetime.now().year
+
 # # # # #         # Print data_extracted to debug the structure
 # # # # #         print("Data extracted:", data_extracted)
 
 # # # # #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
-# # # # #         if 'Expected Annual Return' not in data_extracted :
+# # # # #         if 'Expected Annual Return' not in data_extracted:
 # # # # #             print("'Expected Annual Return' missing in data_extracted")
 # # # # #             data_extracted['Expected Annual Return']['min'] = 6
 # # # # #             data_extracted['Expected Annual Return']['max'] = 8
 # # # # #             min_return = 6
 # # # # #             max_return = 8
-# # # # #         else :
+# # # # #         else:
 # # # # #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
 # # # # #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
-                
+
 # # # # #         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
 # # # # #         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
 
@@ -16454,13 +18872,15 @@ if __name__ == '__main__':
 # # # # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
 # # # # #             return nominal_return / (1 + inflation_rate / 100) ** years
 
-# # # # #         labels = list(range(1, max_years + 1))  # Years for the x-axis
+# # # # #         # Create labels for the next 10 years starting from the current year
+# # # # #         labels = list(range(curr_year, curr_year + max_years))
+
 # # # # #         min_compounded = []
 # # # # #         max_compounded = []
 # # # # #         min_inflation_adjusted = []
 # # # # #         max_inflation_adjusted = []
 
-# # # # #         for year in labels:
+# # # # #         for year in range(1, max_years + 1):
 # # # # #             # Calculate nominal compounded returns
 # # # # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
 # # # # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
@@ -16477,7 +18897,7 @@ if __name__ == '__main__':
 
 # # # # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
 # # # # #         combined_chart_data = {
-# # # # #             'labels': labels,
+# # # # #             'labels': labels,  # Current year and the next 10 years
 # # # # #             'datasets': [
 # # # # #                 {
 # # # # #                     'label': 'Minimum Compounded Return',
@@ -16515,6 +18935,7 @@ if __name__ == '__main__':
 # # # # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
 
 # # # # #     return combined_chart_data
+
 
 
 # # # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
@@ -16696,135 +19117,7 @@ if __name__ == '__main__':
 
 
 # # # # # import plotly.graph_objects as go
-# # # # # import streamlit as st
 # # # # # import numpy as np
-
-# # # # # def plot_3d_bar_graph(data):
-# # # # #     # Initialize a Plotly figure
-# # # # #     fig = go.Figure()
-
-# # # # #     if not data:
-# # # # #         st.write("No data available to plot.")
-# # # # #         return
-
-# # # # #     # Extracting data for plotting
-# # # # #     x = []
-# # # # #     y1 = []  # Min values for plotting
-# # # # #     y2 = []  # Max values for plotting
-# # # # #     categories = []
-
-# # # # #     for i, (key, value) in enumerate(data.items()):
-# # # # #         categories.append(key)  # Categories
-# # # # #         x.append(i)  # X-axis value
-# # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
-# # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
-# # # # #         y1.append(min_val)
-# # # # #         y2.append(max_val)
-
-# # # # #     # Adding bars for Min Compounded Returns
-# # # # #     for i in range(len(x)):
-# # # # #         fig.add_trace(go.Scatter3d(
-# # # # #             x=[x[i], x[i]],
-# # # # #             y=[0, 0.5],
-# # # # #             z=[0, y1[i]],
-# # # # #             mode='lines',
-# # # # #             line=dict(color='red', width=10),
-# # # # #             name='Min Compounded Returns'
-# # # # #         ))
-
-# # # # #     # Adding bars for Max Compounded Returns
-# # # # #     for i in range(len(x)):
-# # # # #         fig.add_trace(go.Scatter3d(
-# # # # #             x=[x[i] + 0.5, x[i] + 0.5],
-# # # # #             y=[0, 0.5],
-# # # # #             z=[0, y2[i]],
-# # # # #             mode='lines',
-# # # # #             line=dict(color='blue', width=10),
-# # # # #             name='Max Compounded Returns'
-# # # # #         ))
-
-# # # # #     # Update layout to match the desired appearance
-# # # # #     fig.update_layout(
-# # # # #         scene=dict(
-# # # # #             xaxis=dict(
-# # # # #                 tickvals=np.arange(len(categories)) + 0.25,
-# # # # #                 ticktext=categories,
-# # # # #                 title='Investment Types'
-# # # # #             ),
-# # # # #             yaxis=dict(title=''),
-# # # # #             zaxis=dict(title='Allocation (%)')
-# # # # #         ),
-# # # # #         title='Investment Allocation 3D Bar Graph',
-# # # # #         legend=dict(x=0.1, y=0.9)
-# # # # #     )
-
-# # # # #     st.plotly_chart(fig)
-
-
-
-
-# # # # # # def plot_3d_bar_graph(data):
-# # # # # #     # Initialize a Plotly figure
-# # # # # #     fig = go.Figure()
-
-# # # # # #     if not data:
-# # # # # #         print("No data available to plot.")
-# # # # # #         return
-
-# # # # # #     # Extracting data for plotting
-# # # # # #     x = []
-# # # # # #     y1 = []  # Min values for plotting
-# # # # # #     y2 = []  # Max values for plotting
-# # # # # #     categories = []
-
-# # # # # #     for i, (key, value) in enumerate(data.items()):
-# # # # # #         categories.append(key)  # Categories
-# # # # # #         x.append(i)  # X-axis value
-# # # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
-# # # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
-# # # # # #         y1.append(min_val)
-# # # # # #         y2.append(max_val)
-
-# # # # # #     # Adding bars for Min Compounded Returns
-# # # # # #     for i in range(len(x)):
-# # # # # #         fig.add_trace(go.Scatter3d(
-# # # # # #             x=[x[i], x[i]],
-# # # # # #             y=[0, 0.5],
-# # # # # #             z=[0, y1[i]],
-# # # # # #             mode='lines',
-# # # # # #             line=dict(color='red', width=10),
-# # # # # #             name='Min Compounded Returns'
-# # # # # #         ))
-
-# # # # # #     # Adding bars for Max Compounded Returns
-# # # # # #     for i in range(len(x)):
-# # # # # #         fig.add_trace(go.Scatter3d(
-# # # # # #             x=[x[i] + 0.5, x[i] + 0.5],
-# # # # # #             y=[0, 0.5],
-# # # # # #             z=[0, y2[i]],
-# # # # # #             mode='lines',
-# # # # # #             line=dict(color='blue', width=10),
-# # # # # #             name='Max Compounded Returns'
-# # # # # #         ))
-
-# # # # # #     # Update layout to match the desired appearance
-# # # # # #     fig.update_layout(
-# # # # # #         scene=dict(
-# # # # # #             xaxis=dict(
-# # # # # #                 tickvals=np.arange(len(categories)) + 0.25,
-# # # # # #                 ticktext=categories,
-# # # # # #                 title='Investment Types'
-# # # # # #             ),
-# # # # # #             yaxis=dict(title=''),
-# # # # # #             zaxis=dict(title='Allocation (%)')
-# # # # # #         ),
-# # # # # #         title='Investment Allocation 3D Bar Graph',
-# # # # # #         legend=dict(x=0.1, y=0.9)
-# # # # # #     )
-
-# # # # # #     fig.show()
-# # # # # #     return fig
-
 
  
 # # # # # # def client_form():
@@ -17382,54 +19675,6 @@ if __name__ == '__main__':
 
 
 
-# # # # # # # Ask for investment personality
-# # # # # # investment_personality = st.selectbox(
-# # # # # #     "Select the investment personality of the client:",
-# # # # # #     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
-# # # # # # )
-
-# # # # # # # Step 4: Generate investment suggestions
-# # # # # # if st.button("Generate Investment Suggestions"):
-# # # # # #     st.write("Generating investment suggestions...")
-
-# # # # # #     # Replace this with the path to your DOCX file
-# # # # # #     file_path = "data/Financial_Investment_1.docx"
-
-# # # # # #     # New logic to read the file directly
-# # # # # #     try:
-# # # # # #         st.write("Loading client document from predefined path...")
-# # # # # #         extracted_text = read_docx(file_path)
-# # # # # #         st.write("Client document loaded successfully.")
-# # # # # #     except FileNotFoundError:
-# # # # # #         st.write("Client document file not found.")
-# # # # # #         st.stop()  # Stop the Streamlit app if the file is not found
-
-
-# # # # # #     # Assuming generate_investment_suggestions is an async function
-    
-# # # # # #     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
-# # # # # #     st.write(suggestions)
-
-# # # # # #     data_extracted = extract_numerical_data(suggestions)
-
-# # # # # #     # Streamlit app for visualizing investment allocation
-# # # # # #     st.title('Investment Allocation Infographics')
-
-# # # # # #     st.write('## Investment Allocation Charts')
-# # # # # #     fig = plot_investment_allocations(data_extracted)
-# # # # # #     st.pyplot(fig)
-
-# # # # # #     st.write('## Pie Chart of Investment Allocation')
-# # # # # #     fig = plot_pie_chart(data_extracted)
-# # # # # #     st.pyplot(fig)
-
-# # # # # #     st.write('## Bar Chart of Compounded Returns')
-# # # # # #     fig = bar_chart(data_extracted['Growth-Oriented Investments'])
-# # # # # #     st.pyplot(fig)
-
-# # # # # #     plot_3d_bar_graph(data_extracted)
-
-
 # # # # # class TrieNode:
 # # # # #     def __init__(self):
 # # # # #         self.children = {}
@@ -17481,14 +19726,14 @@ if __name__ == '__main__':
 # # # # #         trie.insert(name.lower(), client_id)  # Insert in lowercase for case-insensitive search
 # # # # #     return trie
 
-# # # # # async def generate_investment_suggestions_for_investor(investment_personality, context): # # GET Method for py , for front end its Post API
+# # # # # async def generate_investment_suggestions_for_investor(investment_personality,clientName ,context,monthly_investment=10000,investment_period=3): # # GET Method for py , for front end its Post API
     
 # # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
 
 # # # # #     retriever =  await load_vector_db("uploaded_file")
 # # # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
 
-# # # # #     chain = await make_retrieval_chain(retriever)
+# # # # #     chain = await make_retrieval_chain(retriever,investmentPersonality,clientName,monthly_investment,investment_period)
 
 # # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
     
@@ -17580,94 +19825,6 @@ if __name__ == '__main__':
 
 
 
-
-# # # # # # @app.route('/investment-personality-assessment', methods=['POST']) # 1st code
-# # # # # # def investment_personality_assessment():
-# # # # # #     file = request.files['file']
-    
-# # # # # #     if file:
-# # # # # #         # Process the uploaded file and extract responses
-# # # # # #         responses = extract_responses_from_docx(file)
-
-# # # # # #         if responses:
-# # # # # #             # Determine investment personality
-# # # # # #             personality = asyncio.run(determine_investment_personality(responses))
-# # # # # #             return jsonify({
-# # # # # #                 "responses": responses,
-# # # # # #                 "investment_personality": personality
-# # # # # #             })
-        
-# # # # # #         return jsonify({"message": "No responses found in the document."})
-    
-# # # # # #     return jsonify({"message": "No file uploaded."})
-
-# # # # # # @app.route('/investment-personality-assessment', methods=['POST']) # 1st test code for investment-personality-assessment
-# # # # # # def investment_personality_assessment():
-# # # # # #     try:
-# # # # # #         # if 'personalityFile' not in request.files:
-# # # # # #         #     return jsonify({'message': 'Personality file is required!'}), 400
-        
-# # # # # #         personality_file = request.files['personalityFile']
-        
-# # # # # #         # Process the personality file (DOCX/PDF) here
-# # # # # #         # Call the function to extract responses
-# # # # # #         responses = extract_responses_from_docx(personality_file)
-        
-# # # # # #         if not responses:
-# # # # # #             return jsonify({'message': 'No responses found in the document.'}), 400
-        
-# # # # # #         # Determine the investment personality using the extracted responses
-# # # # # #         personality = asyncio.run(determine_investment_personality(responses))
-        
-# # # # # #         return jsonify({'investmentPersonality': personality}), 200
-    
-# # # # # #     except Exception as e:
-# # # # # #         print(f"Error in personality assessment: {e}")
-# # # # # #         return jsonify({'message': 'Internal Server Error'}), 500
-
-# # # # # # @app.route('/generate-investment-suggestions', methods=['POST']) # test code for POST requests
-# # # # # # def generate_investment_suggestions_api():
-# # # # # #     if request.is_json:   
-
-# # # # # #         data = request.get_json()
-# # # # # #         # Your processing logic
-# # # # # #         return jsonify({"message": "Success"})
-
-# # # # # #     return jsonify({"message": "Invalid content type, expecting application/json"}), 415
-
-
-# # # # # # @app.route('/generate-investment-suggestions', methods=['POST']) # 1st test code
-# # # # # # def generate_investment_suggestions():
-# # # # # #     try:
-# # # # # #         if 'personalityFile' not in request.files or 'financialFile' not in request.files:
-# # # # # #             return jsonify({'message': 'Both personality and financial files are required!'}), 400
-
-# # # # # #         personality_file = request.files['personalityFile']
-# # # # # #         financial_file = request.files['financialFile']
-
-# # # # # #         # Extract personality data and financial data
-# # # # # #         responses = extract_responses_from_docx(personality_file)
-# # # # # #         financial_data = asyncio.run(process_document(financial_file))
-
-# # # # # #         if not responses or not financial_data:
-# # # # # #             return jsonify({'message': 'Failed to process one or both of the documents.'}), 400
-
-# # # # # #         # Determine investment personality
-# # # # # #         personality = asyncio.run(determine_investment_personality(responses))
-
-# # # # # #         # Generate investment suggestions based on personality and financial data
-# # # # # #         suggestions = asyncio.run(generate_investment_suggestions(personality, financial_data))
-
-# # # # # #         return jsonify({'investmentSuggestions': suggestions}), 200
-
-# # # # # #     except Exception as e:
-# # # # # #         print(f"Error in generating investment suggestions: {e}")
-# # # # # #         return jsonify({'message': 'Internal Server Error'}), 500
-
-
-
-
-
 # # # # # # @app.route('/upload-personal-details', methods=['POST']) # not necessary
 # # # # # # def upload_personal_details():
 # # # # # #     file = request.files['file']
@@ -17684,41 +19841,259 @@ if __name__ == '__main__':
     
 # # # # # #     return jsonify({"message": "No file uploaded."})
 
-# # # # # import logging
 
-# # # # # @app.route('/investment-personality-assessment', methods=['POST'])
-# # # # # def investment_personality_assessment():
+# # # # # # Determine Investment personality through the investor assesmnet tab : 
+# # # # # @app.route('/investor-personality-assessment', methods=['POST'])
+# # # # # def investor_personality_assessment():
 # # # # #     try:
-# # # # #         # Check if files are present in the request
-# # # # #         # if 'assessmentFile' not in request.files:
-# # # # #         #     return jsonify({'message': 'Assessment file is required!'}), 400
+# # # # #         # Collecting client name and assessment data
+# # # # #         data = request.json  # Expecting JSON input
+# # # # #         # client_name = data.get('client_name')
+# # # # #         client_id = data.get('client_id')
+# # # # #         assessment_data = data.get('assessment_data')  
+        
+# # # # #         # if not client_id or not assessment_data:
+# # # # #         #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
+        
+# # # # #         logging.info(f"Received assessment data for client with client id : {client_id}")
 
-# # # # #         assessment_file = request.files['assessmentFile']
+# # # # #         # Pass the assessment data to determine the investment personality
+# # # # #         personality = asyncio.run(determine_investment_personality(assessment_data))
+# # # # #         logging.info(f"Determined personality for {client_id}: {personality}")
+
+# # # # #         # Return the personality and client id in response
+# # # # #         return jsonify({
+# # # # #             'client_id': client_id,
+# # # # #             'investment_personality': personality
+# # # # #         }), 200
+    
+# # # # #     except Exception as e:
+# # # # #         logging.error(f"Error processing investor assessment: {e}")
+# # # # #         return jsonify({'message': 'Internal Server Error'}), 500
+    
+
+# # # # # import logging
+# # # # # global investmentPersonality  # Global Variable
+# # # # # investmentPersonality = ""
+
+# # # # # async def make_suggestions(investmentPersonality,clientName,finacial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
+# # # # #     try:
+# # # # #         try:
+# # # # #             financial_file = "data\Financial_Investment_1.docx"
+# # # # #             # financial_data = asyncio.run(process_document(financial_file))
+# # # # #             financial_data = await process_document(financial_file)
+# # # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_data))
+# # # # #             suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_data,monthly_investment,investment_period)
+            
+# # # # #             htmlSuggestions = markdown.markdown(suggestions)
+            
+# # # # #             formatSuggestions = markdown_to_text(suggestions)
+# # # # #             data_extracted = extract_numerical_data(suggestions)
+            
+# # # # #             min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                             [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #             max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                             [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+# # # # #             # Normalize allocations
+# # # # #             min_allocations = normalize_allocations(min_allocations)
+# # # # #             max_allocations = normalize_allocations(max_allocations)
+
+# # # # #             # Update Bar Chart Data
+# # # # #             bar_chart_data = {
+# # # # #                 'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# # # # #                 'datasets': [{
+# # # # #                     'label': 'Min Allocation',
+# # # # #                     'data': min_allocations,
+# # # # #                     'backgroundColor': 'skyblue'
+# # # # #                 },
+# # # # #                 {
+# # # # #                     'label': 'Max Allocation',
+# # # # #                     'data': max_allocations,
+# # # # #                     'backgroundColor': 'lightgreen'
+# # # # #                 }]
+# # # # #             }
+
+# # # # #             # Similar changes can be made for the Pie Chart Data:
+# # # # #             all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+# # # # #             num_labels = len(all_labels)
+# # # # #             max_allocations_for_pie = normalize_allocations(
+# # # # #                 [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #             )
+            
+# # # # #             # Generate colors based on the number of labels
+# # # # #             dynamic_colors = generate_colors(num_labels)
+
+# # # # #             # Update Pie Chart Data
+# # # # #             pie_chart_data = {
+# # # # #                 'labels': all_labels,
+# # # # #                 'datasets': [{
+# # # # #                     'label': 'Investment Allocation',
+# # # # #                     'data': max_allocations_for_pie,
+# # # # #                     'backgroundColor': dynamic_colors,
+# # # # #                     'hoverOffset': 4
+# # # # #                 }]
+# # # # #             }
+            
+            
+# # # # #             # Prepare the data for the line chart with inflation adjustment
+# # # # #             initial_investment = 10000
+# # # # #             # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
+# # # # #             combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+# # # # #             print(f"\nThe combined chart data is : {combined_chart_data}")
+            
+# # # # #             return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+            
+# # # # #         except Exception as e:
+# # # # #             logging.info(f"Error occurred while generating investment suggestions: {e}")
+# # # # #             return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
         
-# # # # #         # Process the assessment file here (DOCX/PDF)
-# # # # #         responses = extract_responses_from_docx(assessment_file)
+
         
-# # # # #         if not responses:
-# # # # #             logging.info("Assessment file not found")
-# # # # #             return jsonify({'message': 'No responses found in the assessment file.'}), 400
+# # # # #         # return jsonify({
+# # # # #         #     "status": 200,
+# # # # #         #     "message": "Success",
+# # # # #         #     "investmentSuggestions": htmlSuggestions,
+# # # # #         #     "pieChartData": pie_chart_data,
+# # # # #         #     "barChartData": bar_chart_data,
+# # # # #         #     "compoundedChartData":combined_chart_data
+# # # # #         # }), 200
         
-# # # # #         # Determine investment personality based on the extracted responses
-# # # # #         personality = asyncio.run(determine_investment_personality(responses))
+# # # # #     except Exception as e:
+# # # # #         logging.error(f"Error processing personality assessment: {e}")
+# # # # #         return jsonify({'message': 'Error in generating suggestions with personality'}), 500
         
-# # # # #         return jsonify({'investmentPersonality': personality}), 200
+
+# # # # # @app.route('/personality-assessment', methods=['POST'])
+# # # # # def personality_selected():
+# # # # #     try:
+# # # # #         data = request.json
+# # # # #         clientName = data.get('clientName')
+# # # # #         try :
+# # # # #             clientId = data.get('client_id')
+# # # # #             investmentPersonality = data.get('investmentPersonality') # investment_personality
+# # # # #             print(f"InvestmentPersonality is : {investmentPersonality}")
+# # # # #             logging.info('Recieved Values')
+# # # # #         except Exception as e:
+# # # # #             logging.info(f"Error occurred while retrieving client id: {e}")
+# # # # #             return jsonify({'message': f'Error occurred while retrieving client id: {e}'}), 400
+
+# # # # #         try:
+# # # # #             # monthly_investment= data.get('monthly_investment') #10000
+# # # # #             # investment_period= data.get('investment_period')  #3
+# # # # #             monthly_investment= 10000
+# # # # #             investment_period= 3
+# # # # #             htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,monthly_investment,investment_period))
+            
+# # # # #         except Exception as e:
+# # # # #             logging.info(f"Error occurred while processing investment data: {e}")
+# # # # #             return jsonify({'message': f'Error occurred while processing investment data: {e}'}), 400
+        
+# # # # #         # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName))
+        
+# # # # #         return jsonify({
+# # # # #             "status": 200,
+# # # # #             "message": "Success",
+# # # # #             "investmentSuggestions": htmlSuggestions,
+# # # # #             "pieChartData": pie_chart_data,
+# # # # #             "barChartData": bar_chart_data,
+# # # # #             "compoundedChartData":combined_chart_data
+# # # # #         }), 200
+                    
+                    
+# # # # #         # return jsonify({'message':'Sab thik'}),200
+        
+# # # # #         # if investmentPersonality == 'aggressiveInvestor':
+# # # # #         #     pass
     
 # # # # #     except Exception as e:
 # # # # #         logging.info(f"Error in personality assessment: {e}")
+# # # # #         print(f"Error occured in Investor Personality while collecting data :\n{e}")
 # # # # #         return jsonify({'message': 'Internal Server Error in Investor Personality'}), 500
+
+
 
 # # # # # # Route to handle generating investment suggestions
 # # # # # @app.route('/generate-investment-suggestions', methods=['POST'])
 # # # # # def generate_investment_suggestions():
 # # # # #     try:
-# # # # #         # Check if files are present in the request
-# # # # #         # if 'assessmentFile' not in request.files or 'financialFile' not in request.files:
-# # # # #         #     return jsonify({'message': 'Both assessment and financial files are required!'}), 400
 # # # # #         try :
+# # # # #             if investmentPersonality:
+# # # # #                 try:
+# # # # #                     financial_file = "data\Financial_Investment_1.docx"
+# # # # #                     financial_data = asyncio.run(process_document(financial_file))
+# # # # #                     suggestions = asyncio.run(generate_investment_suggestions_for_investor(investmentPersonality, financial_data))
+# # # # #                 except Exception as e:
+# # # # #                     logging.info(f"Error occurred while generating investment suggestions: {e}")
+# # # # #                     return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
+# # # # #                 htmlSuggestions = markdown.markdown(suggestions)
+                
+# # # # #                 formatSuggestions = markdown_to_text(suggestions)
+# # # # #                 data_extracted = extract_numerical_data(suggestions)
+                
+# # # # #                 min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                                 [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #                 max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # #                                 [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+# # # # #                 # Normalize allocations
+# # # # #                 min_allocations = normalize_allocations(min_allocations)
+# # # # #                 max_allocations = normalize_allocations(max_allocations)
+
+# # # # #                 # Update Bar Chart Data
+# # # # #                 bar_chart_data = {
+# # # # #                     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# # # # #                     'datasets': [{
+# # # # #                         'label': 'Min Allocation',
+# # # # #                         'data': min_allocations,
+# # # # #                         'backgroundColor': 'skyblue'
+# # # # #                     },
+# # # # #                     {
+# # # # #                         'label': 'Max Allocation',
+# # # # #                         'data': max_allocations,
+# # # # #                         'backgroundColor': 'lightgreen'
+# # # # #                     }]
+# # # # #                 }
+
+# # # # #                 # Similar changes can be made for the Pie Chart Data:
+# # # # #                 all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+# # # # #                 num_labels = len(all_labels)
+# # # # #                 max_allocations_for_pie = normalize_allocations(
+# # # # #                     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # #                     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # #                 )
+                
+# # # # #                 # Generate colors based on the number of labels
+# # # # #                 dynamic_colors = generate_colors(num_labels)
+
+# # # # #                 # Update Pie Chart Data
+# # # # #                 pie_chart_data = {
+# # # # #                     'labels': all_labels,
+# # # # #                     'datasets': [{
+# # # # #                         'label': 'Investment Allocation',
+# # # # #                         'data': max_allocations_for_pie,
+# # # # #                         'backgroundColor': dynamic_colors,
+# # # # #                         'hoverOffset': 4
+# # # # #                     }]
+# # # # #                 }
+                
+                
+# # # # #                 # Prepare the data for the line chart with inflation adjustment
+# # # # #                 initial_investment = 10000
+# # # # #                 # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
+# # # # #                 combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+# # # # #                 print(f"\nThe combined chart data is : {combined_chart_data}")
+                
+# # # # #                 return jsonify({
+# # # # #                     "status": 200,
+# # # # #                     "message": "Success",
+# # # # #                     "investmentSuggestions": htmlSuggestions,
+# # # # #                     "pieChartData": pie_chart_data,
+# # # # #                     "barChartData": bar_chart_data,
+# # # # #                     "compoundedChartData":combined_chart_data
+# # # # #                 }), 200
+            
 # # # # #             assessment_file = request.files['assessmentFile']
 # # # # #             financial_file = request.files['financialFile']
 # # # # #             logging.info(" Requested files")
@@ -17728,7 +20103,6 @@ if __name__ == '__main__':
             
         
 # # # # #         try :
-# # # # #             # Extract personality data from assessment file and financial data
 # # # # #             try:
 # # # # #                 responses = extract_responses_from_docx(assessment_file)
 # # # # #             except Exception as e:
@@ -17745,11 +20119,14 @@ if __name__ == '__main__':
 # # # # #             logging.info("Failed to process files")
 # # # # #             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
 
-# # # # #         # if not responses or not financial_data:
-# # # # #         #     return jsonify({'message': 'Failed to process one or both of the documents.'}), 400
 # # # # #         try:
 # # # # #             # Determine investment personality
-# # # # #             personality = asyncio.run(determine_investment_personality(responses))
+# # # # #             # monthly_investment= 10000
+# # # # #             # investment_period= 3
+# # # # #             # personality,monthly_investment,investment_period = asyncio.run(determine_investment_personality(responses))
+            
+# # # # #             personality= asyncio.run(determine_investment_personality(responses))
+            
 # # # # #             logging.info(f"\nPersonality of the user is : {personality}")
 # # # # #         except Exception as e:
 # # # # #             logging.info("Failed to determine personality")
@@ -17757,7 +20134,9 @@ if __name__ == '__main__':
         
 # # # # #         try:
 # # # # #             # Generate investment suggestions based on personality and financial data
-# # # # #             suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, financial_data))
+# # # # #             clientName = "Harshal Gidh"
+# # # # #             suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data))
+# # # # #             # suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality,clientName, financial_data,monthly_investment,investment_period))
 # # # # #             htmlSuggestions = markdown.markdown(suggestions)
 # # # # #             logging.info(f"\Suggestions for investor : \n{suggestions}")
 # # # # #         except Exception as e:
@@ -17814,68 +20193,12 @@ if __name__ == '__main__':
 # # # # #             }]
 # # # # #         }
         
-# # # # #         # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-# # # # #         # num_labels = len(all_labels)
-        
-        
-        
-# # # # #         # # Pie Chart Data
-# # # # #         # pie_chart_data = {
-# # # # #         #     'labels': all_labels,
-# # # # #         #     'datasets': [{
-# # # # #         #         'label': 'Investment Allocation',
-# # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) 
-# # # # #         #                 for label in data_extracted['Growth-Oriented Investments']] + 
-# # # # #         #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) 
-# # # # #         #                 for label in data_extracted['Conservative Investments']],
-# # # # #         #         'backgroundColor': dynamic_colors,  # Use the dynamically generated colors
-# # # # #         #         'hoverOffset': 4
-# # # # #         #     }]
-# # # # #         # }
-        
-        
-# # # # #         #  # Bar Chart Data
-# # # # #         # bar_chart_data = {
-# # # # #         #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-# # # # #         #     'datasets': [{
-# # # # #         #         'label': 'Min Allocation',
-# # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# # # # #         #                 [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']],
-# # # # #         #         'backgroundColor': 'skyblue'
-# # # # #         #     },
-# # # # #         #     {
-# # # # #         #         'label': 'Max Allocation',
-# # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# # # # #         #                 [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']],
-# # # # #         #         'backgroundColor': 'lightgreen'
-# # # # #         #     }]
-# # # # #         # }
-        
-        
-# # # # #         # pie_chart_data = { # 1st version
-# # # # #         #     'labels': list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys()),
-# # # # #         #     'datasets': [{
-# # # # #         #         'label': 'Investment Allocation',
-# # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# # # # #         #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']],
-# # # # #         #         'backgroundColor': ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 205, 86)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'],
-# # # # #         #         'hoverOffset': 4
-# # # # #         #     }]
-# # # # #         # }
-
         
 # # # # #         # Prepare the data for the line chart with inflation adjustment
 # # # # #         initial_investment = 10000
 # # # # #         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
 # # # # #         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
 # # # # #         print(f"\nThe combined chart data is : {combined_chart_data}")
-# # # # #         # return jsonify({
-# # # # #         #     "status": 200,
-# # # # #         #     "message": "Success",
-# # # # #         #     "investmentSuggestions": htmlSuggestions,
-# # # # #         #     "pieChartData": pie_chart_data,
-# # # # #         #     "barChartData": bar_chart_data
-# # # # #         # }), 200
         
 # # # # #         return jsonify({
 # # # # #             "status": 200,
@@ -17901,10 +20224,9 @@ if __name__ == '__main__':
 
 
 
+# # # # # # # Flask Code of APP.py
 
-
-# # # # # # last updated streamlit code :
-# # # # # # import streamlit as st 
+# # # # # # import streamlit as st
 # # # # # # import pandas as pd
 # # # # # # import matplotlib.pyplot as plt
 
@@ -17943,7 +20265,69 @@ if __name__ == '__main__':
 # # # # # # load_dotenv()
 # # # # # # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-# # # # # # def markdown_to_text(md):
+# # # # # # from flask import Flask, request, jsonify
+
+# # # # # # app = Flask(__name__)
+
+# # # # # # # Configure generativeai with your API key
+# # # # # # genai.configure(api_key=GOOGLE_API_KEY)
+
+# # # # # # import markdown
+# # # # # # # def convert_to_markdown(raw_text):
+# # # # # # #     # Replace specific text patterns with markdown syntax
+# # # # # # #     formatted_text = raw_text.replace('\n', '\n\n')  # Ensure newlines create paragraphs
+    
+# # # # # # #     # Convert text into markdown format
+# # # # # # #     html = markdown.markdown(formatted_text)
+
+# # # # # # #     return html
+
+
+# # # # # # import markdown2
+# # # # # # from bs4 import BeautifulSoup
+
+# # # # # # def markdown_to_readable_text(md_text):
+# # # # # #     # Convert markdown to HTML
+# # # # # #     html = markdown2.markdown(md_text)
+
+# # # # # #     # Parse the HTML
+# # # # # #     soup = BeautifulSoup(html, "html.parser")
+
+# # # # # #     # Function to format plain text from tags
+# # # # # #     def format_text_from_html(soup):
+# # # # # #         formatted_text = ''
+# # # # # #         for element in soup:
+# # # # # #             if element.name == "h1":
+# # # # # #                 formatted_text += f"\n\n# {element.text.upper()} #\n\n"
+# # # # # #             elif element.name == "h2":
+# # # # # #                 formatted_text += f"\n\n## {element.text} ##\n\n"
+# # # # # #             elif element.name == "h3":
+# # # # # #                 formatted_text += f"\n\n### {element.text} ###\n\n"
+# # # # # #             elif element.name == "strong":
+# # # # # #                 formatted_text += f"**{element.text}**"
+# # # # # #             elif element.name == "em":
+# # # # # #                 formatted_text += f"_{element.text}_"
+# # # # # #             elif element.name == "ul":
+# # # # # #                 for li in element.find_all("li"):
+# # # # # #                     formatted_text += f"\n - {li.text}"
+# # # # # #             elif element.name == "ol":
+# # # # # #                 for idx, li in enumerate(element.find_all("li"), 1):
+# # # # # #                     formatted_text += f"\n {idx}. {li.text}"
+# # # # # #             elif element.name == "table":
+# # # # # #                 rows = element.find_all("tr")
+# # # # # #                 for row in rows:
+# # # # # #                     cols = row.find_all(["th", "td"])
+# # # # # #                     row_text = ' | '.join(col.text.strip() for col in cols)
+# # # # # #                     formatted_text += f"{row_text}\n"
+# # # # # #                 formatted_text += "\n"
+# # # # # #             else:
+# # # # # #                 formatted_text += element.text
+
+# # # # # #         return formatted_text.strip()
+
+# # # # # #     return format_text_from_html(soup)
+
+# # # # # # def markdown_to_text(md): # og solution code 
 # # # # # #     # Simple conversion for markdown to plain text
 # # # # # #     md = md.replace('**', '')
 # # # # # #     md = md.replace('*', '')
@@ -17952,8 +20336,289 @@ if __name__ == '__main__':
 # # # # # #     md = md.replace('`', '')
 # # # # # #     return md.strip()
 
-# # # # # # # Load the Vector DataBase :
-# # # # # # async def load_vector_db(file_path):
+
+# # # # # # # import docx
+
+# # # # # # # def extract_responses_from_docx(personality_file):
+# # # # # # #     """
+# # # # # # #     Extracts responses from a Word document (.docx) where answers are typed in.
+
+# # # # # # #     Args:
+# # # # # # #         personality_file (UploadedFile): The file object uploaded via Streamlit.
+
+# # # # # # #     Returns:
+# # # # # # #         dict: A dictionary containing the questions and the typed answers.
+# # # # # # #     """
+# # # # # # #     try:
+# # # # # # #         doc = docx.Document(personality_file)
+# # # # # # #         responses = {}
+# # # # # # #         current_question = None
+
+# # # # # # #         # Check paragraphs
+# # # # # # #         for para in doc.paragraphs:
+# # # # # # #             text = para.text.strip()
+# # # # # # #             if text:
+# # # # # # #                 # Check if the paragraph contains a question
+# # # # # # #                 if "?" in text or text.endswith(":"):
+# # # # # # #                     current_question = text
+# # # # # # #                     st.write(f"Identified question: {current_question}")  # Debugging log
+# # # # # # #                 else:
+# # # # # # #                     # This is a typed answer
+# # # # # # #                     typed_answer = text.strip()
+# # # # # # #                     st.write(f"Identified typed answer: {typed_answer}")  # Debugging log
+# # # # # # #                     if current_question:
+# # # # # # #                         # If the question already has an answer, append to it (handles multiple responses)
+# # # # # # #                         if current_question in responses:
+# # # # # # #                             responses[current_question] += "; " + typed_answer
+# # # # # # #                         else:
+# # # # # # #                             responses[current_question] = typed_answer
+
+# # # # # # #             # Debugging log to understand document structure
+# # # # # # #             st.write(f"Processing paragraph: {text}")  # Console log for local testing
+
+# # # # # # #         # Check tables for additional responses
+# # # # # # #         for table in doc.tables:
+# # # # # # #             for row in table.rows:
+# # # # # # #                 for cell in row.cells:
+# # # # # # #                     text = cell.text.strip()
+# # # # # # #                     if text:
+# # # # # # #                         if "?" in text or text.endswith(":"):
+# # # # # # #                             current_question = text
+# # # # # # #                             st.write(f"Identified question in table: {current_question}")  # Debugging log
+# # # # # # #                         else:
+# # # # # # #                             typed_answer = text.strip()
+# # # # # # #                             st.write(f"Identified typed answer in table: {typed_answer}")  # Debugging log
+# # # # # # #                             if current_question:
+# # # # # # #                                 if current_question in responses:
+# # # # # # #                                     responses[current_question] += "; " + typed_answer
+# # # # # # #                                 else:
+# # # # # # #                                     responses[current_question] = typed_answer
+
+# # # # # # #         if responses:
+# # # # # # #             st.write("Extracted Responses:")
+# # # # # # #             for question, answer in responses.items():
+# # # # # # #                 st.write(f"**{question}**: {answer}")
+# # # # # # #         else:
+# # # # # # #             st.write("No responses captured. Please check the document formatting or symbols used.")
+
+# # # # # # #         return responses
+
+# # # # # # #     except Exception as e:
+# # # # # # #         st.write(f"Error extracting responses: {e}")  # Console log for local testing
+# # # # # # #         return None
+
+# # # # # # # def determine_investment_personality(responses):
+# # # # # # #     """
+# # # # # # #     Determines the investment personality based on extracted responses.
+
+# # # # # # #     Args:
+# # # # # # #         responses (dict): A dictionary containing the questions and the selected answers.
+
+# # # # # # #     Returns:
+# # # # # # #         str: The determined investment personality.
+# # # # # # #     """
+# # # # # # #     try:
+# # # # # # #         # Prepare input text for the chatbot based on extracted responses
+# # # # # # #         input_text = "User Profile:\n"
+# # # # # # #         for question, response in responses.items():
+# # # # # # #             input_text += f"{question}: {response}\n"
+
+# # # # # # #         # Introduce the chatbot's task and prompt for classification
+# # # # # # #         input_text += "\nYour task is to determine the investment personality based on the above profile."
+
+# # # # # # #         # Here you would send the input_text to your chatbot or classification model
+# # # # # # #         # For demonstration, we'll just return the input_text
+# # # # # # #         return input_text
+
+# # # # # # #     except Exception as e:
+# # # # # # #         st.write(f"Error determining investment personality: {e}")  # Console log for local testing
+# # # # # # #         return None
+
+# # # # # # # def extract_responses_from_docx(personality_file):
+# # # # # # #     try:
+# # # # # # #         doc = docx.Document(personality_file)
+# # # # # # #         responses = {}
+# # # # # # #         current_question = None
+
+# # # # # # #         # Check paragraphs
+# # # # # # #         for para in doc.paragraphs:
+# # # # # # #             text = para.text.strip()
+# # # # # # #             if text:
+# # # # # # #                 # Check if the paragraph contains a question
+# # # # # # #                 if "?" in text or text.endswith(":"):
+# # # # # # #                     current_question = text
+# # # # # # #                 else:
+# # # # # # #                     # This is a typed answer
+# # # # # # #                     typed_answer = text.strip()
+# # # # # # #                     if current_question:
+# # # # # # #                         # If the question already has an answer, append to it (handles multiple responses)
+# # # # # # #                         if current_question in responses:
+# # # # # # #                             responses[current_question] += "; " + typed_answer
+# # # # # # #                         else:
+# # # # # # #                             responses[current_question] = typed_answer
+
+# # # # # # #         # Check tables for additional responses
+# # # # # # #         for table in doc.tables:
+# # # # # # #             for row in table.rows:
+# # # # # # #                 for cell in row.cells:
+# # # # # # #                     text = cell.text.strip()
+# # # # # # #                     if text:
+# # # # # # #                         if "?" in text or text.endswith(":"):
+# # # # # # #                             current_question = text
+# # # # # # #                         else:
+# # # # # # #                             typed_answer = text.strip()
+# # # # # # #                             if current_question:
+# # # # # # #                                 if current_question in responses:
+# # # # # # #                                     responses[current_question] += "; " + typed_answer
+# # # # # # #                                 else:
+# # # # # # #                                     responses[current_question] = typed_answer
+
+# # # # # # #         return responses
+
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error extracting responses: {e}")
+# # # # # # #         return None
+
+# # # # # # import docx
+
+# # # # # # # # GET Method for me POST method for Frontend
+# # # # # # def extract_responses_from_docx(personality_file): # Using text responses parsing
+# # # # # #     """
+# # # # # #     Extracts responses from a Word document (.docx) where the selected answers are listed as text after the options.
+
+# # # # # #     Args:
+# # # # # #         personality_file (str): Path to the Word document file.
+
+# # # # # #     Returns:
+# # # # # #         dict: A dictionary containing the questions and the selected answers.
+# # # # # #     """
+# # # # # #     try:
+# # # # # #         doc = docx.Document(personality_file)
+# # # # # #         responses = {}
+# # # # # #         current_question = None
+
+# # # # # #         for para in doc.paragraphs:
+# # # # # #             text = para.text.strip()
+# # # # # #             if text:
+# # # # # #                 # Detect the beginning of a question
+# # # # # #                 if "?" in text:
+# # # # # #                     current_question = text
+# # # # # #                 # Detect a chosen response (assuming it follows the question and options)
+# # # # # #                 elif current_question and not text.startswith(("a.", "b.", "c.", "d.")):
+# # # # # #                     selected_answer = text
+# # # # # #                     responses[current_question] = selected_answer
+# # # # # #                     current_question = None  # Reset for the next question
+
+# # # # # #         if responses:
+# # # # # #             print(responses)
+# # # # # #             # st.write(responses)
+# # # # # #         else:
+# # # # # #             print("\nNo responses captured")
+# # # # # #             st.write("No responses captured")
+# # # # # #         return responses
+# # # # # #     except Exception as e:
+# # # # # #         print(f"Error extracting responses: {e}")
+# # # # # #         return None
+
+# # # # # # # def extract_responses_from_assessment(personality_file): # using boxes
+# # # # # # #     # Load the document
+# # # # # # #     # doc = Document(docx_filename)
+# # # # # # #     doc = docx.Document(personality_file)
+    
+# # # # # # #     # Initialize a list to store responses
+# # # # # # #     responses = []
+    
+# # # # # # #     # Iterate through each paragraph in the document
+# # # # # # #     for para in doc.paragraphs:
+# # # # # # #         text = para.text.strip()
+# # # # # # #         # Check if the paragraph contains a checkbox
+# # # # # # #         if '☒' in text or '☐' in text:
+# # # # # # #             # Extract the response marked with ☒
+# # # # # # #             if '☒' in text:
+# # # # # # #                 response = text.split('☒')[1].strip()
+# # # # # # #                 responses.append(response)
+    
+# # # # # # #     return responses
+
+# # # # # # # import asyncio
+# # # # # # # # from some_generative_ai_library import GenerativeModel  # Replace with actual import
+
+# # # # # # # async def determine_investment_personality(assessment_data):
+# # # # # # #     try:
+# # # # # # #         # Prepare input text for the chatbot based on assessment data
+# # # # # # #         input_text = "User Profile:\n"
+# # # # # # #         for question, answer in assessment_data.items():
+# # # # # # #             input_text += f"{question}: {answer}\n"
+
+# # # # # # #         # Introduce the chatbot's task and prompt for classification
+# # # # # # #         input_text += "\nYou are an investment personality identifier. Based on the user profile, classify the user as:\n" \
+# # # # # # #                       "- Conservative Investor\n" \
+# # # # # # #                       "- Moderate Investor\n" \
+# # # # # # #                       "- Aggressive Investor\n\n" \
+# # # # # # #                       "Please provide the classification below:\n"
+
+# # # # # # #         # Use your generative AI model to generate a response
+# # # # # # #         model = GenerativeModel('gemini-1.5-flash')
+# # # # # # #         response = await model.generate_content(input_text)
+
+# # # # # # #         # Determine the investment personality from the chatbot's response
+# # # # # # #         response_text = response.text.lower()
+
+# # # # # # #         if "conservative investor" in response_text:
+# # # # # # #             personality = "Conservative Investor"
+# # # # # # #         elif "moderate investor" in response_text:
+# # # # # # #             personality = "Moderate Investor"
+# # # # # # #         elif "aggressive investor" in response_text:
+# # # # # # #             personality = "Aggressive Investor"
+# # # # # # #         else:
+# # # # # # #             personality = "Unknown"
+
+# # # # # # #         return personality
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error generating response: {e}")
+# # # # # # #         return "Unknown"
+
+
+# # # # # # # GET Method
+# # # # # # async def determine_investment_personality(assessment_data): # proper code 
+# # # # # #     try:
+# # # # # #         # Prepare input text for the chatbot based on assessment data
+# # # # # #         input_text = "User Profile:\n"
+# # # # # #         for question, answer in assessment_data.items():
+# # # # # #             input_text += f"{question}: {answer}\n"
+
+# # # # # #         # Introduce the chatbot's task and prompt for classification
+# # # # # #         input_text += "\nYou are an investment personality identifier. Based on the user profile, classify the user as:\n" \
+# # # # # #                       "- Conservative Investor\n" \
+# # # # # #                       "- Moderate Investor\n" \
+# # # # # #                       "- Aggressive Investor\n\n" \
+# # # # # #                       "Please provide the classification below:\n"
+
+# # # # # #         # Use your generative AI model to generate a response
+# # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # #         response = model.generate_content(input_text)
+
+# # # # # #         # Determine the investment personality from the chatbot's response
+# # # # # #         response_text = response.text.lower()
+
+# # # # # #         if "conservative investor" in response_text:
+# # # # # #             personality = "Conservative Investor"
+# # # # # #         elif "moderate investor" in response_text:
+# # # # # #             personality = "Moderate Investor"
+# # # # # #         elif "aggressive investor" in response_text:
+# # # # # #             personality = "Aggressive Investor"
+# # # # # #         else:
+# # # # # #             personality = "Unknown"
+
+# # # # # #         return personality
+# # # # # #     except Exception as e:
+# # # # # #         print(f"Error generating response: {e}")
+# # # # # #         return "Unknown"
+
+
+
+# # # # # # # #Load the Vector DataBase :
+# # # # # # async def load_vector_db(file_path): # # GET Method 
 # # # # # #     try:
 # # # # # #         print("Loading vector database...")
 # # # # # #         loader = Docx2txtLoader(file_path)
@@ -17980,8 +20645,29 @@ if __name__ == '__main__':
 # # # # # #         return None
 
 
+# # # # # # # async def load_vector_db(file_path="client_data.txt"):
+# # # # # # #     try:
+# # # # # # #         print("Loading vector database...")
+# # # # # # #         with open(file_path, "r") as file:
+# # # # # # #             text = file.read()
+        
+# # # # # # #         loader = Docx2txtLoader(file_path)
+# # # # # # #         documents = loader.load()
+# # # # # # #         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+# # # # # # #         text_chunks = text_splitter.split_documents(documents) #([Document(text=text)])
+# # # # # # #         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
+        
+# # # # # # #         vector_store = FAISS.from_documents(documents=text_chunks, embedding=embeddings)
+        
+# # # # # # #         print("Vector database loaded successfully.") 
+# # # # # # #         return vector_store.as_retriever(search_kwargs={"k": 1})
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error loading vector database: {e}")
+# # # # # # #         return None
+
+
 # # # # # # investment_personality = "Moderate Investor"
-# # # # # # async def make_retrieval_chain(retriever):
+# # # # # # async def make_retrieval_chain(retriever): # GET Method
 # # # # # #     """
 # # # # # #     Create a retrieval chain using the provided retriever.
 
@@ -18029,7 +20715,7 @@ if __name__ == '__main__':
 # # # # # #                 Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
                 
                 
-# # # # # #                 Percentage Allocation: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+# # # # # #                 Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
 
 # # # # # #                 Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
 # # # # # #                 How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
@@ -18044,17 +20730,25 @@ if __name__ == '__main__':
                 
 # # # # # #                 Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
                 
-# # # # # #                 Percentage Allocation: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+# # # # # #                 Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
 
 # # # # # #                 Time Horizon and Expected Returns:
 
 # # # # # #                 Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
 # # # # # #                 Minimum Expected Annual Return: 4% - 6% 
-# # # # # #                 Maximum Expected Annual Return: 8% - 10% 
+                
+                
+# # # # # #                 \nMaximum Expected Annual Return: 8% - 10% 
+                
 # # # # # #                 Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
 # # # # # #                 Minimum Expected Growth in Dollars: 
                 
-# # # # # #                 4,000−6,000 (over 10 years) Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+# # # # # #                 4,000−6,000 (over 10 years) 
+                
+                
+# # # # # #                 Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
 
                 
 # # # # # #                 Rationale for Investment Suggestions:
@@ -18065,6 +20759,8 @@ if __name__ == '__main__':
 # # # # # #                 Important Considerations:
 
 # # # # # #                 Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+
+# # # # # #                 Inflation Adjusted Returns:(do not write this part inside the bracket just give answer,assume US inflation rate, and give the investment returns value that was suggested by you  for $10k investment after 3,5,10years of growth  mention the values before adjusting and after adjusting with inflation )
 
 # # # # # #                 Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
 
@@ -18097,110 +20793,7 @@ if __name__ == '__main__':
 # # # # # # import io
 
 
-
-# # # # # # # async def process_document(file_path):
-# # # # # # #     try:
-# # # # # # #         print("Processing the document")
-# # # # # # #         file_type = filetype.guess(file_path)
-# # # # # # #         if file_type is not None:
-# # # # # # #             if file_type.mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-# # # # # # #                 # return extract_text_from_word(file_path)
-# # # # # # #                 return extract_text_and_tables_from_word(file_path)
-# # # # # # #             elif file_type.mime == "application/pdf":
-# # # # # # #                 return extract_text_from_pdf(file_path)
-# # # # # # #         return None
-# # # # # # #     except Exception as e:
-# # # # # # #         print(f"Error processing document: {e}")
-# # # # # # #         return None
-
-
-# # # # # # # async def extract_text_from_pdf(pdf_file_path):
-# # # # # # #     try:
-# # # # # # #         print("Processing pdf file")
-# # # # # # #         with open(pdf_file_path, "rb") as pdf_file:
-# # # # # # #             pdf_reader = PyPDF2.PdfFileReader(pdf_file)
-# # # # # # #             text_content = []
-# # # # # # #             for page_num in range(pdf_reader.numPages):
-# # # # # # #                 page = pdf_reader.getPage(page_num)
-# # # # # # #                 text_content.append(page.extract_text())
-# # # # # # #             return "\n".join(text_content)
-# # # # # # #     except Exception as e:
-# # # # # # #         print(f"Error extracting text from PDF: {e}")
-# # # # # # #         return None
-
-
-
-# # # # # # # async def extract_text_and_tables_from_word(docx_file_path):
-# # # # # # #     """
-# # # # # # #     Extracts text and tables from a Word document (.docx).
-
-# # # # # # #     Args:
-# # # # # # #         docx_file_path (str): Path to the Word document file.
-
-# # # # # # #     Returns:
-# # # # # # #         tuple: Extracted text content and tables from the document.
-# # # # # # #     """
-# # # # # # #     try:
-# # # # # # #         print("Extracting text and tables from word file")
-# # # # # # #         doc = docx.Document(docx_file_path)
-# # # # # # #         text_content = []
-# # # # # # #         tables_content = []
-
-# # # # # # #         for para in doc.paragraphs:
-# # # # # # #             text_content.append(para.text)
-
-# # # # # # #         for table in doc.tables:
-# # # # # # #             table_data = []
-# # # # # # #             for row in table.rows:
-# # # # # # #                 row_data = []
-# # # # # # #                 for cell in row.cells:
-# # # # # # #                     row_data.append(cell.text.strip())
-# # # # # # #                 table_data.append(row_data)
-# # # # # # #             tables_content.append(table_data)
-# # # # # # #         print("Extracted text from word file")
-# # # # # # #         return "\n".join(text_content), tables_content
-# # # # # # #     except Exception as e:
-# # # # # # #         print(f"Error extracting text and tables from Word document: {e}")
-# # # # # # #         return None, None
-
-
-# # # # # # # def parse_financial_data(text_content, tables_content):
-# # # # # # #     assets = {}
-# # # # # # #     liabilities = {}
-
-# # # # # # #     # Extract assets and liabilities from tables
-# # # # # # #     if tables_content:
-# # # # # # #         for table in tables_content:
-# # # # # # #             for row in table:
-# # # # # # #                 # Basic keyword matching (e.g., 'Asset' or 'Liability' detection)
-# # # # # # #                 if any("asset" in cell.lower() for cell in row):
-# # # # # # #                     key = row[0]
-# # # # # # #                     value = float(row[1].replace('$', '').replace(',', ''))
-# # # # # # #                     assets[key] = value
-# # # # # # #                 elif any("liability" in cell.lower() for cell in row):
-# # # # # # #                     key = row[0]
-# # # # # # #                     value = float(row[1].replace('$', '').replace(',', ''))
-# # # # # # #                     liabilities[key] = value
-
-# # # # # # #     # Additional parsing logic can be added here based on the document structure
-
-# # # # # # #     return assets, liabilities
-
-# # # # # # # # Step 3: Plot pie chart
-# # # # # # # def plot_pie_chart(assets, liabilities):
-# # # # # # #     total_assets = sum(assets.values())
-# # # # # # #     total_liabilities = sum(liabilities.values())
-
-# # # # # # #     labels = ['Assets', 'Liabilities']
-# # # # # # #     sizes = [total_assets, total_liabilities]
-
-# # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
-# # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
-# # # # # # #     ax.set_title('Assets vs Liabilities Distribution')
-
-# # # # # # #     st.pyplot(fig)
-
-# # # # # # async def process_document(file_path):
+# # # # # # async def process_document(file_path): # GET Method
 # # # # # #     try:
 # # # # # #         print("Processing the document")
 # # # # # #         file_type = filetype.guess(file_path)
@@ -18216,7 +20809,7 @@ if __name__ == '__main__':
 # # # # # #         return None
 
 # # # # # # # Async function to extract text from a PDF file
-# # # # # # async def extract_text_from_pdf(pdf_file_path):
+# # # # # # async def extract_text_from_pdf(pdf_file_path): # GET Method
 # # # # # #     try:
 # # # # # #         print("Processing pdf file")
 # # # # # #         with open(pdf_file_path, "rb") as pdf_file:
@@ -18231,7 +20824,7 @@ if __name__ == '__main__':
 # # # # # #         return None
 
 # # # # # # # Async function to extract text and tables from a Word document
-# # # # # # async def extract_text_and_tables_from_word(docx_file_path):
+# # # # # # async def extract_text_and_tables_from_word(docx_file_path): # GET Method
 # # # # # #     try:
 # # # # # #         print("Extracting text and tables from word file")
 # # # # # #         doc = docx.Document(docx_file_path)
@@ -18326,12 +20919,14 @@ if __name__ == '__main__':
 # # # # # #     return client_name, errors
 
 
-
-# # # # # # async def generate_investment_suggestions(investment_personality, context):
+# # # # # # # RUN Button :
+# # # # # # async def generate_investment_suggestions(investment_personality, context): # # GET Method for py , for front end its Post API
     
 # # # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
 
 # # # # # #     retriever = await load_vector_db("uploaded_file")
+# # # # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
+
 # # # # # #     chain = await make_retrieval_chain(retriever)
 
 # # # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
@@ -18430,40 +21025,247 @@ if __name__ == '__main__':
 
 # # # # # #     return data
 
+# # # # # # def normalize_allocations(allocations):
+# # # # # #     total = sum(allocations)
+# # # # # #     if total == 100:
+# # # # # #         return allocations
+# # # # # #     return [round((allocation / total) * 100, 2) for allocation in allocations]
 
-# # # # # # # def plot_investment_allocations(data):
-# # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(14, 7))
-# # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(18, 9))
 
-# # # # # # #     # fig, axes = plt.subplots(2, 1, figsize=(18, 9))
-# # # # # # #     fig, axes = plt.subplots(2, 1, figsize=(28, 15))
+# # # # # # # def prepare_line_chart_data_with_inflation(data_extracted, initial_investment=10000, inflation_rate=4):
+# # # # # # #     min_return = data_extracted['Expected Annual Return']['min']
+# # # # # # #     max_return = data_extracted['Expected Annual Return']['max']
+# # # # # # #     min_years = data_extracted['Time Horizon']['min_years']
+# # # # # # #     max_years = data_extracted['Time Horizon']['max_years']
 
-# # # # # # #     # Plot Growth-Oriented Investments
-# # # # # # #     growth_data = data['Growth-Oriented Investments']
-# # # # # # #     growth_labels = list(growth_data.keys())
-# # # # # # #     growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
-# # # # # # #     growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
+# # # # # # #     def calculate_compounded_return(principal, rate, years):
+# # # # # # #         return principal * (1 + rate / 100) ** years
 
-# # # # # # #     axes[0].barh(growth_labels, growth_min, color='skyblue', label='Min Allocation')
-# # # # # # #     axes[0].barh(growth_labels, growth_max, left=growth_min, color='lightgreen', label='Max Allocation')
-# # # # # # #     axes[0].set_title('Growth-Oriented Investments')
-# # # # # # #     axes[0].set_xlabel('Percentage Allocation')
-# # # # # # #     axes[0].legend()
+# # # # # # #     def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
+# # # # # # #         return nominal_return / (1 + inflation_rate / 100) ** years
 
-# # # # # # #     # Plot Conservative Investments
-# # # # # # #     conservative_data = data['Conservative Investments']
-# # # # # # #     conservative_labels = list(conservative_data.keys())
-# # # # # # #     conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
-# # # # # # #     conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
+# # # # # # #     labels = list(range(1, max_years + 1))  # Years for the x-axis
+# # # # # # #     min_compounded = []
+# # # # # # #     max_compounded = []
+# # # # # # #     min_inflation_adjusted = []
+# # # # # # #     max_inflation_adjusted = []
 
-# # # # # # #     axes[1].barh(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
-# # # # # # #     axes[1].barh(conservative_labels, conservative_max, left=conservative_min, color='lightgreen', label='Max Allocation')
-# # # # # # #     axes[1].set_title('Conservative Investments')
-# # # # # # #     axes[1].set_xlabel('Percentage Allocation')
-# # # # # # #     axes[1].legend()
+# # # # # # #     for year in labels:
+# # # # # # #         # Calculate compounded returns (nominal)
+# # # # # # #         min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
+# # # # # # #         max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
 
-# # # # # # #     plt.tight_layout()
-# # # # # # #     return fig
+# # # # # # #         # Calculate inflation-adjusted returns
+# # # # # # #         min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
+# # # # # # #         max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
+
+# # # # # # #         # Append results
+# # # # # # #         min_compounded.append(min_compounded_value)
+# # # # # # #         max_compounded.append(max_compounded_value)
+# # # # # # #         min_inflation_adjusted.append(min_inflation_value)
+# # # # # # #         max_inflation_adjusted.append(max_inflation_value)
+
+# # # # # # #     # Line Chart Data for Compounded Returns
+# # # # # # #     compounded_return_chart_data = {
+# # # # # # #         'labels': labels,
+# # # # # # #         'datasets': [
+# # # # # # #             {
+# # # # # # #                 'label': 'Minimum Compounded Return',
+# # # # # # #                 'data': min_compounded,
+# # # # # # #                 'borderColor': 'rgb(255, 99, 132)',  # Red color
+# # # # # # #                 'fill': False
+# # # # # # #             },
+# # # # # # #             {
+# # # # # # #                 'label': 'Maximum Compounded Return',
+# # # # # # #                 'data': max_compounded,
+# # # # # # #                 'borderColor': 'rgb(54, 162, 235)',  # Blue color
+# # # # # # #                 'fill': False
+# # # # # # #             }
+# # # # # # #         ]
+# # # # # # #     }
+
+# # # # # # #     # Line Chart Data for Inflation-Adjusted Returns
+# # # # # # #     inflation_adjusted_chart_data = {
+# # # # # # #         'labels': labels,
+# # # # # # #         'datasets': [
+# # # # # # #             {
+# # # # # # #                 'label': 'Min Inflation Adjusted Return',
+# # # # # # #                 'data': min_inflation_adjusted,
+# # # # # # #                 'borderColor': 'rgb(75, 192, 192)',  # Light blue
+# # # # # # #                 'fill': False
+# # # # # # #             },
+# # # # # # #             {
+# # # # # # #                 'label': 'Max Inflation Adjusted Return',
+# # # # # # #                 'data': max_inflation_adjusted,
+# # # # # # #                 'borderColor': 'rgb(153, 102, 255)',  # Light purple
+# # # # # # #                 'fill': False
+# # # # # # #             }
+# # # # # # #         ]
+# # # # # # #     }
+
+# # # # # # #     return compounded_return_chart_data, inflation_adjusted_chart_data
+
+
+# # # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
+# # # # # #     try:
+# # # # # #         # Print data_extracted to debug the structure
+# # # # # #         print("Data extracted:", data_extracted)
+
+# # # # # #         # Check if 'Expected Annual Return' and 'Time Horizon' exist and have the expected keys
+# # # # # #         if 'Expected Annual Return' not in data_extracted :
+# # # # # #             print("'Expected Annual Return' missing in data_extracted")
+# # # # # #             data_extracted['Expected Annual Return']['min'] = 6
+# # # # # #             data_extracted['Expected Annual Return']['max'] = 8
+# # # # # #             min_return = 6
+# # # # # #             max_return = 8
+# # # # # #         else :
+# # # # # #             min_return = float(data_extracted['Expected Annual Return'].get('min', '0').strip('%'))
+# # # # # #             max_return = float(data_extracted['Expected Annual Return'].get('max', '0').strip('%'))
+                
+# # # # # #         min_years = int(data_extracted['Time Horizon'].get('min_years', 1))  # Default to 1 year if missing
+# # # # # #         max_years = int(data_extracted['Time Horizon'].get('max_years', 10))  # Default to 10 years if missing
+
+# # # # # #         def calculate_compounded_return(principal, rate, years):
+# # # # # #             return principal * (1 + rate / 100) ** years
+
+# # # # # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
+# # # # # #             return nominal_return / (1 + inflation_rate / 100) ** years
+
+# # # # # #         labels = list(range(1, max_years + 1))  # Years for the x-axis
+# # # # # #         min_compounded = []
+# # # # # #         max_compounded = []
+# # # # # #         min_inflation_adjusted = []
+# # # # # #         max_inflation_adjusted = []
+
+# # # # # #         for year in labels:
+# # # # # #             # Calculate nominal compounded returns
+# # # # # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
+# # # # # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
+
+# # # # # #             # Calculate inflation-adjusted compounded returns
+# # # # # #             min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
+# # # # # #             max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
+
+# # # # # #             # Append results
+# # # # # #             min_compounded.append(min_compounded_value)
+# # # # # #             max_compounded.append(max_compounded_value)
+# # # # # #             min_inflation_adjusted.append(min_inflation_value)
+# # # # # #             max_inflation_adjusted.append(max_inflation_value)
+
+# # # # # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
+# # # # # #         combined_chart_data = {
+# # # # # #             'labels': labels,
+# # # # # #             'datasets': [
+# # # # # #                 {
+# # # # # #                     'label': 'Minimum Compounded Return',
+# # # # # #                     'data': min_compounded,
+# # # # # #                     'borderColor': 'rgb(255, 99, 132)',  # Red color
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Maximum Compounded Return',
+# # # # # #                     'data': max_compounded,
+# # # # # #                     'borderColor': 'rgb(54, 162, 235)',  # Blue color
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Min Inflation Adjusted Return',
+# # # # # #                     'data': min_inflation_adjusted,
+# # # # # #                     'borderColor': 'rgb(75, 192, 192)',  # Light blue
+# # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # #                     'fill': False
+# # # # # #                 },
+# # # # # #                 {
+# # # # # #                     'label': 'Max Inflation Adjusted Return',
+# # # # # #                     'data': max_inflation_adjusted,
+# # # # # #                     'borderColor': 'rgb(153, 102, 255)',  # Light purple
+# # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # #                     'fill': False
+# # # # # #                 }
+# # # # # #             ]
+# # # # # #         }
+# # # # # #     except KeyError as e:
+# # # # # #         print(f"KeyError occurred: {e}")
+# # # # # #         return jsonify({'message': f'Key Error: {e}'}), 400
+# # # # # #     except Exception as e:
+# # # # # #         print(f"Error occurred while preparing data for combined line chart: {e}")
+# # # # # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
+
+# # # # # #     return combined_chart_data
+
+
+# # # # # # # def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
+# # # # # # #     try:
+# # # # # # #         min_return = float(data_extracted['Expected Annual Return']['min'].strip('%'))
+# # # # # # #         max_return = float(data_extracted['Expected Annual Return']['max'].strip('%'))
+# # # # # # #         min_years = int(data_extracted['Time Horizon']['min_years'])
+# # # # # # #         max_years = int(data_extracted['Time Horizon']['max_years'])
+
+# # # # # # #         def calculate_compounded_return(principal, rate, years):
+# # # # # # #             return principal * (1 + rate / 100) ** years
+
+# # # # # # #         def calculate_inflation_adjusted_return(nominal_return, inflation_rate, years):
+# # # # # # #             return nominal_return / (1 + inflation_rate / 100) ** years
+
+# # # # # # #         labels = list(range(1, max_years + 1))  # Years for the x-axis
+# # # # # # #         min_compounded = []
+# # # # # # #         max_compounded = []
+# # # # # # #         min_inflation_adjusted = []
+# # # # # # #         max_inflation_adjusted = []
+
+# # # # # # #         for year in labels:
+# # # # # # #             # Calculate nominal compounded returns
+# # # # # # #             min_compounded_value = calculate_compounded_return(initial_investment, min_return, year)
+# # # # # # #             max_compounded_value = calculate_compounded_return(initial_investment, max_return, year)
+
+# # # # # # #             # Calculate inflation-adjusted compounded returns
+# # # # # # #             min_inflation_value = calculate_inflation_adjusted_return(min_compounded_value, inflation_rate, year)
+# # # # # # #             max_inflation_value = calculate_inflation_adjusted_return(max_compounded_value, inflation_rate, year)
+
+# # # # # # #             # Append results
+# # # # # # #             min_compounded.append(min_compounded_value)
+# # # # # # #             max_compounded.append(max_compounded_value)
+# # # # # # #             min_inflation_adjusted.append(min_inflation_value)
+# # # # # # #             max_inflation_adjusted.append(max_inflation_value)
+
+# # # # # # #         # Combined Line Chart Data for both Nominal and Inflation-Adjusted Compounded Returns
+# # # # # # #         combined_chart_data = {
+# # # # # # #             'labels': labels,
+# # # # # # #             'datasets': [
+# # # # # # #                 {
+# # # # # # #                     'label': 'Minimum Compounded Return',
+# # # # # # #                     'data': min_compounded,
+# # # # # # #                     'borderColor': 'rgb(255, 99, 132)',  # Red color
+# # # # # # #                     'fill': False
+# # # # # # #                 },
+# # # # # # #                 {
+# # # # # # #                     'label': 'Maximum Compounded Return',
+# # # # # # #                     'data': max_compounded,
+# # # # # # #                     'borderColor': 'rgb(54, 162, 235)',  # Blue color
+# # # # # # #                     'fill': False
+# # # # # # #                 },
+# # # # # # #                 {
+# # # # # # #                     'label': 'Min Inflation Adjusted Return',
+# # # # # # #                     'data': min_inflation_adjusted,
+# # # # # # #                     'borderColor': 'rgb(75, 192, 192)',  # Light blue
+# # # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # # #                     'fill': False
+# # # # # # #                 },
+# # # # # # #                 {
+# # # # # # #                     'label': 'Max Inflation Adjusted Return',
+# # # # # # #                     'data': max_inflation_adjusted,
+# # # # # # #                     'borderColor': 'rgb(153, 102, 255)',  # Light purple
+# # # # # # #                     'borderDash': [5, 5],  # Dashed line for distinction
+# # # # # # #                     'fill': False
+# # # # # # #                 }
+# # # # # # #             ]
+# # # # # # #         }
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error occurred while preparing data for combined line chart: {e}")
+# # # # # # #         return jsonify({'message': 'Internal Server Error in creating line chart'}), 500
+# # # # # # #     return combined_chart_data
+
+
 
 # # # # # # def plot_investment_allocations(data):
 # # # # # #     # Create subplots with a large figure size
@@ -18524,27 +21326,6 @@ if __name__ == '__main__':
 
 
 
-
-# # # # # # # def plot_pie_chart(data):
-# # # # # # #     fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
-
-# # # # # # #     # Combine all investment data for pie chart
-# # # # # # #     all_data = {**data['Growth-Oriented Investments'], **data['Conservative Investments']}
-# # # # # # #     labels = list(all_data.keys())
-# # # # # # #     sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
-# # # # # # #     colors = plt.cm.Paired(range(len(labels)))
-
-# # # # # # #     ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
-# # # # # # #     ax.legend(loc='lower left',frameon= True)
-# # # # # # #     ax.set_title('Investment Allocation')
-
-# # # # # # # #         myexplode = [0.2, 0, 0, 0]
-
-# # # # # # # # plt.pie(y, labels = mylabels, explode = myexplode, shadow = True)
-
-# # # # # # #     return fig
-
-
 # # # # # # def bar_chart(data):
 # # # # # #     fig, ax = plt.subplots(figsize=(12, 8))  # Increased size
 
@@ -18569,62 +21350,26 @@ if __name__ == '__main__':
 # # # # # #     return fig
 
 
+# # # # # # import random
 
-# # # # # # import plotly.graph_objects as go
-# # # # # # import numpy as np
+# # # # # # def generate_colors(n):
+# # # # # #     """
+# # # # # #     Generate 'n' random RGB colors.
 
-# # # # # # # import plotly.graph_objects as go
-# # # # # # # import streamlit as st
-# # # # # # # import numpy as np
-
-# # # # # # # def plot_3d_bar_graph(data):
-# # # # # # #     # Initialize a Plotly figure
-# # # # # # #     fig = go.Figure()
-
-# # # # # # #     if not data:
-# # # # # # #         st.write("No data available to plot.")
-# # # # # # #         return
-
-# # # # # # #     # Extracting data for plotting
-# # # # # # #     x = []
-# # # # # # #     y1 = []  # Min values for plotting
-# # # # # # #     y2 = []  # Max values for plotting
-# # # # # # #     categories = []
-
-# # # # # # #     for i, (key, value) in enumerate(data.items()):
-# # # # # # #         categories.append(key)  # Categories
-# # # # # # #         x.append(i)  # X-axis value
-# # # # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
-# # # # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
-# # # # # # #         y1.append(min_val)
-# # # # # # #         y2.append(max_val)
-
-# # # # # # #     # Adding bars for Min Compounded Returns
-# # # # # # #     fig.add_trace(go.Bar(
-# # # # # # #         x=x, y=y1, name='Min Compounded Returns',
-# # # # # # #         marker=dict(color='red')
-# # # # # # #     ))
-
-# # # # # # #     # Adding bars for Max Compounded Returns
-# # # # # # #     fig.add_trace(go.Bar(
-# # # # # # #         x=x, y=y2, name='Max Compounded Returns',
-# # # # # # #         marker=dict(color='blue')
-# # # # # # #     ))
-
-# # # # # # #     # Update layout to match the desired appearance
-# # # # # # #     fig.update_layout(
-# # # # # # #         barmode='group',
-# # # # # # #         xaxis=dict(
-# # # # # # #             tickvals=np.arange(len(categories)),
-# # # # # # #             ticktext=categories,
-# # # # # # #             title='Investment Types'
-# # # # # # #         ),
-# # # # # # #         yaxis=dict(title='Compounded Returns (%)'),
-# # # # # # #         title='Investment Allocation Bar Graph',
-# # # # # # #         legend=dict(x=0.1, y=0.9)
-# # # # # # #     )
-
-# # # # # # #     st.plotly_chart(fig)
+# # # # # #     Args:
+# # # # # #         n (int): Number of colors to generate.
+    
+# # # # # #     Returns:
+# # # # # #         list: A list of RGB colors in 'rgb(r, g, b)' format.
+# # # # # #     """
+# # # # # #     colors = []
+# # # # # #     for _ in range(n):
+# # # # # #         r = random.randint(0, 255)
+# # # # # #         g = random.randint(0, 255)
+# # # # # #         b = random.randint(0, 255)
+# # # # # #         colors.append(f'rgb({r}, {g}, {b})')
+    
+# # # # # #     return colors
 
 
 # # # # # # import plotly.graph_objects as go
@@ -18821,90 +21566,6 @@ if __name__ == '__main__':
 
 # # # # # # from datetime import date  # Make sure to import the date class
 
-# # # # # # # def client_form():
-# # # # # # #     st.title("Client Details Form")
-
-# # # # # # #     with st.form("client_form"):
-# # # # # # #         st.header("Personal Information")
-# # # # # # #         client_name = st.text_input("Client Name")
-# # # # # # #         co_client_name = st.text_input("Co-Client Name")
-# # # # # # #         client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
-# # # # # # #         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
-# # # # # # #         today_date = st.date_input("Today's Date")
-# # # # # # #         # today_date = st.date_input("Today's Date", value=date.today())
-
-# # # # # # #         st.header("Your Assets and Liabilities")
-        
-# # # # # # #         # Assets
-# # # # # # #         assets = {}
-# # # # # # #         # assets['Checking Accounts'] = st.number_input("Checking Accounts", min_value=0.0, step=0.01)
-# # # # # # #         assets['Annual Income'] = st.text_input("Annual Income (e.g. , Your Annual Salary Income or other source of income)" )
-# # # # # # #         assets['Savings Accounts'] = st.text_input("Savings Accounts (e.g. , Your Annual Savings)" )
-# # # # # # #         assets['Retirement Accounts'] = st.text_input("Retirement Accounts (e.g. , Your Retirement Savings)" )
-# # # # # # #         assets['Investment Accounts'] = st.text_input("Investment Accounts (e.g. , Your Investment Savings)" )
-        
-# # # # # # #         # Liabilities
-# # # # # # #         liabilities = {}
-# # # # # # #         liabilities['Mortgage'] = st.text_input("Mortgage (Mention the balance amount, Interest rate and Monthly Payment)" )
-# # # # # # #         liabilities['Home Loans'] = st.text_input("Home Loans (Mention the balance amount, Interest rate and Monthly Payment)")
-# # # # # # #         liabilities['Car/Vehicle Loans'] = st.text_input("Car/Vehicle Loans (Mention the balance amount, Interest rate and Monthly Payment)")
-# # # # # # #         liabilities['Education Loans'] = st.text_input("Education Loans (Mention the balance amount, Interest rate and Monthly Payment)")
-# # # # # # #         liabilities['Credit Card Debt'] = st.text_input("Credit Card Debt")
-# # # # # # #         liabilities['Miscellaneous'] = st.text_input("Miscellaneous (Mention the balance amount, Interest rate and Monthly Payment)" )
-
-# # # # # # #         st.header("Your Retirement Goal")
-# # # # # # #         retirement_age = st.number_input("At what age do you plan to retire?", min_value=0, max_value=120, value=65, step=1)
-# # # # # # #         retirement_income = st.text_input("Desired annual retirement income" )
-
-# # # # # # #         st.header("Your Other Goals")
-# # # # # # #         goal_name = st.text_input("Name of the Goal (e.g., Buy a House, Education,Travel,etc)" )
-# # # # # # #         goal_amount = st.text_input("Amount needed for the goal")
-# # # # # # #         goal_timeframe = st.number_input("Timeframe to achieve the goal (in years)", min_value=0, max_value=100, value=5, step=1)
-
-# # # # # # #         st.header("Insurance Information")
-# # # # # # #         life_insurance = st.text_input("Life Insurance (e.g., coverage amount)")
-# # # # # # #         disability_insurance = st.text_input("Disability Insurance (e.g., coverage amount)")
-# # # # # # #         long_term_care = st.text_input("Long-Term Care Insurance (e.g., coverage amount)")
-
-# # # # # # #         st.header("Estate Planning")
-# # # # # # #         will_status = st.radio("Do you have a will?", ["Yes", "No"])
-# # # # # # #         trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
-# # # # # # #         power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
-# # # # # # #         healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
-
-# # # # # # #         # Submit button
-# # # # # # #         submitted = st.form_submit_button("Submit")
-
-# # # # # # #         if submitted:
-# # # # # # #             # Save form data
-# # # # # # #             form_data = {
-# # # # # # #                 "Client Name": client_name,
-# # # # # # #                 "Co-Client Name": co_client_name,
-# # # # # # #                 "Client Age": client_age,
-# # # # # # #                 "Co-Client Age": co_client_age,
-# # # # # # #                 "Today's Date": str(today_date),
-# # # # # # #                 "Assets": assets,
-# # # # # # #                 "Liabilities": liabilities,
-# # # # # # #                 "Retirement Age": retirement_age,
-# # # # # # #                 "Desired Retirement Income": retirement_income,
-# # # # # # #                 "Goal Name": goal_name,
-# # # # # # #                 "Goal Amount": goal_amount,
-# # # # # # #                 "Goal Timeframe": goal_timeframe,
-# # # # # # #                 "Life Insurance": life_insurance,
-# # # # # # #                 "Disability Insurance": disability_insurance,
-# # # # # # #                 "Long-Term Care Insurance": long_term_care,
-# # # # # # #                 "Will Status": will_status,
-# # # # # # #                 "Trust Status": trust_status,
-# # # # # # #                 "Power of Attorney": power_of_attorney,
-# # # # # # #                 "Healthcare Proxy": healthcare_proxy,
-# # # # # # #             }
-            
-# # # # # # #             # Save to a file or database
-# # # # # # #             with open("client_data.txt", "a") as f:
-# # # # # # #                 f.write(str(form_data) + "\n")
-            
-# # # # # # #             st.success("Form submitted successfully!")
-# # # # # # #             st.session_state.page = "main"  # Redirect back to main page after form submission
 
 # # # # # # # Function to parse financial data from the text
 # # # # # # import re
@@ -18955,83 +21616,153 @@ if __name__ == '__main__':
 # # # # # #     except ValueError:
 # # # # # #         return 0
 
-# # # # # # # Function to plot pie chart for assets and liabilities
-# # # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):
-# # # # # # #     data = {}
 
-# # # # # # #     for key, value in assets.items():
-# # # # # # #         numeric_value = extract_numeric(value)
-# # # # # # #         if numeric_value > 0:
-# # # # # # #             data[key] = numeric_value
-
-# # # # # # #     for key, value in liabilities.items():
-# # # # # # #         numeric_value = extract_numeric(value)
-# # # # # # #         if numeric_value > 0:
-# # # # # # #             data[key] = numeric_value
-
-# # # # # # #     if not data:
-# # # # # # #         st.warning("No valid financial data available to plot.")
-# # # # # # #         return
-
-# # # # # # #     labels = list(data.keys())
-# # # # # # #     values = list(data.values())
-
-# # # # # # #     fig, ax = plt.subplots()
-# # # # # # #     ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=140, colors=plt.cm.Paired.colors)
-# # # # # # #     ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
-
-# # # # # # #     plt.title("Distribution of Assets and Liabilities")
-# # # # # # #     st.pyplot(fig)
-
-# # # # # # # def plot_assets_and_liabilities_pie_chart(assets, liabilities): default plot 
-# # # # # # #     # total_assets = sum(assets.values())
-# # # # # # #     # total_liabilities = sum(liabilities.values())
-
-# # # # # # #     # labels = ['Assets', 'Liabilities']
-# # # # # # #     # sizes = [total_assets, total_liabilities]
-
-# # # # # # #     # fig, ax = plt.subplots(figsize=(8, 8))
-# # # # # # #     # ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
-# # # # # # #     # ax.set_title('Assets vs Liabilities Distribution')
-
-# # # # # # #     total_assets = sum(assets)
-# # # # # # #     total_liabilities = sum(liabilities)
-
-# # # # # # #     if total_assets == 0 and total_liabilities == 0:
-# # # # # # #         print("No data to plot.")
-# # # # # # #         return
-
-# # # # # # #     labels = ['Assets', 'Liabilities']
-# # # # # # #     sizes = [total_assets, total_liabilities]
-
-# # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
-# # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
-# # # # # # #     ax.set_title('Assets vs Liabilities Distribution')
-
-# # # # # # #     # plt.show()
-
-# # # # # # #     st.pyplot(fig)
+# # # # # # # plots graph from the details of the form :
 
 
-# # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):
-# # # # # #     labels = list(assets.keys()) + list(liabilities.keys())
-# # # # # #     values = [float(value) for value in assets.values()] + [float(value) for value in liabilities.values()]
+# # # # # # def is_float(value):
+# # # # # #     try:
+# # # # # #         float(value)
+# # # # # #         return True
+# # # # # #     except ValueError:
+# # # # # #         return False
 
-# # # # # #     fig, ax = plt.subplots()
-# # # # # #     ax.pie(values, labels=labels, autopct='%1.1f%%', colors=plt.cm.Paired.colors)
-# # # # # #     ax.set_title('Distribution of Assets and Liabilities')
+
+
+# # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities, threshold=50): # best plot 
+# # # # # #     """
+# # # # # #     Plots separate pie charts for assets and liabilities. If there are any categories
+# # # # # #     below a specified threshold, they are plotted in an additional small pie chart.
     
-# # # # # #     # Create a legend to avoid overlapping labels
-# # # # # #     ax.legend(labels, loc="best", bbox_to_anchor=(1, 0, 0.5, 1))
-# # # # # #     plt.axis('equal')
-    
-# # # # # #     st.pyplot(fig)
+# # # # # #     Parameters:
+# # # # # #     - assets: dict, keys are asset names, values are their amounts.
+# # # # # #     - liabilities: dict, keys are liability names, values are their amounts.
+# # # # # #     - threshold: int, percentage threshold below which segments are considered small.
+# # # # # #     """
+# # # # # #     # Update matplotlib settings to increase the font size globally
+# # # # # #     # plt.rcParams.update({'font.size': 32})
+
+# # # # # #     plt.rcParams.update({'font.size': 16})
+
+# # # # # #     def plot_pie(data, title):
+# # # # # #         # Filter out zero values and create a summary for small segments
+# # # # # #         total = sum(data.values())
+# # # # # #         filtered_data = {k: v for k, v in data.items() if (v / total) >= threshold / 100}
+# # # # # #         small_segments = {k: v for k, v in data.items() if (v / total) < threshold / 100}
+# # # # # #         small_total = sum(small_segments.values())
+
+# # # # # #         # Plotting logic
+# # # # # #         if small_segments:
+# # # # # #             fig, (ax_main, ax_small) = plt.subplots(1, 2, figsize=(30, 15))  # Side-by-side layout
+# # # # # #         else:
+# # # # # #             fig, ax_main = plt.subplots(figsize=(30, 20))  # Only main chart with larger size
+
+# # # # # #             # fig, ax_main = plt.subplots(figsize=(10, 10))  # Only main chart with larger size
+
+# # # # # #         # Plot main pie chart
+# # # # # #         labels_main = list(filtered_data.keys()) + ([f"Other small {title}"] if small_segments else [])
+# # # # # #         values_main = list(filtered_data.values()) + ([small_total] if small_segments else [])
+# # # # # #         wedges_main, texts_main, autotexts_main = ax_main.pie(
+# # # # # #             values_main, labels=labels_main, autopct='%1.1f%%', colors=plt.cm.Paired.colors, 
+# # # # # #             startangle=140, textprops={'fontsize': 28} #18}  # Larger font size for labels
+# # # # # #         )
+
+# # # # # #         ax_main.set_title(title, fontsize=20)
+# # # # # #         # Position legend to the right of the plot to avoid overlapping
+# # # # # #         ax_main.legend(wedges_main, labels_main, title="Categories", loc="upper right", bbox_to_anchor=(0.001, 0.9), fontsize= 28)#14)
+
+# # # # # #         if small_segments:
+# # # # # #             # Plot additional small pie chart for small segments
+# # # # # #             labels_small = list(small_segments.keys())
+# # # # # #             values_small = list(small_segments.values())
+# # # # # #             wedges_small, texts_small, autotexts_small = ax_small.pie(
+# # # # # #                 values_small, labels=labels_small, autopct='%1.1f%%', colors=plt.cm.Paired.colors, 
+# # # # # #                 startangle=140, textprops={'fontsize': 24} #14}  # Consistent label size for small chart
+# # # # # #             )
+# # # # # #             ax_small.set_title(f"Small Segments of {title}", fontsize=20)
+# # # # # #             # Position legend to the right of the small pie chart but slightly lower to avoid overlap with the main chart's legend
+# # # # # #             ax_small.legend(wedges_small, labels_small, title="Small Categories", loc="center left", bbox_to_anchor=(1.2, 0.3), fontsize= 22)#12)
+
+# # # # # #         st.pyplot(fig)
+
+# # # # # #     # Convert valid entries to float, ensuring only numeric values are considered
+# # # # # #     assets = {k: float(v) for k, v in assets.items() if isinstance(v, (str, float)) and is_float(v) and float(v) > 0.0}
+# # # # # #     liabilities = {k: float(v) for k, v in liabilities.items() if isinstance(v, (str, float)) and is_float(v) and float(v) > 0.0}
+
+# # # # # #     # Plot pie charts
+# # # # # #     plot_pie(assets, 'Distribution of Assets')
+# # # # # #     plot_pie(liabilities, 'Distribution of Liabilities')
+
+# # # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):# properly plots a big and 1 small pie chart for both assets and liability
+# # # # # # #     # Filter and convert values to float, handle non-numeric or empty inputs
+# # # # # # #     filtered_assets = {k: float(v) for k, v in assets.items() if v and is_float(v) and float(v) > 0 and 'interest' not in k.lower() and 'time' not in k.lower()}
+# # # # # # #     filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and is_float(v) and float(v) > 0 and 'interest' not in k.lower() and 'time' not in k.lower()}
+
+# # # # # # #     # Combine assets and liabilities for total calculation
+# # # # # # #     all_values = {**filtered_assets, **filtered_liabilities}
+# # # # # # #     total_value = sum(all_values.values())
+
+# # # # # # #     # Separate main and small segments
+# # # # # # #     main_segments = {k: v for k, v in all_values.items() if (v / total_value) >= 0.05}
+# # # # # # #     small_segments = {k: v for k, v in all_values.items() if (v / total_value) < 0.05}
+# # # # # # #     small_total = sum(small_segments.values())
+
+# # # # # # #     # Prepare data for main pie chart
+# # # # # # #     main_labels = list(main_segments.keys()) + (["Others"] if small_segments else [])
+# # # # # # #     main_values = list(main_segments.values()) + ([small_total] if small_segments else [])
+
+# # # # # # #     # Prepare data for small pie chart (only if there are small segments)
+# # # # # # #     small_labels = list(small_segments.keys())
+# # # # # # #     small_values = list(small_segments.values())
+
+# # # # # # #     fig, ax = plt.subplots(figsize=(8, 6))
+
+# # # # # # #     # Plot main pie chart
+# # # # # # #     wedges, texts, autotexts = ax.pie(
+# # # # # # #         main_values,
+# # # # # # #         labels=main_labels,
+# # # # # # #         autopct='%1.1f%%',
+# # # # # # #         startangle=140,
+# # # # # # #         colors=plt.cm.Paired.colors,
+# # # # # # #     )
+
+# # # # # # #     # Explode the "Others" slice
+# # # # # # #     if small_segments:
+# # # # # # #         others_index = main_labels.index("Others")
+# # # # # # #         wedges[others_index].set_edgecolor('white')
+# # # # # # #         # wedges[others_index].set_linestyle('--')
+# # # # # # #         wedges[others_index].set_linewidth(2)
+# # # # # # #         wedges[others_index].set_hatch('/')
+
+# # # # # # #     ax.set_title('Assets and Liabilities Distribution')
+
+# # # # # # #     # Draw a second pie chart for "Others"
+# # # # # # #     if small_segments:
+# # # # # # #         fig2, ax2 = plt.subplots(figsize=(8, 6))
+# # # # # # #         wedges_small, texts_small, autotexts_small = ax2.pie(
+# # # # # # #             small_values,
+# # # # # # #             labels=small_labels,
+# # # # # # #             autopct='%1.1f%%',
+# # # # # # #             startangle=140,
+# # # # # # #             colors=plt.cm.Pastel1.colors
+# # # # # # #         )
+
+# # # # # # #         ax2.set_title('Detailed View of "Others" Categories')
+
+# # # # # # #     plt.tight_layout()
+# # # # # # #     st.pyplot(fig)
+# # # # # # #     if small_segments:
+# # # # # # #         st.pyplot(fig2)
+
+
 
 # # # # # # def save_data_to_file(form_data):
 # # # # # #     file_path = 'client_data.txt'
 # # # # # #     with open(file_path, 'a') as file:
 # # # # # #         file.write(str(form_data) + "\n")
-# # # # # #     st.success(f"Form data saved to {file_path}")
+# # # # # #     # st.success(f"Form data saved to {file_path}")
+# # # # # #     print(f"Form data saved to {file_path}")
+    
 
 # # # # # # def client_form():
 # # # # # #     st.title("Client Details Form")
@@ -19044,22 +21775,45 @@ if __name__ == '__main__':
 # # # # # #         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
 # # # # # #         today_date = st.date_input("Today's Date")
 
-# # # # # #         st.header("Your Assets and Liabilities")
-        
+# # # # # #         st.header("Your Assets (in $)")
+
 # # # # # #         assets = {
-# # # # # #             'Annual Income': st.text_input("Annual Income"),
-# # # # # #             'Savings Accounts': st.text_input("Savings Accounts"),
-# # # # # #             'Retirement Accounts': st.text_input("Retirement Accounts"),
-# # # # # #             'Investment Accounts': st.text_input("Investment Accounts")
+# # # # # #             # 'Annual Income': st.text_input("Annual Income (e.g. , Your Annual Salary Income or other source of income) "),
+# # # # # #             'Cash/Bank Account': st.text_input("Cash/Bank Account"),
+# # # # # #             '401(k), 403(b), 457 Plans': st.text_input("Your 401(k), 403(b), 457 Plans "),
+# # # # # #             'Traditional, SEP and SIMPLE IRAs': st.text_input("Traditional, SEP and SIMPLE IRAs "),
+# # # # # #             'Roth IRA,Roth 401(k)': st.text_input("Roth IRA, Roth 401(k)"),
+# # # # # #             'Brokerage/non-qualified accounts': st.text_input("Brokerage/non-qualified accounts"),
+# # # # # #             'Annuities': st.text_input("Annuities"),
+# # # # # #             '529 Plans': st.text_input("529 Plans"),
+# # # # # #             'Home': st.text_input("Home"),
+# # # # # #             'Other Real Estate': st.text_input("Other Real Estate"),
+# # # # # #             'Business': st.text_input("Business"),
+# # # # # #             'Other': st.text_input("Other")
 # # # # # #         }
-        
+# # # # # #         st.header("Your Liabilities (in $)")
+
 # # # # # #         liabilities = {
 # # # # # #             'Mortgage': st.text_input("Mortgage"),
+# # # # # #             # 'Annual Mortgage Interest Rate': st.number_input("Annual Mortgage Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0, value=12.0, step=0.5),
+# # # # # #             # 'Mortagage Time Period': st.number_input("Mortagage Time Period (Mention the time period of the Mortgage in years)", min_value=0, max_value=100,value=10,step=1),
+
 # # # # # #             'Home Loans': st.text_input("Home Loans"),
-# # # # # #             'Car/Vehicle Loans': st.text_input("Car/Vehicle Loans"),
+# # # # # #             # 'Home Loans Interest Rate': st.number_input("Home Loan Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0, value=10.0, step=0.5),
+# # # # # #             # 'Home Loans Time Period': st.number_input("Home Loans Time Period (Mention the time period of the Home Loan in years)", min_value=0, max_value=100,value=15,step=1),
+
+# # # # # #             'Vehicle Loans': st.text_input("Vehicle Loans"),
+# # # # # #             # 'Vehicle Loans Interest Rate': st.number_input("Vehicle Loan Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
+# # # # # #             # 'Vehicle Loans Time Period': st.number_input("Vehicle Loans Time Period (Mention the time period of the Car/Vehicle Loan in years)", min_value=0, max_value=100,value=15,step=1),
+
 # # # # # #             'Education Loans': st.text_input("Education Loans"),
-# # # # # #             'Credit Card Debt': st.text_input("Credit Card Debt"),
-# # # # # #             'Miscellaneous': st.text_input("Miscellaneous")
+# # # # # #             # 'Education Loans Interest Rate' : st.number_input("Education Loans Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
+# # # # # #             # 'Education Loans Time Period': st.number_input("Education Loans Time Period (Mention the time period of the Education Loan in years)", min_value=0, max_value=100,value=15,step=1),
+
+# # # # # #             # 'Credit Card': st.text_input("Monthly Credit Card Debt (Mention Amount)"),
+# # # # # #             # 'Credit Card Debt Interest Rate': st.number_input("Credit Card Debt Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
+
+# # # # # #             'Miscellaneous': st.text_input("Miscellaneous"),
 # # # # # #         }
 
 # # # # # #         st.header("Your Retirement Goal")
@@ -19067,14 +21821,18 @@ if __name__ == '__main__':
 # # # # # #         retirement_income = st.text_input("Desired annual retirement income")
 
 # # # # # #         st.header("Your Other Goals")
-# # # # # #         goal_name = st.text_input("Name of the Goal")
-# # # # # #         goal_amount = st.text_input("Amount needed for the goal")
+# # # # # #         goal_name = st.text_input("Name of the Goal (e.g . , Dream House, Travel, Educational, etc.)")
+# # # # # #         goal_amount = st.text_input("Amount needed for the goal (in $)")
 # # # # # #         goal_timeframe = st.number_input("Timeframe to achieve the goal (in years)", min_value=0, max_value=100, value=5, step=1)
 
 # # # # # #         st.header("Insurance Information")
-# # # # # #         life_insurance = st.text_input("Life Insurance")
-# # # # # #         disability_insurance = st.text_input("Disability Insurance")
-# # # # # #         long_term_care = st.text_input("Long-Term Care Insurance")
+# # # # # #         life_insurance_Benefit = st.text_input("Life Insurance-Benefit")
+# # # # # #         life_insurance_Premium = st.text_input("Life Insurance-Premium")
+# # # # # #         disability_insurance_Benefit = st.text_input("Disability Insurance-Benefit")
+# # # # # #         disability_insurance_Premium = st.text_input("Disability Insurance-Premium")
+# # # # # #         long_term_care_benefit = st.text_input("Long-Term Care Insurance-Benefit")
+# # # # # #         long_term_care_premium = st.text_input("Long-Term Care Insurance-Premium")
+
 
 # # # # # #         st.header("Estate Planning")
 # # # # # #         will_status = st.radio("Do you have a will?", ["Yes", "No"])
@@ -19098,9 +21856,12 @@ if __name__ == '__main__':
 # # # # # #                 "Goal Name": goal_name,
 # # # # # #                 "Goal Amount": goal_amount,
 # # # # # #                 "Goal Timeframe": goal_timeframe,
-# # # # # #                 "Life Insurance": life_insurance,
-# # # # # #                 "Disability Insurance": disability_insurance,
-# # # # # #                 "Long-Term Care Insurance": long_term_care,
+# # # # # #                 "Life Insurance Benefit": life_insurance_Benefit,
+# # # # # #                 "Life Insurance Premium": life_insurance_Premium,
+# # # # # #                 "Disability Insurance Benefit": disability_insurance_Benefit,
+# # # # # #                 "Disability Insurance Premium": disability_insurance_Premium,
+# # # # # #                 "Long-Term Care Insurance Benefit": long_term_care_benefit,
+# # # # # #                 "Long-Term Care Insurance Premium": long_term_care_premium,
 # # # # # #                 "Will Status": will_status,
 # # # # # #                 "Trust Status": trust_status,
 # # # # # #                 "Power of Attorney": power_of_attorney,
@@ -19109,151 +21870,718 @@ if __name__ == '__main__':
 
 # # # # # #             save_data_to_file(form_data)
             
-# # # # # #             # Plot the pie chart
-# # # # # #             st.subheader("Assets and Liabilities Breakdown")
-# # # # # #             plot_assets_liabilities_pie_chart(assets, liabilities)
+# # # # # #             # # Plot the pie chart
+# # # # # #             # st.subheader("Assets and Liabilities Breakdown")
+# # # # # #             # plot_assets_liabilities_pie_chart(assets, liabilities)
 
+# # # # # #             # Store data in session state and redirect to main
+# # # # # #             st.session_state.assets = assets
+# # # # # #             st.session_state.liabilities = liabilities
+# # # # # #             st.session_state.total_assets, st.session_state.total_liabilities = calculate_totals(assets, liabilities)
+# # # # # #             st.session_state.page = "main"
+# # # # # #             st.success("Data submitted!\nThank You for filling the form !\nReturning to main portal...")
 
-# # # # # # def main():
-# # # # # #     st.title("Wealth Advisor Chatbot")
-
-# # # # # #     # Step 1: Choose between Investment Suggestions or Stock Analysis
-# # # # # #     task_choice = st.radio("Select the task you want to perform:", ["Investment Suggestions", "Stock Analysis"])
-
-# # # # # #     # Step 2: Choose between New Client or Existing Client (for Investment Suggestions)
-# # # # # #     if task_choice == "Investment Suggestions":
-# # # # # #         client_type = st.radio("Is this for a new client or an existing client?", ["New Client", "Existing Client"])
-
-# # # # # #         if client_type == "New Client":
-# # # # # #             # Button to redirect to the form page
-# # # # # #             if st.button("Fill in the Client Details"):
-# # # # # #                 st.session_state.page = "form"
-# # # # # #                 # st.query_params(page="form")  #set_query_params(page="form")
-# # # # # #                 # Display the pie chart if assets and liabilities data is available
-
-# # # # # #             if 'assets' in st.session_state and 'liabilities' in st.session_state:
-# # # # # #                 st.subheader("Assets and Liabilities Breakdown")
-# # # # # #                 plot_assets_liabilities_pie_chart(st.session_state.assets, st.session_state.liabilities)
-# # # # # #             else:
-# # # # # #                 st.info("Please fill in the client details to view the assets and liabilities breakdown.")
-
-# # # # # #             uploaded_file = st.file_uploader("Upload the client's document", type=["docx", "pdf"])
-
-# # # # # #             if uploaded_file is not None:
-# # # # # #                 st.write("Extracting text from the document...")
-# # # # # #                 document_data = asyncio.run(process_document(uploaded_file))
-
-# # # # # #                 if document_data:
-# # # # # #                     if isinstance(document_data, tuple) and len(document_data) == 2:
-# # # # # #                         extracted_text, tables_content = document_data
-# # # # # #                         st.write("Text extracted from the document")
-
-# # # # # #                         # Print extracted text for debugging
-# # # # # #                         print("Extracted Text Content:", extracted_text)
-
-# # # # # #                         # Parse extracted data to get assets and liabilities
-# # # # # #                         # assets, liabilities = parse_financial_data(extracted_text)
-
-# # # # # #                         # if assets or liabilities:
-# # # # # #                         #     plot_pie_chart(assets, liabilities)
-# # # # # #                         # else:
-# # # # # #                         #     # Extracted data from the word file
-# # # # # #                         #     st.write("Financial Data Plotted :")
-# # # # # #                         #     assets = [100000, 150000, 12000]  # Cash/bank accounts, Home, Other (e.g. car, boat, art, etc.)
-# # # # # #                         #     liabilities = [200000, 400, 15000]  # Mortgage(s), Credit Card(s), Other loans (car, education, etc.)
-# # # # # #                         #     # plot_assets_and_liabilities_pie_chart(assets, liabilities)
-# # # # # #                         #     plot_assets_liabilities_pie_chart()
-# # # # # #                         #     # st.write("No financial data found to plot.")
-# # # # # #                     else:
-# # # # # #                         st.write("Unexpected data format returned from document processing.")
-
-
-
-# # # # # #                 # extracted_text = asyncio.run(process_document(uploaded_file))
-# # # # # #                 # extracted_text, tables_content = asyncio.run(process_document(uploaded_file))
-# # # # # #                 # # st.write("Text extracted from the document")
-# # # # # #                 # if extracted_text:
-# # # # # #                 #     st.write("Text extracted from the document")
-                    
-# # # # # #                 #     # Parse extracted data to get assets and liabilities
-# # # # # #                 #     assets, liabilities = parse_financial_data(extracted_text)
-                    
-# # # # # #                 #     # Check if there is any data to plot
-# # # # # #                 #     if assets or liabilities:
-# # # # # #                 #         plot_pie_chart(assets, liabilities)
-# # # # # #                 #     else:
-# # # # # #                 #         st.write("No financial data found to plot.")
-# # # # # #                 # else:
-# # # # # #                 #     st.write("Failed to extract data from the document.")
-
-# # # # # #                 # Ask for investment personality
-# # # # # #                 investment_personality = st.selectbox(
-# # # # # #                     "Select the investment personality of the client:",
-# # # # # #                     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
-# # # # # #                 )
-
-# # # # # #                 # Step 4: Generate investment suggestions
-# # # # # #                 if st.button("Generate Investment Suggestions"):
-# # # # # #                     st.write("Generating investment suggestions...")
-# # # # # #                     # Assuming generate_investment_suggestions is an async function
-                    
-# # # # # #                     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
-# # # # # #                     st.write(suggestions)
-
-# # # # # #                     # # Generate infographics
-# # # # # #                     # generate_infographics(suggestions, investment_personality)
-
-# # # # # #                     data_extracted = extract_numerical_data(suggestions)
-
-# # # # # #                     # Streamlit app
-# # # # # #                     st.title('Investment Allocation Infographics')
-# # # # # #                     # st.write('### Extracted Investment Data')
-# # # # # #                     # st.json(data_extracted)
-
-# # # # # #                     st.write('## Investment Allocation Charts')
-# # # # # #                     fig = plot_investment_allocations(data_extracted)
-# # # # # #                     st.pyplot(fig)
-
-# # # # # #                     st.write('## Pie Chart of Investment Allocation')
-
-# # # # # #                     # plot_pie_chart(data_extracted)
-# # # # # #                     fig = plot_pie_chart(data_extracted)
-# # # # # #                     st.pyplot(fig)
-
-# # # # # #                     st.write('## Bar Chart of Compounded Returns')
-# # # # # #                     fig = bar_chart(data_extracted['Growth-Oriented Investments'])
-# # # # # #                     st.pyplot(fig)
-
-# # # # # #                     plot_3d_bar_graph(data_extracted)
-# # # # # #                     # fig = plot_3d_bar_graph(data_extracted)
-# # # # # #                     # st.pyplot(fig)
-
-# # # # # #         elif client_type == "Existing Client":
-# # # # # #             st.write("Fetching existing client data...")
-
-# # # # # #     elif task_choice == "Stock Analysis":
-# # # # # #         st.write("Performing stock analysis...")
-
-
-# # # # # # if __name__ == "__main__":
-# # # # # #     if 'page' not in st.session_state:
-# # # # # #         st.session_state.page = "main"
-    
-# # # # # #     if st.session_state.page == "form":
-# # # # # #         client_form()
+# # # # # # import math
+# # # # # # def calculate_compounded_amount(principal, rate, time):
+# # # # # #     """
+# # # # # #     Calculates the compounded amount using the formula:
+# # # # # #     A = P * (1 + r/n)^(nt)
+# # # # # #     Assuming n (compounding frequency) is 1 for simplicity (annually).
+# # # # # #     """
+# # # # # #     if principal == 0 or rate == 0 or time == 0:
+# # # # # #         return principal
 # # # # # #     else:
-# # # # # #         main()
+# # # # # #         # Using annual compounding
+# # # # # #         return principal * (1 + rate / 100) ** time
+    
+# # # # # # def calculate_totals(assets, liabilities):
+# # # # # #     total_assets = sum(extract_numeric(v) for v in assets.values())
+# # # # # #     print(f"Total Assets : {total_assets}")
+# # # # # #     total_liabilities = 0
+# # # # # #     total_liabilities = sum(extract_numeric(v) for v in liabilities.values() )
 
-# # # # # # # if __name__ == "__main__":
-# # # # # # #     main()
+# # # # # #     # total_liabilities += calculate_compounded_amount(
+# # # # # #     #     extract_numeric(liabilities['Mortgage']),
+# # # # # #     #     liabilities['Annual Mortgage Interest Rate'],
+# # # # # #     #     liabilities['Mortagage Time Period']
+# # # # # #     # )
+# # # # # #     # total_liabilities += calculate_compounded_amount(
+# # # # # #     #     extract_numeric(liabilities['Home Loans']),
+# # # # # #     #     liabilities['Home Loans Interest Rate'],
+# # # # # #     #     liabilities['Home Loans Time Period']
+# # # # # #     # )
+# # # # # #     # total_liabilities += calculate_compounded_amount(
+# # # # # #     #     extract_numeric(liabilities['Vehicle Loans']),
+# # # # # #     #     liabilities['Vehicle Loans Interest Rate'],
+# # # # # #     #     liabilities['Vehicle Loans Time Period']
+# # # # # #     # )
+# # # # # #     # total_liabilities += calculate_compounded_amount(
+# # # # # #     #     extract_numeric(liabilities['Education Loans']),
+# # # # # #     #     liabilities['Education Loans Interest Rate'],
+# # # # # #     #     liabilities['Education Loans Time Period']
+# # # # # #     # )
+    
+# # # # # #     # For credit card debt, only calculate compounded amount if interest rate > 0
+
+# # # # # #     # credit_card_balance = extract_numeric(liabilities['Credit Card'])
+# # # # # #     # credit_card_interest = liabilities['Credit Card Debt Interest Rate']
+# # # # # #     # if credit_card_interest > 0:
+# # # # # #     #     # Assuming the time period for credit card debt is 1 year for compounding
+# # # # # #     #     total_liabilities += calculate_compounded_amount(credit_card_balance, credit_card_interest, 1)
+# # # # # #     # else:
+# # # # # #     #     total_liabilities += credit_card_balance
+    
+# # # # # #     # Miscellaneous debts are taken directly as is
+# # # # # #     total_liabilities += extract_numeric(liabilities['Miscellaneous'])
+# # # # # #     rounded_liabilities = round(total_liabilities,2)
+
+# # # # # #     print(f"Total liabilities :{total_liabilities}")
+# # # # # #     print(f"Rounded of Total liabilities :{rounded_liabilities}")
+
+# # # # # #     return total_assets, rounded_liabilities #total_liabilities
+
+# # # # # # def create_financial_summary_table(assets, liabilities):
+# # # # # #     # Filter out items with zero value
+# # # # # #     filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
+# # # # # #     filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and float(v) > 0.0}
+
+# # # # # #     # Create DataFrames for assets and liabilities with indices starting from 1
+# # # # # #     assets_df = pd.DataFrame(
+# # # # # #         list(filtered_assets.items()), 
+# # # # # #         columns=['Assets', 'Amount ($)'], 
+# # # # # #         index=range(1, len(filtered_assets) + 1)
+# # # # # #     )
+# # # # # #     liabilities_df = pd.DataFrame(
+# # # # # #         list(filtered_liabilities.items()), 
+# # # # # #         columns=['Liabilities', 'Amount ($)'], 
+# # # # # #         index=range(1, len(filtered_liabilities) + 1)
+# # # # # #     )
+
+# # # # # #     # Calculate total
+# # # # # #     total_assets, total_liabilities = calculate_totals(assets, liabilities)
+
+# # # # # #     # Add total row with index incremented by 1
+# # # # # #     total_assets_row = pd.DataFrame(
+# # # # # #         [['TOTAL', total_assets]], 
+# # # # # #         columns=['Assets', 'Amount ($)'], 
+# # # # # #         index=[len(assets_df) + 1]
+# # # # # #     )
+# # # # # #     total_liabilities_row = pd.DataFrame(
+# # # # # #         [['TOTAL', total_liabilities]], 
+# # # # # #         columns=['Liabilities', 'Amount ($)'], 
+# # # # # #         index=[len(liabilities_df) + 1]
+# # # # # #     )
+
+# # # # # #     # Append total rows to DataFrames
+# # # # # #     assets_df = pd.concat([assets_df, total_assets_row])
+# # # # # #     liabilities_df = pd.concat([liabilities_df, total_liabilities_row])
+
+# # # # # #     # Display tables with formatted values
+# # # # # #     st.subheader("Assets")
+# # # # # #     st.table(assets_df.style.format({'Amount ($)': '{:,.2f}'}))
+
+# # # # # #     st.subheader("Liabilities")
+# # # # # #     st.table(liabilities_df.style.format({'Amount ($)': '{:,.2f}'}))
+
+
+# # # # # # def plot_bar_graphs(assets, liabilities):
+# # # # # #     # Filter out items with zero values
+# # # # # #     filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
+# # # # # #     filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and float(v) > 0.0}
+
+# # # # # #     # Calculate compounded liabilities
+# # # # # #     # compounded_liabilities = {} 
+
+# # # # # #     # for k, v in filtered_liabilities.items():
+# # # # # #         # if 'Interest Rate' in k or 'Time Period' in k:
+# # # # # #         #     continue  # Skip non-monetary entries
+
+# # # # # #         # if k == 'Credit Card Payment' and liabilities['Credit Card Debt Interest Rate'] == 0.0:
+# # # # # #         #     continue  # Skip if credit card interest rate is zero
+
+# # # # # #         # if k == 'Mortgage':
+# # # # # #         #     interest_rate = liabilities['Annual Mortgage Interest Rate']
+# # # # # #         #     time_period = liabilities['Mortagage Time Period']
+
+# # # # # #         # elif k == 'Home Loans':
+# # # # # #         #     interest_rate = liabilities['Home Loans Interest Rate']
+# # # # # #         #     time_period = liabilities['Home Loans Time Period']
+
+# # # # # #         # elif k == 'Car/Vehicle Loans':
+# # # # # #         #     interest_rate = liabilities['Car/Vehicle Loans Interest Rate']
+# # # # # #         #     time_period = liabilities['Car/Vehicle Loans Time Period']
+
+# # # # # #         # elif k == 'Education Loans':
+# # # # # #         #     interest_rate = liabilities['Education Loans Interest Rate']
+# # # # # #         #     time_period = liabilities['Education Loans Time Period']
+
+# # # # # #         # elif k == 'Credit Card Payment':
+# # # # # #         #     interest_rate = liabilities['Credit Card Debt Interest Rate']
+# # # # # #         #     time_period = 1  # Assuming interest is calculated yearly
+
+# # # # # #         # if interest_rate > 0:
+# # # # # #         #     compounded_amount = float(v) * (1 + float(interest_rate) / 100) ** float(time_period)
+# # # # # #         #     compounded_liabilities[k] = compounded_amount
+# # # # # #         # else:
+# # # # # #         #     compounded_liabilities[k] = float(v)
+
+# # # # # #     # Plot bar graph for assets
+# # # # # #     st.write("### All Assets ")
+# # # # # #     fig1, ax1 = plt.subplots()
+# # # # # #     ax1.bar(filtered_assets.keys(), filtered_assets.values(), color='green')
+# # # # # #     ax1.set_ylabel('Amount ($)')
+# # # # # #     ax1.set_xlabel('Asset Type')
+# # # # # #     ax1.set_title(' All Assets ')
+# # # # # #     plt.xticks(rotation=45)
+# # # # # #     st.pyplot(fig1)
+
+# # # # # #     # Plot bar graph for liabilities
+# # # # # #     st.write("### All Liabilities ")
+# # # # # #     # st.write("### All Liabilities with Compounded Interest")
+# # # # # #     fig2, ax2 = plt.subplots()
+# # # # # #     # ax2.bar(compounded_liabilities.keys(), compounded_liabilities.values(), color='red')
+# # # # # #     ax2.bar(filtered_liabilities.keys(), filtered_liabilities.values(), color='red')    
+# # # # # #     ax2.set_ylabel('Amount ($)')
+# # # # # #     ax2.set_xlabel('Liability Type')
+# # # # # #     ax2.set_title(' All Liabilities ')
+
+# # # # # #     # ax2.set_title(' All Liabilities with Compounded Interest')
+# # # # # #     plt.xticks(rotation=45)
+# # # # # #     st.pyplot(fig2)
+
+
+# # # # # # from docx import Document
+# # # # # # # Define a helper function to read and extract text from a DOCX file
+# # # # # # def read_docx(file_path):
+# # # # # #     document = Document(file_path)
+# # # # # #     extracted_text = "\n".join([para.text for para in document.paragraphs])
+# # # # # #     return extracted_text
+
+
+
+# # # # # # # # Ask for investment personality
+# # # # # # # investment_personality = st.selectbox(
+# # # # # # #     "Select the investment personality of the client:",
+# # # # # # #     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
+# # # # # # # )
+
+# # # # # # # # Step 4: Generate investment suggestions
+# # # # # # # if st.button("Generate Investment Suggestions"):
+# # # # # # #     st.write("Generating investment suggestions...")
+
+# # # # # # #     # Replace this with the path to your DOCX file
+# # # # # # #     file_path = "data/Financial_Investment_1.docx"
+
+# # # # # # #     # New logic to read the file directly
+# # # # # # #     try:
+# # # # # # #         st.write("Loading client document from predefined path...")
+# # # # # # #         extracted_text = read_docx(file_path)
+# # # # # # #         st.write("Client document loaded successfully.")
+# # # # # # #     except FileNotFoundError:
+# # # # # # #         st.write("Client document file not found.")
+# # # # # # #         st.stop()  # Stop the Streamlit app if the file is not found
+
+
+# # # # # # #     # Assuming generate_investment_suggestions is an async function
+    
+# # # # # # #     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
+# # # # # # #     st.write(suggestions)
+
+# # # # # # #     data_extracted = extract_numerical_data(suggestions)
+
+# # # # # # #     # Streamlit app for visualizing investment allocation
+# # # # # # #     st.title('Investment Allocation Infographics')
+
+# # # # # # #     st.write('## Investment Allocation Charts')
+# # # # # # #     fig = plot_investment_allocations(data_extracted)
+# # # # # # #     st.pyplot(fig)
+
+# # # # # # #     st.write('## Pie Chart of Investment Allocation')
+# # # # # # #     fig = plot_pie_chart(data_extracted)
+# # # # # # #     st.pyplot(fig)
+
+# # # # # # #     st.write('## Bar Chart of Compounded Returns')
+# # # # # # #     fig = bar_chart(data_extracted['Growth-Oriented Investments'])
+# # # # # # #     st.pyplot(fig)
+
+# # # # # # #     plot_3d_bar_graph(data_extracted)
+
+
+# # # # # # class TrieNode:
+# # # # # #     def __init__(self):
+# # # # # #         self.children = {}
+# # # # # #         self.client_ids = []
+# # # # # #         self.end_of_name = False  # Marks the end of a client's name
+
+# # # # # # class Trie:
+# # # # # #     def __init__(self):
+# # # # # #         self.root = TrieNode()
+
+# # # # # #     def insert(self, name, client_id):
+# # # # # #         node = self.root
+# # # # # #         for char in name:
+# # # # # #             if char not in node.children:
+# # # # # #                 node.children[char] = TrieNode()
+# # # # # #             node = node.children[char]
+# # # # # #         node.client_ids.append(client_id)
+# # # # # #         node.end_of_name = True
+
+# # # # # #     def search(self, prefix):
+# # # # # #         node = self.root
+# # # # # #         for char in prefix:
+# # # # # #             if char in node.children:
+# # # # # #                 node = node.children[char]
+# # # # # #             else:
+# # # # # #                 return []  # Prefix not found
+# # # # # #         return self._get_all_names_from_node(prefix, node)
+
+# # # # # #     def _get_all_names_from_node(self, prefix, node):
+# # # # # #         suggestions = []
+# # # # # #         if node.end_of_name:
+# # # # # #             suggestions.append((prefix, node.client_ids))
+# # # # # #         for char, child_node in node.children.items():
+# # # # # #             suggestions.extend(self._get_all_names_from_node(prefix + char, child_node))
+# # # # # #         return suggestions
+
+
+
+# # # # # # def preload_trie():
+# # # # # #     trie = Trie()
+# # # # # #     clients = {
+# # # # # #         "John Doe": "C001",
+# # # # # #         "Jane Smith": "C002",
+# # # # # #         "James Brown": "C003",
+# # # # # #         "Jill Johnson": "C004",
+# # # # # #         "Jake White": "C005"
+# # # # # #     }
+# # # # # #     for name, client_id in clients.items():
+# # # # # #         trie.insert(name.lower(), client_id)  # Insert in lowercase for case-insensitive search
+# # # # # #     return trie
+
+# # # # # # async def generate_investment_suggestions_for_investor(investment_personality, context): # # GET Method for py , for front end its Post API
+    
+# # # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
+
+# # # # # #     retriever =  await load_vector_db("uploaded_file")
+# # # # # #     # retriever = await load_vector_db("data\Financial_Investment_1.docx") 
+
+# # # # # #     chain = await make_retrieval_chain(retriever)
+
+# # # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
+    
+# # # # # #     if chain is not None:
+# # # # # #         # summary = context
+# # # # # #         # query = summary + "\n" + investment_personality
+# # # # # #         query = str(investment_personality)
+# # # # # #         response = chain.invoke({"input": query})
+        
+# # # # # #         # format_response = markdown_to_text(response['answer'])
+# # # # # #         # return format_response
+        
+# # # # # #         # html_output = markdown.markdown(response['answer'])
+# # # # # #         # return html_output
+        
+# # # # # #         # readable_text = markdown_to_readable_text(response['answer'])
+# # # # # #         # print(readable_text)
+# # # # # #         # return readable_text
+
+# # # # # #         # format_text = convert_to_markdown(response['answer'])
+# # # # # #         # return format_text
+        
+# # # # # #         return response['answer']
+    
+        
+
+# # # # # #         # handle_graph(response['answer'])
+
+# # # # # #     else:
+# # # # # #         logging.INFO("response is not generated by llm model")
+# # # # # #         return jsonify("response is not generated by llm model"),500
+# # # # # #         # st.error("Failed to create the retrieval chain. Please upload a valid document.")
+
+# # # # # # from flask import Flask, request, jsonify, send_file
+# # # # # # import asyncio
+# # # # # # from flask_cors import CORS
+# # # # # # app = Flask(__name__)
+# # # # # # CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+# # # # # # # CORS(app,resources={r"/api/*":{"origins":"*"}})
+# # # # # # # CORS(app)
+
+# # # # # # # Initialize the Trie with preloaded clients
+# # # # # # trie = preload_trie()
+
+# # # # # # @app.route('/')
+# # # # # # def home():
+# # # # # #     return "Wealth Advisor Chatbot API"
+
+# # # # # # @app.route('/investment-suggestions', methods=['POST'])
+# # # # # # def investment_suggestions():
+# # # # # #     # Get the input data (new or existing client)
+# # # # # #     data = request.get_json()
+
+# # # # # #     # Determine if it's a new client or existing client
+# # # # # #     client_type = data.get("client_type")
+
+# # # # # #     if client_type == "New Client":
+# # # # # #         # Get form details and perform investment suggestions
+
+# # # # # #         # Check if assets and liabilities are provided
+# # # # # #         assets = data.get('assets', None)
+# # # # # #         liabilities = data.get('liabilities', None)
+
+# # # # # #         if assets and liabilities:
+# # # # # #             financial_summary = create_financial_summary_table(assets, liabilities)
+# # # # # #             bar_graphs = plot_bar_graphs(assets, liabilities)
+# # # # # #             pie_chart = plot_assets_liabilities_pie_chart(assets, liabilities)
+
+# # # # # #             return jsonify({
+# # # # # #                 "financial_summary": financial_summary,
+# # # # # #                 "bar_graphs": "Bar graphs generated.",
+# # # # # #                 "pie_chart": "Pie chart generated."
+# # # # # #             })
+
+# # # # # #         return jsonify({"message": "Please fill in the client details to view the assets and liabilities breakdown."})
+
+# # # # # #     elif client_type == "Existing Client":
+# # # # # #         # Search for an existing client in the Trie
+# # # # # #         search_query = data.get("search_query", "").lower()
+# # # # # #         matching_names = trie.search(search_query)
+
+# # # # # #         if matching_names:
+# # # # # #             suggestions = [{"name": name, "client_ids": client_ids} for name, client_ids in matching_names]
+# # # # # #             return jsonify({"suggestions": suggestions})
+# # # # # #         else:
+# # # # # #             return jsonify({"message": "No matching clients found."})
+    
+# # # # # #     return jsonify({"message": "Invalid client type."})
 
 
 
 
-# # # # # # # # infographics oplotting maanger side code |
+# # # # # # # @app.route('/investment-personality-assessment', methods=['POST']) # 1st code
+# # # # # # # def investment_personality_assessment():
+# # # # # # #     file = request.files['file']
+    
+# # # # # # #     if file:
+# # # # # # #         # Process the uploaded file and extract responses
+# # # # # # #         responses = extract_responses_from_docx(file)
+
+# # # # # # #         if responses:
+# # # # # # #             # Determine investment personality
+# # # # # # #             personality = asyncio.run(determine_investment_personality(responses))
+# # # # # # #             return jsonify({
+# # # # # # #                 "responses": responses,
+# # # # # # #                 "investment_personality": personality
+# # # # # # #             })
+        
+# # # # # # #         return jsonify({"message": "No responses found in the document."})
+    
+# # # # # # #     return jsonify({"message": "No file uploaded."})
+
+# # # # # # # @app.route('/investment-personality-assessment', methods=['POST']) # 1st test code for investment-personality-assessment
+# # # # # # # def investment_personality_assessment():
+# # # # # # #     try:
+# # # # # # #         # if 'personalityFile' not in request.files:
+# # # # # # #         #     return jsonify({'message': 'Personality file is required!'}), 400
+        
+# # # # # # #         personality_file = request.files['personalityFile']
+        
+# # # # # # #         # Process the personality file (DOCX/PDF) here
+# # # # # # #         # Call the function to extract responses
+# # # # # # #         responses = extract_responses_from_docx(personality_file)
+        
+# # # # # # #         if not responses:
+# # # # # # #             return jsonify({'message': 'No responses found in the document.'}), 400
+        
+# # # # # # #         # Determine the investment personality using the extracted responses
+# # # # # # #         personality = asyncio.run(determine_investment_personality(responses))
+        
+# # # # # # #         return jsonify({'investmentPersonality': personality}), 200
+    
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error in personality assessment: {e}")
+# # # # # # #         return jsonify({'message': 'Internal Server Error'}), 500
+
+# # # # # # # @app.route('/generate-investment-suggestions', methods=['POST']) # test code for POST requests
+# # # # # # # def generate_investment_suggestions_api():
+# # # # # # #     if request.is_json:   
+
+# # # # # # #         data = request.get_json()
+# # # # # # #         # Your processing logic
+# # # # # # #         return jsonify({"message": "Success"})
+
+# # # # # # #     return jsonify({"message": "Invalid content type, expecting application/json"}), 415
 
 
-# # # # # # # import streamlit as st
+# # # # # # # @app.route('/generate-investment-suggestions', methods=['POST']) # 1st test code
+# # # # # # # def generate_investment_suggestions():
+# # # # # # #     try:
+# # # # # # #         if 'personalityFile' not in request.files or 'financialFile' not in request.files:
+# # # # # # #             return jsonify({'message': 'Both personality and financial files are required!'}), 400
+
+# # # # # # #         personality_file = request.files['personalityFile']
+# # # # # # #         financial_file = request.files['financialFile']
+
+# # # # # # #         # Extract personality data and financial data
+# # # # # # #         responses = extract_responses_from_docx(personality_file)
+# # # # # # #         financial_data = asyncio.run(process_document(financial_file))
+
+# # # # # # #         if not responses or not financial_data:
+# # # # # # #             return jsonify({'message': 'Failed to process one or both of the documents.'}), 400
+
+# # # # # # #         # Determine investment personality
+# # # # # # #         personality = asyncio.run(determine_investment_personality(responses))
+
+# # # # # # #         # Generate investment suggestions based on personality and financial data
+# # # # # # #         suggestions = asyncio.run(generate_investment_suggestions(personality, financial_data))
+
+# # # # # # #         return jsonify({'investmentSuggestions': suggestions}), 200
+
+# # # # # # #     except Exception as e:
+# # # # # # #         print(f"Error in generating investment suggestions: {e}")
+# # # # # # #         return jsonify({'message': 'Internal Server Error'}), 500
+
+
+
+
+
+# # # # # # # @app.route('/upload-personal-details', methods=['POST']) # not necessary
+# # # # # # # def upload_personal_details():
+# # # # # # #     file = request.files['file']
+
+# # # # # # #     if file:
+# # # # # # #         # Process the uploaded file (personal details document)
+# # # # # # #         document_data = asyncio.run(process_document(file))
+        
+# # # # # # #         if isinstance(document_data, tuple) and len(document_data) == 2:
+# # # # # # #             extracted_text, tables_content = document_data
+# # # # # # #             return jsonify({"message": "File processed", "extracted_text": extracted_text})
+        
+# # # # # # #         return jsonify({"message": "Unexpected data format returned from document processing."})
+    
+# # # # # # #     return jsonify({"message": "No file uploaded."})
+
+# # # # # # import logging
+
+# # # # # # @app.route('/investment-personality-assessment', methods=['POST'])
+# # # # # # def investment_personality_assessment():
+# # # # # #     try:
+# # # # # #         # Check if files are present in the request
+# # # # # #         # if 'assessmentFile' not in request.files:
+# # # # # #         #     return jsonify({'message': 'Assessment file is required!'}), 400
+
+# # # # # #         assessment_file = request.files['assessmentFile']
+        
+# # # # # #         # Process the assessment file here (DOCX/PDF)
+# # # # # #         responses = extract_responses_from_docx(assessment_file)
+        
+# # # # # #         if not responses:
+# # # # # #             logging.info("Assessment file not found")
+# # # # # #             return jsonify({'message': 'No responses found in the assessment file.'}), 400
+        
+# # # # # #         # Determine investment personality based on the extracted responses
+# # # # # #         personality = asyncio.run(determine_investment_personality(responses))
+        
+# # # # # #         return jsonify({'investmentPersonality': personality}), 200
+    
+# # # # # #     except Exception as e:
+# # # # # #         logging.info(f"Error in personality assessment: {e}")
+# # # # # #         return jsonify({'message': 'Internal Server Error in Investor Personality'}), 500
+
+# # # # # # # Route to handle generating investment suggestions
+# # # # # # @app.route('/generate-investment-suggestions', methods=['POST'])
+# # # # # # def generate_investment_suggestions():
+# # # # # #     try:
+# # # # # #         # Check if files are present in the request
+# # # # # #         # if 'assessmentFile' not in request.files or 'financialFile' not in request.files:
+# # # # # #         #     return jsonify({'message': 'Both assessment and financial files are required!'}), 400
+# # # # # #         try :
+# # # # # #             assessment_file = request.files['assessmentFile']
+# # # # # #             financial_file = request.files['financialFile']
+# # # # # #             logging.info(" Requested files")
+# # # # # #         except Exception as e:
+# # # # # #             logging.info(" Requested files not passed")
+# # # # # #             return jsonify({'message': f'Error occurred while retrieving files12: {e}'}), 400
+            
+        
+# # # # # #         try :
+# # # # # #             # Extract personality data from assessment file and financial data
+# # # # # #             try:
+# # # # # #                 responses = extract_responses_from_docx(assessment_file)
+# # # # # #             except Exception as e:
+# # # # # #                 logging.info(f"Failed to extract responses from assessment file: {e}")
+# # # # # #                 return jsonify({'message': 'Failed to extract responses from assessment file.'}), 400
+# # # # # #             try:
+# # # # # #                 financial_data = asyncio.run(process_document(financial_file))
+# # # # # #             except Exception as e:
+# # # # # #                 logging.info(f"Failed to process financial file: {e}")
+# # # # # #                 return jsonify({'message': 'Failed to process financial file.'}), 400
+
+# # # # # #             logging.info(f"Received Responses from the file {responses}")
+# # # # # #         except Exception as e:
+# # # # # #             logging.info("Failed to process files")
+# # # # # #             return jsonify({'message': f'Error occurred while processing files: {e}'}), 400
+
+# # # # # #         # if not responses or not financial_data:
+# # # # # #         #     return jsonify({'message': 'Failed to process one or both of the documents.'}), 400
+# # # # # #         try:
+# # # # # #             # Determine investment personality
+# # # # # #             personality = asyncio.run(determine_investment_personality(responses))
+# # # # # #             logging.info(f"\nPersonality of the user is : {personality}")
+# # # # # #         except Exception as e:
+# # # # # #             logging.info("Failed to determine personality")
+# # # # # #             return jsonify({'message': f'Error occurred while determining personality: {e}'}), 400
+        
+# # # # # #         try:
+# # # # # #             # Generate investment suggestions based on personality and financial data
+# # # # # #             suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, financial_data))
+# # # # # #             htmlSuggestions = markdown.markdown(suggestions)
+# # # # # #             logging.info(f"\Suggestions for investor : \n{suggestions}")
+# # # # # #         except Exception as e:
+# # # # # #             logging.info("Failed to generate suggestions")
+# # # # # #             return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 400
+
+# # # # # #         logging.info("Successfully generated")
+# # # # # #         formatSuggestions = markdown_to_text(suggestions)
+# # # # # #         data_extracted = extract_numerical_data(suggestions)
+        
+# # # # # #         min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # # #                         [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # # #         max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+# # # # # #                         [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+# # # # # #         # Normalize allocations
+# # # # # #         min_allocations = normalize_allocations(min_allocations)
+# # # # # #         max_allocations = normalize_allocations(max_allocations)
+
+# # # # # #         # Update Bar Chart Data
+# # # # # #         bar_chart_data = {
+# # # # # #             'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# # # # # #             'datasets': [{
+# # # # # #                 'label': 'Min Allocation',
+# # # # # #                 'data': min_allocations,
+# # # # # #                 'backgroundColor': 'skyblue'
+# # # # # #             },
+# # # # # #             {
+# # # # # #                 'label': 'Max Allocation',
+# # # # # #                 'data': max_allocations,
+# # # # # #                 'backgroundColor': 'lightgreen'
+# # # # # #             }]
+# # # # # #         }
+
+# # # # # #         # Similar changes can be made for the Pie Chart Data:
+# # # # # #         all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+# # # # # #         num_labels = len(all_labels)
+# # # # # #         max_allocations_for_pie = normalize_allocations(
+# # # # # #             [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # # #             [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+# # # # # #         )
+        
+# # # # # #         # Generate colors based on the number of labels
+# # # # # #         dynamic_colors = generate_colors(num_labels)
+
+# # # # # #         # Update Pie Chart Data
+# # # # # #         pie_chart_data = {
+# # # # # #             'labels': all_labels,
+# # # # # #             'datasets': [{
+# # # # # #                 'label': 'Investment Allocation',
+# # # # # #                 'data': max_allocations_for_pie,
+# # # # # #                 'backgroundColor': dynamic_colors,
+# # # # # #                 'hoverOffset': 4
+# # # # # #             }]
+# # # # # #         }
+        
+# # # # # #         # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+# # # # # #         # num_labels = len(all_labels)
+        
+        
+        
+# # # # # #         # # Pie Chart Data
+# # # # # #         # pie_chart_data = {
+# # # # # #         #     'labels': all_labels,
+# # # # # #         #     'datasets': [{
+# # # # # #         #         'label': 'Investment Allocation',
+# # # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) 
+# # # # # #         #                 for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # # #         #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) 
+# # # # # #         #                 for label in data_extracted['Conservative Investments']],
+# # # # # #         #         'backgroundColor': dynamic_colors,  # Use the dynamically generated colors
+# # # # # #         #         'hoverOffset': 4
+# # # # # #         #     }]
+# # # # # #         # }
+        
+        
+# # # # # #         #  # Bar Chart Data
+# # # # # #         # bar_chart_data = {
+# # # # # #         #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+# # # # # #         #     'datasets': [{
+# # # # # #         #         'label': 'Min Allocation',
+# # # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # # #         #                 [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']],
+# # # # # #         #         'backgroundColor': 'skyblue'
+# # # # # #         #     },
+# # # # # #         #     {
+# # # # # #         #         'label': 'Max Allocation',
+# # # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # # #         #                 [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']],
+# # # # # #         #         'backgroundColor': 'lightgreen'
+# # # # # #         #     }]
+# # # # # #         # }
+        
+        
+# # # # # #         # pie_chart_data = { # 1st version
+# # # # # #         #     'labels': list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys()),
+# # # # # #         #     'datasets': [{
+# # # # # #         #         'label': 'Investment Allocation',
+# # # # # #         #         'data': [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+# # # # # #         #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']],
+# # # # # #         #         'backgroundColor': ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 205, 86)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'],
+# # # # # #         #         'hoverOffset': 4
+# # # # # #         #     }]
+# # # # # #         # }
+
+        
+# # # # # #         # Prepare the data for the line chart with inflation adjustment
+# # # # # #         initial_investment = 10000
+# # # # # #         # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
+# # # # # #         combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+# # # # # #         print(f"\nThe combined chart data is : {combined_chart_data}")
+# # # # # #         # return jsonify({
+# # # # # #         #     "status": 200,
+# # # # # #         #     "message": "Success",
+# # # # # #         #     "investmentSuggestions": htmlSuggestions,
+# # # # # #         #     "pieChartData": pie_chart_data,
+# # # # # #         #     "barChartData": bar_chart_data
+# # # # # #         # }), 200
+        
+# # # # # #         return jsonify({
+# # # # # #             "status": 200,
+# # # # # #             "message": "Success",
+# # # # # #             "investmentSuggestions": htmlSuggestions,
+# # # # # #             "pieChartData": pie_chart_data,
+# # # # # #             "barChartData": bar_chart_data,
+# # # # # #             "compoundedChartData":combined_chart_data
+# # # # # #         }), 200
+
+# # # # # #     except Exception as e:
+# # # # # #         logging.info(f"Error in generating investment suggestions: {e}")
+# # # # # #         return jsonify({'message': 'Internal Server Error in Generating responses'}), 500
+
+
+
+
+# # # # # # # Run the Flask application
+# # # # # # if __name__ == '__main__':
+# # # # # #     app.run(host='0.0.0.0',debug=True)
+
+
+
+
+
+
+
+# # # # # # # last updated streamlit code :
+# # # # # # # import streamlit as st 
 # # # # # # # import pandas as pd
 # # # # # # # import matplotlib.pyplot as plt
 
@@ -19398,8 +22726,10 @@ if __name__ == '__main__':
 # # # # # # #                 Time Horizon and Expected Returns:
 
 # # # # # # #                 Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
-# # # # # # #                 Minimum Expected Annual Return: 4% - 6% Maximum Expected Annual Return: 8% - 10% Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, 
-# # # # # # #                 a 10,000 investment could growto approximately 17,908 in 10 years. Minimum Expected Growth in Dollars: 
+# # # # # # #                 Minimum Expected Annual Return: 4% - 6% 
+# # # # # # #                 Maximum Expected Annual Return: 8% - 10% 
+# # # # # # #                 Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, a 10,000 investment could grow to approximately 17,908 in 10 years.
+# # # # # # #                 Minimum Expected Growth in Dollars: 
                 
 # # # # # # #                 4,000−6,000 (over 10 years) Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
 
@@ -19445,87 +22775,107 @@ if __name__ == '__main__':
 
 
 
-# # # # # # # # Create InfoGraphics :
+# # # # # # # # async def process_document(file_path):
+# # # # # # # #     try:
+# # # # # # # #         print("Processing the document")
+# # # # # # # #         file_type = filetype.guess(file_path)
+# # # # # # # #         if file_type is not None:
+# # # # # # # #             if file_type.mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+# # # # # # # #                 # return extract_text_from_word(file_path)
+# # # # # # # #                 return extract_text_and_tables_from_word(file_path)
+# # # # # # # #             elif file_type.mime == "application/pdf":
+# # # # # # # #                 return extract_text_from_pdf(file_path)
+# # # # # # # #         return None
+# # # # # # # #     except Exception as e:
+# # # # # # # #         print(f"Error processing document: {e}")
+# # # # # # # #         return None
 
 
-# # # # # # # # import re
-# # # # # # # # import matplotlib.pyplot as plt
-# # # # # # # # import seaborn as sns
-# # # # # # # # from collections import defaultdict
-
-# # # # # # # # def extract_numerical_data(response):
-# # # # # # # #     # Extract percentage ranges, dollar values, and other numbers from the text
-# # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
-# # # # # # # #     data = defaultdict(list)
-    
-# # # # # # # #     for match in pattern.findall(response):
-# # # # # # # #         category, values = match
-# # # # # # # #         values = values.replace('$', '').replace(',', '')
-        
-# # # # # # # #         if '-' in values:
-# # # # # # # #             if '%' in values:
-# # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
-# # # # # # # #             else:
-# # # # # # # #                 min_val, max_val = map(float, values.split('-'))
-# # # # # # # #         else:
-# # # # # # # #             min_val = max_val = float(values.replace('%', ''))
-
-# # # # # # # #         data[category.strip()].append((min_val, max_val))
-    
-# # # # # # # #     return data
-
-# # # # # # # # def create_bar_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(10, 6))
-# # # # # # # #     plt.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
-# # # # # # # #     plt.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
-
-# # # # # # # #     plt.xlabel('Values')
-# # # # # # # #     plt.ylabel('Categories')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     plt.legend()
-# # # # # # # #     plt.show()
-
-# # # # # # # # def create_pie_chart(data, title):
-# # # # # # # #     labels = list(data.keys())
-# # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(8, 8))
-# # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
-# # # # # # # #     plt.axis('equal')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     plt.show()
-
-# # # # # # # # def create_expected_return_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(10, 6))
-# # # # # # # #     plt.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
-# # # # # # # #     plt.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
-    
-# # # # # # # #     plt.ylabel('Values')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     plt.legend()
-# # # # # # # #     plt.show()
-
-# # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
-# # # # # # # #     # Extract the data
-# # # # # # # #     data = extract_numerical_data(response)
-    
-# # # # # # # #     # Generate the charts
-# # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
-# # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
-# # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
+# # # # # # # # async def extract_text_from_pdf(pdf_file_path):
+# # # # # # # #     try:
+# # # # # # # #         print("Processing pdf file")
+# # # # # # # #         with open(pdf_file_path, "rb") as pdf_file:
+# # # # # # # #             pdf_reader = PyPDF2.PdfFileReader(pdf_file)
+# # # # # # # #             text_content = []
+# # # # # # # #             for page_num in range(pdf_reader.numPages):
+# # # # # # # #                 page = pdf_reader.getPage(page_num)
+# # # # # # # #                 text_content.append(page.extract_text())
+# # # # # # # #             return "\n".join(text_content)
+# # # # # # # #     except Exception as e:
+# # # # # # # #         print(f"Error extracting text from PDF: {e}")
+# # # # # # # #         return None
 
 
 
+# # # # # # # # async def extract_text_and_tables_from_word(docx_file_path):
+# # # # # # # #     """
+# # # # # # # #     Extracts text and tables from a Word document (.docx).
+
+# # # # # # # #     Args:
+# # # # # # # #         docx_file_path (str): Path to the Word document file.
+
+# # # # # # # #     Returns:
+# # # # # # # #         tuple: Extracted text content and tables from the document.
+# # # # # # # #     """
+# # # # # # # #     try:
+# # # # # # # #         print("Extracting text and tables from word file")
+# # # # # # # #         doc = docx.Document(docx_file_path)
+# # # # # # # #         text_content = []
+# # # # # # # #         tables_content = []
+
+# # # # # # # #         for para in doc.paragraphs:
+# # # # # # # #             text_content.append(para.text)
+
+# # # # # # # #         for table in doc.tables:
+# # # # # # # #             table_data = []
+# # # # # # # #             for row in table.rows:
+# # # # # # # #                 row_data = []
+# # # # # # # #                 for cell in row.cells:
+# # # # # # # #                     row_data.append(cell.text.strip())
+# # # # # # # #                 table_data.append(row_data)
+# # # # # # # #             tables_content.append(table_data)
+# # # # # # # #         print("Extracted text from word file")
+# # # # # # # #         return "\n".join(text_content), tables_content
+# # # # # # # #     except Exception as e:
+# # # # # # # #         print(f"Error extracting text and tables from Word document: {e}")
+# # # # # # # #         return None, None
 
 
+# # # # # # # # def parse_financial_data(text_content, tables_content):
+# # # # # # # #     assets = {}
+# # # # # # # #     liabilities = {}
+
+# # # # # # # #     # Extract assets and liabilities from tables
+# # # # # # # #     if tables_content:
+# # # # # # # #         for table in tables_content:
+# # # # # # # #             for row in table:
+# # # # # # # #                 # Basic keyword matching (e.g., 'Asset' or 'Liability' detection)
+# # # # # # # #                 if any("asset" in cell.lower() for cell in row):
+# # # # # # # #                     key = row[0]
+# # # # # # # #                     value = float(row[1].replace('$', '').replace(',', ''))
+# # # # # # # #                     assets[key] = value
+# # # # # # # #                 elif any("liability" in cell.lower() for cell in row):
+# # # # # # # #                     key = row[0]
+# # # # # # # #                     value = float(row[1].replace('$', '').replace(',', ''))
+# # # # # # # #                     liabilities[key] = value
+
+# # # # # # # #     # Additional parsing logic can be added here based on the document structure
+
+# # # # # # # #     return assets, liabilities
+
+# # # # # # # # # Step 3: Plot pie chart
+# # # # # # # # def plot_pie_chart(assets, liabilities):
+# # # # # # # #     total_assets = sum(assets.values())
+# # # # # # # #     total_liabilities = sum(liabilities.values())
+
+# # # # # # # #     labels = ['Assets', 'Liabilities']
+# # # # # # # #     sizes = [total_assets, total_liabilities]
+
+# # # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
+# # # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
+# # # # # # # #     ax.set_title('Assets vs Liabilities Distribution')
+
+# # # # # # # #     st.pyplot(fig)
 
 # # # # # # # async def process_document(file_path):
 # # # # # # #     try:
@@ -19533,16 +22883,16 @@ if __name__ == '__main__':
 # # # # # # #         file_type = filetype.guess(file_path)
 # # # # # # #         if file_type is not None:
 # # # # # # #             if file_type.mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-# # # # # # #                 # return extract_text_from_word(file_path)
-# # # # # # #                 return extract_text_and_tables_from_word(file_path)
+# # # # # # #                 # Await the coroutine to extract text and tables
+# # # # # # #                 return await extract_text_and_tables_from_word(file_path)
 # # # # # # #             elif file_type.mime == "application/pdf":
-# # # # # # #                 return extract_text_from_pdf(file_path)
+# # # # # # #                 return await extract_text_from_pdf(file_path)
 # # # # # # #         return None
 # # # # # # #     except Exception as e:
 # # # # # # #         print(f"Error processing document: {e}")
 # # # # # # #         return None
 
-
+# # # # # # # # Async function to extract text from a PDF file
 # # # # # # # async def extract_text_from_pdf(pdf_file_path):
 # # # # # # #     try:
 # # # # # # #         print("Processing pdf file")
@@ -19557,18 +22907,8 @@ if __name__ == '__main__':
 # # # # # # #         print(f"Error extracting text from PDF: {e}")
 # # # # # # #         return None
 
-
-
+# # # # # # # # Async function to extract text and tables from a Word document
 # # # # # # # async def extract_text_and_tables_from_word(docx_file_path):
-# # # # # # #     """
-# # # # # # #     Extracts text and tables from a Word document (.docx).
-
-# # # # # # #     Args:
-# # # # # # #         docx_file_path (str): Path to the Word document file.
-
-# # # # # # #     Returns:
-# # # # # # #         tuple: Extracted text content and tables from the document.
-# # # # # # #     """
 # # # # # # #     try:
 # # # # # # #         print("Extracting text and tables from word file")
 # # # # # # #         doc = docx.Document(docx_file_path)
@@ -19591,6 +22931,8 @@ if __name__ == '__main__':
 # # # # # # #     except Exception as e:
 # # # # # # #         print(f"Error extracting text and tables from Word document: {e}")
 # # # # # # #         return None, None
+
+
 
 # # # # # # # async def validate_document_content(text, tables):
 # # # # # # #     """
@@ -19686,490 +23028,16 @@ if __name__ == '__main__':
 # # # # # # #         st.error("Failed to create the retrieval chain. Please upload a valid document.")
 
 
-# # # # # # # # Generating Infographics : however got st.pyplot warnings:
-
-# # # # # # # # import re
-# # # # # # # # import matplotlib.pyplot as plt
-# # # # # # # # import seaborn as sns
-# # # # # # # # from collections import defaultdict
-# # # # # # # # import streamlit as st
-
-# # # # # # # # def extract_numerical_data(response):
-# # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
-# # # # # # # #     data = defaultdict(list)
-    
-# # # # # # # #     for match in pattern.findall(response):
-# # # # # # # #         category, values = match
-# # # # # # # #         values = values.replace('$', '').replace(',', '')
-        
-# # # # # # # #         if '-' in values:
-# # # # # # # #             if '%' in values:
-# # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
-# # # # # # # #             else:
-# # # # # # # #                 min_val, max_val = map(float, values.split('-'))
-# # # # # # # #         else:
-# # # # # # # #             min_val = max_val = float(values.replace('%', ''))
-
-# # # # # # # #         data[category.strip()].append((min_val, max_val))
-    
-# # # # # # # #     return data
-
-# # # # # # # # def create_bar_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(10, 6))
-# # # # # # # #     plt.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
-# # # # # # # #     plt.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
-
-# # # # # # # #     plt.xlabel('Values')
-# # # # # # # #     plt.ylabel('Categories')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     plt.legend()
-# # # # # # # #     st.pyplot()  # Display the plot in Streamlit
-
-# # # # # # # # def create_pie_chart(data, title):
-# # # # # # # #     labels = list(data.keys())
-# # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(8, 8))
-# # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
-# # # # # # # #     plt.axis('equal')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     st.pyplot()  # Display the plot in Streamlit
-
-# # # # # # # # def create_expected_return_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     plt.figure(figsize=(10, 6))
-# # # # # # # #     plt.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
-# # # # # # # #     plt.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
-    
-# # # # # # # #     plt.ylabel('Values')
-# # # # # # # #     plt.title(title)
-# # # # # # # #     plt.legend()
-# # # # # # # #     st.pyplot()  # Display the plot in Streamlit
-
-# # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
-# # # # # # # #     data = extract_numerical_data(response)
-    
-# # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
-# # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
-# # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
-
-
-
-
-# # # # # # # # # Genrating Inforgaphics :
-# # # # # # # # # generated unreadable graphs:
-
-# # # # # # # # import re
-# # # # # # # # import matplotlib.pyplot as plt
-# # # # # # # # import seaborn as sns
-# # # # # # # # from collections import defaultdict
-# # # # # # # # import streamlit as st
-
-# # # # # # # # def extract_numerical_data(response):
-# # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
-# # # # # # # #     data = defaultdict(list)
-    
-# # # # # # # #     for match in pattern.findall(response):
-# # # # # # # #         category, values = match
-# # # # # # # #         values = values.replace('$', '').replace(',', '')
-        
-# # # # # # # #         if '-' in values:
-# # # # # # # #             if '%' in values:
-# # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
-# # # # # # # #             else:
-# # # # # # # #                 min_val, max_val = map(float, values.split('-'))
-# # # # # # # #         else:
-# # # # # # # #             min_val = max_val = float(values.replace('%', ''))
-
-# # # # # # # #         data[category.strip()].append((min_val, max_val))
-    
-# # # # # # # #     return data
-
-# # # # # # # # def create_bar_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     fig, ax = plt.subplots(figsize=(10, 6))
-# # # # # # # #     ax.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
-# # # # # # # #     ax.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
-
-# # # # # # # #     ax.set_xlabel('Values')
-# # # # # # # #     ax.set_ylabel('Categories')
-# # # # # # # #     ax.set_title(title)
-# # # # # # # #     ax.legend()
-# # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
-
-# # # # # # # # def create_pie_chart(data, title):
-# # # # # # # #     labels = list(data.keys())
-# # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
-
-# # # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
-# # # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
-# # # # # # # #     ax.axis('equal')
-# # # # # # # #     ax.set_title(title)
-# # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
-
-# # # # # # # # def create_expected_return_chart(data, title):
-# # # # # # # #     categories = list(data.keys())
-# # # # # # # #     min_values = [v[0][0] for v in data.values()]
-# # # # # # # #     max_values = [v[0][1] for v in data.values()]
-
-# # # # # # # #     fig, ax = plt.subplots(figsize=(10, 6))
-# # # # # # # #     width = 0.35  # Width of the bars
-
-# # # # # # # #     ax.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
-# # # # # # # #     ax.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
-    
-# # # # # # # #     ax.set_ylabel('Values')
-# # # # # # # #     ax.set_title(title)
-# # # # # # # #     ax.legend()
-# # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
-
-# # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
-# # # # # # # #     data = extract_numerical_data(response)
-    
-# # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
-# # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
-# # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
-
-
-# # # # # # # import re
-# # # # # # # import matplotlib.pyplot as plt
-# # # # # # # import seaborn as sns
-# # # # # # # import streamlit as st
-
-# # # # # # # # Function to extract numerical data from the response text
-# # # # # # # # def extract_numerical_data(response, investment_personality):
-# # # # # # # #     investment_types = [investment_personality]  # Wrap the personality in a list
-# # # # # # # #     allocation = []
-# # # # # # # #     returns = []
-# # # # # # # #     time_horizon = []
-
-# # # # # # # #     # Regex patterns to match relevant data
-# # # # # # # #     allocation_pattern = re.compile(r'Percentage Allocation:.*?(\d+)%', re.IGNORECASE)
-# # # # # # # #     return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
-# # # # # # # #     time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
-
-# # # # # # # #     # Extracting allocation percentages
-# # # # # # # #     allocation_matches = allocation_pattern.findall(response)
-# # # # # # # #     allocation = [int(a) for a in allocation_matches]
-
-# # # # # # # #     # Extracting expected returns
-# # # # # # # #     return_matches = return_pattern.findall(response)
-# # # # # # # #     returns = [int(r) for r in return_matches]
-
-# # # # # # # #     # Extracting time horizon
-# # # # # # # #     time_matches = time_pattern.findall(response)
-# # # # # # # #     time_horizon = [int(t) for t in time_matches]
-
-# # # # # # # #     return investment_types, allocation, returns, time_horizon
-
-# # # # # # # # Function to create a pie chart for asset allocation
-# # # # # # # # def create_pie_chart(investment_types, allocation):
-# # # # # # # #     if not investment_types or not allocation:
-# # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
-# # # # # # # #         return
-
-# # # # # # # #     plt.figure(figsize=(8, 6))
-# # # # # # # #     plt.pie(allocation, labels=investment_types, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(investment_types)))
-# # # # # # # #     plt.title('Asset Allocation')
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # def create_pie_chart(investment_types, allocation):
-# # # # # # # #     # Check if the lengths of the lists match
-# # # # # # # #     if not investment_types or not allocation:
-# # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
-# # # # # # # #         return
-
-# # # # # # # #     if len(investment_types) != len(allocation):
-# # # # # # # #         st.warning("Mismatch between investment types and allocation data.")
-# # # # # # # #         st.write(f"Investment types: {investment_types}")
-# # # # # # # #         st.write(f"Allocation: {allocation}")
-# # # # # # # #         return
-
-# # # # # # # #     plt.figure(figsize=(8, 6))
-# # # # # # # #     plt.pie(allocation, labels=investment_types, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(investment_types)))
-# # # # # # # #     plt.title('Asset Allocation')
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Function to create a bar chart for expected returns
-# # # # # # # # def create_compounded_return_chart(returns, time_horizon):
-# # # # # # # #     if not returns or not time_horizon:
-# # # # # # # #         st.warning("Not enough data for Compounded Returns Bar Chart.")
-# # # # # # # #         return
-
-# # # # # # # #     # Ensure we have at least two time horizons for the plot (e.g., 5 years and 10 years)
-# # # # # # # #     if len(time_horizon) < 2:
-# # # # # # # #         time_horizon.append(time_horizon[0] * 2)  # Add a second time horizon by doubling the first
-
-# # # # # # # #     years = ['5 Years', '10 Years']
-# # # # # # # #     plt.figure(figsize=(10, 6))
-
-# # # # # # # #     for i, rate in enumerate(returns):
-# # # # # # # #         compounded_5_years = ((1 + rate / 100) ** 5 - 1) * 100
-# # # # # # # #         compounded_10_years = ((1 + rate / 100) ** 10 - 1) * 100
-# # # # # # # #         plt.bar(years, [compounded_5_years, compounded_10_years], color=['blue', 'green'][i % 2], alpha=0.7, label=f'Return Rate {rate}%')
-
-# # # # # # # #     plt.xlabel('Time Horizon')
-# # # # # # # #     plt.ylabel('Returns (%)')
-# # # # # # # #     plt.title('Compounded Returns over Different Time Horizons')
-# # # # # # # #     plt.legend()
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Main function to generate infographics
-# # # # # # # # def generate_infographics(response_text, investment_personality):
-# # # # # # # #     investment_types, allocation, returns, time_horizon = extract_numerical_data(response_text, investment_personality)
-
-# # # # # # # #     st.write(f"Investment Type: {investment_types}")
-# # # # # # # #     st.write(f"Allocation: {allocation}")
-# # # # # # # #     st.write(f"Returns: {returns}")
-# # # # # # # #     st.write(f"Time Horizon: {time_horizon}")
-
-# # # # # # # #     create_pie_chart(investment_types, allocation)
-# # # # # # # #     create_compounded_return_chart(returns, time_horizon)
-
-# # # # # # # import re
-# # # # # # # import matplotlib.pyplot as plt
-# # # # # # # import seaborn as sns
-# # # # # # # import streamlit as st
-
-# # # # # # # # Function to extract numerical data from the response text
-# # # # # # # # def extract_numerical_data(response):
-# # # # # # # #     allocation_pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*(\d+)%', re.IGNORECASE)
-# # # # # # # #     return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
-# # # # # # # #     time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
-
-# # # # # # # #     allocations = {}
-# # # # # # # #     returns = []
-# # # # # # # #     time_horizon = []
-
-# # # # # # # #     # Extracting allocations
-# # # # # # # #     allocation_matches = allocation_pattern.findall(response)
-# # # # # # # #     for match in allocation_matches:
-# # # # # # # #         investment_type, percentage = match
-# # # # # # # #         allocations[investment_type.strip()] = int(percentage)
-
-# # # # # # # #     # Extracting returns
-# # # # # # # #     return_matches = return_pattern.findall(response)
-# # # # # # # #     returns = [int(r) for r in return_matches]
-
-# # # # # # # #     # Extracting time horizon
-# # # # # # # #     time_matches = time_pattern.findall(response)
-# # # # # # # #     time_horizon = [int(t) for t in time_matches]
-
-# # # # # # # #     return allocations, returns, time_horizon
-
-# # # # # # # # # Function to create a pie chart for asset allocation
-# # # # # # # # def create_pie_chart(allocations):
-# # # # # # # #     if not allocations:
-# # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
-# # # # # # # #         return
-
-# # # # # # # #     labels = list(allocations.keys())
-# # # # # # # #     sizes = list(allocations.values())
-
-# # # # # # # #     plt.figure(figsize=(8, 6))
-# # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
-# # # # # # # #     plt.title('Asset Allocation')
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Function to create a bar chart for expected returns
-# # # # # # # # def create_compounded_return_chart(returns, time_horizon):
-# # # # # # # #     if not returns or not time_horizon:
-# # # # # # # #         st.warning("Not enough data for Compounded Returns Bar Chart.")
-# # # # # # # #         return
-
-# # # # # # # #     years = ['5 Years', '10 Years']
-# # # # # # # #     plt.figure(figsize=(10, 6))
-
-# # # # # # # #     for i, rate in enumerate(returns):
-# # # # # # # #         plt.bar(years, [rate * 5, rate * 10], color=['blue', 'green'][i % 2], alpha=0.7, label=f'Return Rate {rate}%')
-
-# # # # # # # #     plt.xlabel('Time Horizon')
-# # # # # # # #     plt.ylabel('Returns')
-# # # # # # # #     plt.title('Compounded Returns over Different Time Horizons')
-# # # # # # # #     plt.legend()
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Main function to generate infographics
-# # # # # # # # def generate_infographics(response_text):
-# # # # # # # #     allocations, returns, time_horizon = extract_numerical_data(response_text)
-
-# # # # # # # #     st.write(f"Allocations: {allocations}")
-# # # # # # # #     st.write(f"Returns: {returns}")
-# # # # # # # #     st.write(f"Time Horizon: {time_horizon}")
-
-# # # # # # # #     create_pie_chart(allocations)
-# # # # # # # #     create_compounded_return_chart(returns, time_horizon)
-
-
-# # # # # # # # Genrate Infographics : static code :
-
-# # # # # # # # import re
-# # # # # # # # import matplotlib.pyplot as plt
-# # # # # # # # import seaborn as sns
-# # # # # # # # import streamlit as st
-
-# # # # # # # # # Function to extract numerical data from the response text
-# # # # # # # # def extract_numerical_data(response, investment_personality):
-# # # # # # # #     # Define default allocation percentages for each investment type based on personality
-# # # # # # # #     default_allocations = {
-# # # # # # # #         'Conservative Investor': {
-# # # # # # # #             'Growth-Oriented Investments': {'min': 20, 'max': 30},
-# # # # # # # #             'Conservative Investments': {'min': 70, 'max': 80},
-# # # # # # # #             'Growth Types': ['stocks', 'short term bonds', 'low-volatility ETFs'],
-# # # # # # # #             'Conservative Types': ['bonds', 'ETFs', 'mutual funds', 'real estate (REITs)']
-# # # # # # # #         },
-# # # # # # # #         'Moderate Investor': {
-# # # # # # # #             'Growth-Oriented Investments': {'min': 50, 'max': 60},
-# # # # # # # #             'Conservative Investments': {'min': 40, 'max': 50},
-# # # # # # # #             'Growth Types': ['index funds', 'mutual funds', 'ETFs', 'stocks'],
-# # # # # # # #             'Conservative Types': ['cash', 'REITs']
-# # # # # # # #         },
-# # # # # # # #         'Aggressive Investor': {
-# # # # # # # #             'Growth-Oriented Investments': {'min': 70, 'max': 80},
-# # # # # # # #             'Conservative Investments': {'min': 20, 'max': 30},
-# # # # # # # #             'Growth Types': ['stocks', 'ETFs', 'mutual funds', 'cryptocurrency'],
-# # # # # # # #             'Conservative Types': ['bonds', 'real estate']
-# # # # # # # #         }
-# # # # # # # #     }
-
-# # # # # # # #     allocations = {'Growth-Oriented Investments': {}, 'Conservative Investments': {}}
-
-# # # # # # # #     # Attempt to dynamically extract allocation percentages from the response
-# # # # # # # #     try:
-# # # # # # # #         # Search for allocation percentages in the response text
-# # # # # # # #         # growth_pattern = r"Growth-Oriented Investments: (\d+)%"
-# # # # # # # #         growth_pattern = re.compile("Growth-Oriented Investments: (\d+)%",re.IGNORECASE)
-# # # # # # # #         # conservative_pattern = r"Conservative Investments: (\d+)%"
-# # # # # # # #         conservative_pattern = re.compile("Conservative Investments: (\d+)%",re.IGNORECASE)
-
-# # # # # # # #         # allocation_pattern = re.compile(r'Percentage Allocation:.*?(\d+)%', re.IGNORECASE)
-# # # # # # # #         # return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
-# # # # # # # #         # time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
-# # # # # # # #         growth_match = re.search(growth_pattern, response)
-# # # # # # # #         conservative_match = re.search(conservative_pattern, response)
-
-# # # # # # # #         if growth_match and conservative_match:
-# # # # # # # #             print("Growth and conservative Patttern is found, original logic is working properly")
-# # # # # # # #             growth_allocation = int(growth_match.group(1))
-# # # # # # # #             conservative_allocation = int(conservative_match.group(1))
-# # # # # # # #         elif growth_pattern and conservative_pattern:
-# # # # # # # #             print("Growth and conservative Patttern is found")
-# # # # # # # #             # growth_allocation = int(growth_match.group(1))
-# # # # # # # #             # conservative_allocation = int(conservative_match.group(1))
-# # # # # # # #         else:
-# # # # # # # #             # Use default values if specific percentages not found
-# # # # # # # #             allocation_info = default_allocations[investment_personality]
-# # # # # # # #             growth_range = allocation_info['Growth-Oriented Investments']
-# # # # # # # #             conservative_range = allocation_info['Conservative Investments']
-
-# # # # # # # #             growth_allocation = (growth_range['min'] + growth_range['max']) / 2
-# # # # # # # #             conservative_allocation = (conservative_range['min'] + conservative_range['max']) / 2
-
-# # # # # # # #         # Distribute equally among types
-# # # # # # # #         growth_types = default_allocations[investment_personality]['Growth Types']
-# # # # # # # #         conservative_types = default_allocations[investment_personality]['Conservative Types']
-
-# # # # # # # #         for g_type in growth_types:
-# # # # # # # #             allocations['Growth-Oriented Investments'][g_type] = growth_allocation / len(growth_types)
-
-# # # # # # # #         for c_type in conservative_types:
-# # # # # # # #             allocations['Conservative Investments'][c_type] = conservative_allocation / len(conservative_types)
-
-# # # # # # # #     except Exception as e:
-# # # # # # # #         st.write(f"Error extracting data: {e}")
-# # # # # # # #         # Fallback to default allocation if error occurs
-# # # # # # # #         allocation_info = default_allocations[investment_personality]
-# # # # # # # #         growth_range = allocation_info['Growth-Oriented Investments']
-# # # # # # # #         conservative_range = allocation_info['Conservative Investments']
-
-# # # # # # # #         growth_allocation = (growth_range['min'] + growth_range['max']) / 2
-# # # # # # # #         conservative_allocation = (conservative_range['min'] + conservative_range['max']) / 2
-
-# # # # # # # #         # Distribute equally among types
-# # # # # # # #         growth_types = allocation_info['Growth Types']
-# # # # # # # #         conservative_types = allocation_info['Conservative Types']
-
-# # # # # # # #         for g_type in growth_types:
-# # # # # # # #             allocations['Growth-Oriented Investments'][g_type] = growth_allocation / len(growth_types)
-
-# # # # # # # #         for c_type in conservative_types:
-# # # # # # # #             allocations['Conservative Investments'][c_type] = conservative_allocation / len(conservative_types)
-    
-# # # # # # # #     return allocations
-
-# # # # # # # # # Function to create pie charts for allocations
-# # # # # # # # def create_pie_charts(allocations):
-# # # # # # # #     for key in allocations:
-# # # # # # # #         plt.figure(figsize=(8, 6))
-# # # # # # # #         labels = list(allocations[key].keys())
-# # # # # # # #         sizes = list(allocations[key].values())
-        
-# # # # # # # #         plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
-# # # # # # # #         plt.title(f'{key} Allocation')
-# # # # # # # #         st.pyplot(plt)
-# # # # # # # #         plt.clf()
-
-# # # # # # # # # Function to plot overall split between Growth and Conservative investments
-# # # # # # # # def plot_overall_split(allocations):
-# # # # # # # #     plt.figure(figsize=(8, 6))
-# # # # # # # #     total_growth = sum(allocations['Growth-Oriented Investments'].values())
-# # # # # # # #     total_conservative = sum(allocations['Conservative Investments'].values())
-    
-# # # # # # # #     plt.bar(['Growth-Oriented Investments', 'Conservative Investments'], [total_growth, total_conservative], color=['blue', 'green'])
-# # # # # # # #     plt.ylabel('Percentage')
-# # # # # # # #     plt.title('Overall Investment Split')
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Function to create compounded return chart
-# # # # # # # # def create_compounded_return_chart(returns, time_horizon):
-# # # # # # # #     plt.figure(figsize=(8, 6))
-# # # # # # # #     years = list(range(1, time_horizon + 1))
-# # # # # # # #     compounded_returns = [returns[0] * (1 + returns[1] / 100) ** year for year in years]
-    
-# # # # # # # #     plt.plot(years, compounded_returns, marker='o', linestyle='-', color='blue')
-# # # # # # # #     plt.xlabel('Years')
-# # # # # # # #     plt.ylabel('Returns')
-# # # # # # # #     plt.title('Compounded Returns Over Time')
-# # # # # # # #     st.pyplot(plt)
-# # # # # # # #     plt.clf()
-
-# # # # # # # # # Main function to generate infographics
-# # # # # # # # def generate_infographics(response_text, investment_personality):
-# # # # # # # #     allocations = extract_numerical_data(response_text, investment_personality)
-
-# # # # # # # #     st.write(f"Allocations: {allocations}")
-
-# # # # # # # #     create_pie_charts(allocations)
-# # # # # # # #     plot_overall_split(allocations)
-
-# # # # # # # #     # Example values for returns and time horizon
-# # # # # # # #     example_returns = [10000, 8]  # Principal amount and annual return rate
-# # # # # # # #     example_time_horizon = 10     # Number of years
-# # # # # # # #     create_compounded_return_chart(example_returns, example_time_horizon)
-
 
 # # # # # # # # Generate Infographics : Best Code so far:
 
+
+# # # # # # # import seaborn as sns
 # # # # # # # import re
 # # # # # # # from collections import defaultdict
 # # # # # # # import matplotlib.pyplot as plt
 # # # # # # # import streamlit as st
+# # # # # # # import numpy as np
 
 # # # # # # # def extract_numerical_data(response):
 # # # # # # #     # Define patterns to match different sections and their respective allocations
@@ -20239,12 +23107,44 @@ if __name__ == '__main__':
 
 # # # # # # #     return data
 
-# # # # # # # def plot_investment_allocations(data):
-# # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(14, 7))
-# # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(18, 9))
 
-# # # # # # #     # fig, axes = plt.subplots(2, 1, figsize=(18, 9))
-# # # # # # #     fig, axes = plt.subplots(2, 1, figsize=(28, 15))
+# # # # # # # # def plot_investment_allocations(data):
+# # # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+# # # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(18, 9))
+
+# # # # # # # #     # fig, axes = plt.subplots(2, 1, figsize=(18, 9))
+# # # # # # # #     fig, axes = plt.subplots(2, 1, figsize=(28, 15))
+
+# # # # # # # #     # Plot Growth-Oriented Investments
+# # # # # # # #     growth_data = data['Growth-Oriented Investments']
+# # # # # # # #     growth_labels = list(growth_data.keys())
+# # # # # # # #     growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
+# # # # # # # #     growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
+
+# # # # # # # #     axes[0].barh(growth_labels, growth_min, color='skyblue', label='Min Allocation')
+# # # # # # # #     axes[0].barh(growth_labels, growth_max, left=growth_min, color='lightgreen', label='Max Allocation')
+# # # # # # # #     axes[0].set_title('Growth-Oriented Investments')
+# # # # # # # #     axes[0].set_xlabel('Percentage Allocation')
+# # # # # # # #     axes[0].legend()
+
+# # # # # # # #     # Plot Conservative Investments
+# # # # # # # #     conservative_data = data['Conservative Investments']
+# # # # # # # #     conservative_labels = list(conservative_data.keys())
+# # # # # # # #     conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
+# # # # # # # #     conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
+
+# # # # # # # #     axes[1].barh(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
+# # # # # # # #     axes[1].barh(conservative_labels, conservative_max, left=conservative_min, color='lightgreen', label='Max Allocation')
+# # # # # # # #     axes[1].set_title('Conservative Investments')
+# # # # # # # #     axes[1].set_xlabel('Percentage Allocation')
+# # # # # # # #     axes[1].legend()
+
+# # # # # # # #     plt.tight_layout()
+# # # # # # # #     return fig
+
+# # # # # # # def plot_investment_allocations(data):
+# # # # # # #     # Create subplots with a large figure size
+# # # # # # #     fig, axes = plt.subplots(2, 1, figsize= (16,10)) #(28, 15))  # Adjust size as needed
 
 # # # # # # #     # Plot Growth-Oriented Investments
 # # # # # # #     growth_data = data['Growth-Oriented Investments']
@@ -20252,10 +23152,13 @@ if __name__ == '__main__':
 # # # # # # #     growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
 # # # # # # #     growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
 
-# # # # # # #     axes[0].barh(growth_labels, growth_min, color='skyblue', label='Min Allocation')
-# # # # # # #     axes[0].barh(growth_labels, growth_max, left=growth_min, color='lightgreen', label='Max Allocation')
-# # # # # # #     axes[0].set_title('Growth-Oriented Investments')
-# # # # # # #     axes[0].set_xlabel('Percentage Allocation')
+# # # # # # #     axes[0].bar(growth_labels, growth_min, color='skyblue', label='Min Allocation')
+# # # # # # #     axes[0].bar(growth_labels, growth_max, bottom=growth_min, color='lightgreen', label='Max Allocation')
+# # # # # # #     axes[0].set_title('Growth-Oriented Investments', fontsize=16)
+# # # # # # #     axes[0].set_ylabel('Percentage Allocation', fontsize=14)
+# # # # # # #     axes[0].set_xlabel('Investment Types', fontsize=14)
+# # # # # # #     axes[0].tick_params(axis='x', rotation=45, labelsize=12)
+# # # # # # #     axes[0].tick_params(axis='y', labelsize=12)
 # # # # # # #     axes[0].legend()
 
 # # # # # # #     # Plot Conservative Investments
@@ -20264,14 +23167,20 @@ if __name__ == '__main__':
 # # # # # # #     conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
 # # # # # # #     conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
 
-# # # # # # #     axes[1].barh(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
-# # # # # # #     axes[1].barh(conservative_labels, conservative_max, left=conservative_min, color='lightgreen', label='Max Allocation')
-# # # # # # #     axes[1].set_title('Conservative Investments')
-# # # # # # #     axes[1].set_xlabel('Percentage Allocation')
+# # # # # # #     axes[1].bar(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
+# # # # # # #     axes[1].bar(conservative_labels, conservative_max, bottom=conservative_min, color='lightgreen', label='Max Allocation')
+# # # # # # #     axes[1].set_title('Conservative Investments', fontsize=16)
+# # # # # # #     axes[1].set_ylabel('Percentage Allocation', fontsize=14)
+# # # # # # #     axes[1].set_xlabel('Investment Types', fontsize=14)
+# # # # # # #     axes[1].tick_params(axis='x', rotation=45, labelsize=12)
+# # # # # # #     axes[1].tick_params(axis='y', labelsize=12)
 # # # # # # #     axes[1].legend()
 
+# # # # # # #     # Tight layout for better spacing
 # # # # # # #     plt.tight_layout()
+# # # # # # #     plt.show()
 # # # # # # #     return fig
+
 
 # # # # # # # def plot_pie_chart(data):
 # # # # # # #     fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
@@ -20282,10 +23191,35 @@ if __name__ == '__main__':
 # # # # # # #     sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
 # # # # # # #     colors = plt.cm.Paired(range(len(labels)))
 
-# # # # # # #     ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
+# # # # # # #     wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
 # # # # # # #     ax.set_title('Investment Allocation')
 
+# # # # # # #     # Add legend
+# # # # # # #     ax.legend(wedges, labels, title="Investment Types", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+
 # # # # # # #     return fig
+
+
+
+
+# # # # # # # # def plot_pie_chart(data):
+# # # # # # # #     fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
+
+# # # # # # # #     # Combine all investment data for pie chart
+# # # # # # # #     all_data = {**data['Growth-Oriented Investments'], **data['Conservative Investments']}
+# # # # # # # #     labels = list(all_data.keys())
+# # # # # # # #     sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
+# # # # # # # #     colors = plt.cm.Paired(range(len(labels)))
+
+# # # # # # # #     ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
+# # # # # # # #     ax.legend(loc='lower left',frameon= True)
+# # # # # # # #     ax.set_title('Investment Allocation')
+
+# # # # # # # # #         myexplode = [0.2, 0, 0, 0]
+
+# # # # # # # # # plt.pie(y, labels = mylabels, explode = myexplode, shadow = True)
+
+# # # # # # # #     return fig
 
 
 # # # # # # # def bar_chart(data):
@@ -20316,57 +23250,151 @@ if __name__ == '__main__':
 # # # # # # # import plotly.graph_objects as go
 # # # # # # # import numpy as np
 
-# # # # # # # import matplotlib.pyplot as plt
-# # # # # # # from mpl_toolkits.mplot3d import Axes3D
+# # # # # # # # import plotly.graph_objects as go
+# # # # # # # # import streamlit as st
+# # # # # # # # import numpy as np
 
-# # # # # # # def plot_3d_bar_graph(data):
-# # # # # # #     # Ensure 'values' is a numpy array
-# # # # # # #     values_array = np.array(data['values'])
-
-# # # # # # #     # Check if 'values' can be raveled
-# # # # # # #     if values_array.ndim > 1:
-# # # # # # #         dz = values_array.ravel()
-# # # # # # #     else:
-# # # # # # #         dz = values_array
-
-# # # # # # #     # Creating a new figure
-# # # # # # #     fig = plt.figure()
-# # # # # # #     ax = fig.add_subplot(111, projection='3d')
-
-# # # # # # #     # Unpacking the data
-# # # # # # #     x_data = np.arange(len(data['x_labels']))
-# # # # # # #     y_data = np.arange(len(data['y_labels']))
-# # # # # # #     x, y = np.meshgrid(x_data, y_data)
-# # # # # # #     x, y = x.ravel(), y.ravel()
-# # # # # # #     z = np.zeros_like(x)
-# # # # # # #     dx = dy = 0.8
-
-# # # # # # #     # Creating the bar graph
-# # # # # # #     ax.bar3d(x, y, z, dx, dy, dz, color='b', zsort='average')
-
-# # # # # # #     # Setting labels
-# # # # # # #     ax.set_xlabel(data['x_label'])
-# # # # # # #     ax.set_ylabel(data['y_label'])
-# # # # # # #     ax.set_zlabel(data['z_label'])
-# # # # # # #     ax.set_xticks(x_data)
-# # # # # # #     ax.set_yticks(y_data)
-# # # # # # #     ax.set_xticklabels(data['x_labels'])
-# # # # # # #     ax.set_yticklabels(data['y_labels'])
-
-# # # # # # #     # Displaying the figure using Streamlit
-# # # # # # #     st.pyplot(fig)
-
-
-# # # # # # # # def plot_3d_bar_chart():
-# # # # # # # #     # Data for plotting
-# # # # # # # #     categories = ['Timeline', 'Min Compounded Returns', 'Max Compounded Returns']
-# # # # # # # #     x = np.arange(len(categories))
-# # # # # # # #     y1 = [5, 10, 15]  # Example data for 5 Yr Compounded Returns
-# # # # # # # #     y2 = [10, 20, 30]  # Example data for 10 Yr Compounded Returns
-
+# # # # # # # # def plot_3d_bar_graph(data):
+# # # # # # # #     # Initialize a Plotly figure
 # # # # # # # #     fig = go.Figure()
 
-# # # # # # # #     # Adding bars for 5 Yr Compounded Returns
+# # # # # # # #     if not data:
+# # # # # # # #         st.write("No data available to plot.")
+# # # # # # # #         return
+
+# # # # # # # #     # Extracting data for plotting
+# # # # # # # #     x = []
+# # # # # # # #     y1 = []  # Min values for plotting
+# # # # # # # #     y2 = []  # Max values for plotting
+# # # # # # # #     categories = []
+
+# # # # # # # #     for i, (key, value) in enumerate(data.items()):
+# # # # # # # #         categories.append(key)  # Categories
+# # # # # # # #         x.append(i)  # X-axis value
+# # # # # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
+# # # # # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
+# # # # # # # #         y1.append(min_val)
+# # # # # # # #         y2.append(max_val)
+
+# # # # # # # #     # Adding bars for Min Compounded Returns
+# # # # # # # #     fig.add_trace(go.Bar(
+# # # # # # # #         x=x, y=y1, name='Min Compounded Returns',
+# # # # # # # #         marker=dict(color='red')
+# # # # # # # #     ))
+
+# # # # # # # #     # Adding bars for Max Compounded Returns
+# # # # # # # #     fig.add_trace(go.Bar(
+# # # # # # # #         x=x, y=y2, name='Max Compounded Returns',
+# # # # # # # #         marker=dict(color='blue')
+# # # # # # # #     ))
+
+# # # # # # # #     # Update layout to match the desired appearance
+# # # # # # # #     fig.update_layout(
+# # # # # # # #         barmode='group',
+# # # # # # # #         xaxis=dict(
+# # # # # # # #             tickvals=np.arange(len(categories)),
+# # # # # # # #             ticktext=categories,
+# # # # # # # #             title='Investment Types'
+# # # # # # # #         ),
+# # # # # # # #         yaxis=dict(title='Compounded Returns (%)'),
+# # # # # # # #         title='Investment Allocation Bar Graph',
+# # # # # # # #         legend=dict(x=0.1, y=0.9)
+# # # # # # # #     )
+
+# # # # # # # #     st.plotly_chart(fig)
+
+
+# # # # # # # import plotly.graph_objects as go
+# # # # # # # import streamlit as st
+# # # # # # # import numpy as np
+
+# # # # # # # def plot_3d_bar_graph(data):
+# # # # # # #     # Initialize a Plotly figure
+# # # # # # #     fig = go.Figure()
+
+# # # # # # #     if not data:
+# # # # # # #         st.write("No data available to plot.")
+# # # # # # #         return
+
+# # # # # # #     # Extracting data for plotting
+# # # # # # #     x = []
+# # # # # # #     y1 = []  # Min values for plotting
+# # # # # # #     y2 = []  # Max values for plotting
+# # # # # # #     categories = []
+
+# # # # # # #     for i, (key, value) in enumerate(data.items()):
+# # # # # # #         categories.append(key)  # Categories
+# # # # # # #         x.append(i)  # X-axis value
+# # # # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
+# # # # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
+# # # # # # #         y1.append(min_val)
+# # # # # # #         y2.append(max_val)
+
+# # # # # # #     # Adding bars for Min Compounded Returns
+# # # # # # #     for i in range(len(x)):
+# # # # # # #         fig.add_trace(go.Scatter3d(
+# # # # # # #             x=[x[i], x[i]],
+# # # # # # #             y=[0, 0.5],
+# # # # # # #             z=[0, y1[i]],
+# # # # # # #             mode='lines',
+# # # # # # #             line=dict(color='red', width=10),
+# # # # # # #             name='Min Compounded Returns'
+# # # # # # #         ))
+
+# # # # # # #     # Adding bars for Max Compounded Returns
+# # # # # # #     for i in range(len(x)):
+# # # # # # #         fig.add_trace(go.Scatter3d(
+# # # # # # #             x=[x[i] + 0.5, x[i] + 0.5],
+# # # # # # #             y=[0, 0.5],
+# # # # # # #             z=[0, y2[i]],
+# # # # # # #             mode='lines',
+# # # # # # #             line=dict(color='blue', width=10),
+# # # # # # #             name='Max Compounded Returns'
+# # # # # # #         ))
+
+# # # # # # #     # Update layout to match the desired appearance
+# # # # # # #     fig.update_layout(
+# # # # # # #         scene=dict(
+# # # # # # #             xaxis=dict(
+# # # # # # #                 tickvals=np.arange(len(categories)) + 0.25,
+# # # # # # #                 ticktext=categories,
+# # # # # # #                 title='Investment Types'
+# # # # # # #             ),
+# # # # # # #             yaxis=dict(title=''),
+# # # # # # #             zaxis=dict(title='Allocation (%)')
+# # # # # # #         ),
+# # # # # # #         title='Investment Allocation 3D Bar Graph',
+# # # # # # #         legend=dict(x=0.1, y=0.9)
+# # # # # # #     )
+
+# # # # # # #     st.plotly_chart(fig)
+
+
+
+
+# # # # # # # # def plot_3d_bar_graph(data):
+# # # # # # # #     # Initialize a Plotly figure
+# # # # # # # #     fig = go.Figure()
+
+# # # # # # # #     if not data:
+# # # # # # # #         print("No data available to plot.")
+# # # # # # # #         return
+
+# # # # # # # #     # Extracting data for plotting
+# # # # # # # #     x = []
+# # # # # # # #     y1 = []  # Min values for plotting
+# # # # # # # #     y2 = []  # Max values for plotting
+# # # # # # # #     categories = []
+
+# # # # # # # #     for i, (key, value) in enumerate(data.items()):
+# # # # # # # #         categories.append(key)  # Categories
+# # # # # # # #         x.append(i)  # X-axis value
+# # # # # # # #         min_val = int(value.get('min', '0').replace('%', ''))  # Default to 0 if 'min' is missing
+# # # # # # # #         max_val = int(value.get('max', '0').replace('%', ''))  # Default to 0 if 'max' is missing
+# # # # # # # #         y1.append(min_val)
+# # # # # # # #         y2.append(max_val)
+
+# # # # # # # #     # Adding bars for Min Compounded Returns
 # # # # # # # #     for i in range(len(x)):
 # # # # # # # #         fig.add_trace(go.Scatter3d(
 # # # # # # # #             x=[x[i], x[i]],
@@ -20374,10 +23402,10 @@ if __name__ == '__main__':
 # # # # # # # #             z=[0, y1[i]],
 # # # # # # # #             mode='lines',
 # # # # # # # #             line=dict(color='red', width=10),
-# # # # # # # #             name='5 Yr Compounded Returns'
+# # # # # # # #             name='Min Compounded Returns'
 # # # # # # # #         ))
 
-# # # # # # # #     # Adding bars for 10 Yr Compounded Returns
+# # # # # # # #     # Adding bars for Max Compounded Returns
 # # # # # # # #     for i in range(len(x)):
 # # # # # # # #         fig.add_trace(go.Scatter3d(
 # # # # # # # #             x=[x[i] + 0.5, x[i] + 0.5],
@@ -20385,28 +23413,382 @@ if __name__ == '__main__':
 # # # # # # # #             z=[0, y2[i]],
 # # # # # # # #             mode='lines',
 # # # # # # # #             line=dict(color='blue', width=10),
-# # # # # # # #             name='10 Yr Compounded Returns'
+# # # # # # # #             name='Max Compounded Returns'
 # # # # # # # #         ))
 
+# # # # # # # #     # Update layout to match the desired appearance
 # # # # # # # #     fig.update_layout(
 # # # # # # # #         scene=dict(
 # # # # # # # #             xaxis=dict(
-# # # # # # # #                 tickvals=x + 0.25,
+# # # # # # # #                 tickvals=np.arange(len(categories)) + 0.25,
 # # # # # # # #                 ticktext=categories,
-# # # # # # # #                 title='Categories'
+# # # # # # # #                 title='Investment Types'
 # # # # # # # #             ),
-# # # # # # # #             yaxis=dict(title='Returns'),
-# # # # # # # #             zaxis=dict(title='Percentage')
+# # # # # # # #             yaxis=dict(title=''),
+# # # # # # # #             zaxis=dict(title='Allocation (%)')
 # # # # # # # #         ),
-# # # # # # # #         title='COMPOUNDED RETURNS',
+# # # # # # # #         title='Investment Allocation 3D Bar Graph',
 # # # # # # # #         legend=dict(x=0.1, y=0.9)
 # # # # # # # #     )
 
-# # # # # # # #     fig.show() # return fig 
+# # # # # # # #     fig.show()
+# # # # # # # #     return fig
+
+
+ 
+# # # # # # # # def client_form():
+# # # # # # # #     st.title("Client Details Form")
+
+# # # # # # # #     with st.form("client_form"):
+# # # # # # # #         st.header("Personal Information")
+# # # # # # # #         client_name = st.text_input("Client Name")
+# # # # # # # #         co_client_name = st.text_input("Co-Client Name")
+# # # # # # # #         client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # # #         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # # #         today_date = st.date_input("Today's Date")
+        
+# # # # # # # #         st.header("Financial Information")
+# # # # # # # #         current_assets = st.text_area("Current Assets (e.g., type and value)")
+# # # # # # # #         liabilities = st.text_area("Liabilities (e.g., type and amount)")
+# # # # # # # #         annual_income = st.text_area("Current Annual Income (source and amount)")
+# # # # # # # #         annual_contributions = st.text_area("Annual Contributions (e.g., retirement savings)")
+
+# # # # # # # #         st.header("Insurance Information")
+# # # # # # # #         life_insurance = st.text_input("Life Insurance (e.g., coverage amount)")
+# # # # # # # #         disability_insurance = st.text_input("Disability Insurance (e.g., coverage amount)")
+# # # # # # # #         long_term_care = st.text_input("Long-Term Care Insurance (e.g., coverage amount)")
+
+# # # # # # # #         st.header("Estate Planning")
+# # # # # # # #         will_status = st.radio("Do you have a will?", ["Yes", "No"])
+# # # # # # # #         trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
+# # # # # # # #         power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
+# # # # # # # #         healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
+
+# # # # # # # #         # Submit button
+# # # # # # # #         submitted = st.form_submit_button("Submit")
+
+# # # # # # # #         if submitted:
+# # # # # # # #             # Save form data
+# # # # # # # #             form_data = {
+# # # # # # # #                 "Client Name": client_name,
+# # # # # # # #                 "Co-Client Name": co_client_name,
+# # # # # # # #                 "Client Age": client_age,
+# # # # # # # #                 "Co-Client Age": co_client_age,
+# # # # # # # #                 "Today's Date": str(today_date),
+# # # # # # # #                 "Current Assets": current_assets,
+# # # # # # # #                 "Liabilities": liabilities,
+# # # # # # # #                 "Annual Income": annual_income,
+# # # # # # # #                 "Annual Contributions": annual_contributions,
+# # # # # # # #                 "Life Insurance": life_insurance,
+# # # # # # # #                 "Disability Insurance": disability_insurance,
+# # # # # # # #                 "Long-Term Care Insurance": long_term_care,
+# # # # # # # #                 "Will Status": will_status,
+# # # # # # # #                 "Trust Status": trust_status,
+# # # # # # # #                 "Power of Attorney": power_of_attorney,
+# # # # # # # #                 "Healthcare Proxy": healthcare_proxy,
+# # # # # # # #             }
+            
+# # # # # # # #             # Save to a file or database
+# # # # # # # #             with open("client_data.txt", "a") as f:
+# # # # # # # #                 f.write(str(form_data) + "\n")
+            
+# # # # # # # #             st.success("Form submitted successfully!")
+# # # # # # # #             st.session_state.page = "main"  # Redirect back to main page after form submission
+
+
+# # # # # # # from datetime import date  # Make sure to import the date class
+
+# # # # # # # # def client_form():
+# # # # # # # #     st.title("Client Details Form")
+
+# # # # # # # #     with st.form("client_form"):
+# # # # # # # #         st.header("Personal Information")
+# # # # # # # #         client_name = st.text_input("Client Name")
+# # # # # # # #         co_client_name = st.text_input("Co-Client Name")
+# # # # # # # #         client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # # #         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # # #         today_date = st.date_input("Today's Date")
+# # # # # # # #         # today_date = st.date_input("Today's Date", value=date.today())
+
+# # # # # # # #         st.header("Your Assets and Liabilities")
+        
+# # # # # # # #         # Assets
+# # # # # # # #         assets = {}
+# # # # # # # #         # assets['Checking Accounts'] = st.number_input("Checking Accounts", min_value=0.0, step=0.01)
+# # # # # # # #         assets['Annual Income'] = st.text_input("Annual Income (e.g. , Your Annual Salary Income or other source of income)" )
+# # # # # # # #         assets['Savings Accounts'] = st.text_input("Savings Accounts (e.g. , Your Annual Savings)" )
+# # # # # # # #         assets['Retirement Accounts'] = st.text_input("Retirement Accounts (e.g. , Your Retirement Savings)" )
+# # # # # # # #         assets['Investment Accounts'] = st.text_input("Investment Accounts (e.g. , Your Investment Savings)" )
+        
+# # # # # # # #         # Liabilities
+# # # # # # # #         liabilities = {}
+# # # # # # # #         liabilities['Mortgage'] = st.text_input("Mortgage (Mention the balance amount, Interest rate and Monthly Payment)" )
+# # # # # # # #         liabilities['Home Loans'] = st.text_input("Home Loans (Mention the balance amount, Interest rate and Monthly Payment)")
+# # # # # # # #         liabilities['Car/Vehicle Loans'] = st.text_input("Car/Vehicle Loans (Mention the balance amount, Interest rate and Monthly Payment)")
+# # # # # # # #         liabilities['Education Loans'] = st.text_input("Education Loans (Mention the balance amount, Interest rate and Monthly Payment)")
+# # # # # # # #         liabilities['Credit Card Debt'] = st.text_input("Credit Card Debt")
+# # # # # # # #         liabilities['Miscellaneous'] = st.text_input("Miscellaneous (Mention the balance amount, Interest rate and Monthly Payment)" )
+
+# # # # # # # #         st.header("Your Retirement Goal")
+# # # # # # # #         retirement_age = st.number_input("At what age do you plan to retire?", min_value=0, max_value=120, value=65, step=1)
+# # # # # # # #         retirement_income = st.text_input("Desired annual retirement income" )
+
+# # # # # # # #         st.header("Your Other Goals")
+# # # # # # # #         goal_name = st.text_input("Name of the Goal (e.g., Buy a House, Education,Travel,etc)" )
+# # # # # # # #         goal_amount = st.text_input("Amount needed for the goal")
+# # # # # # # #         goal_timeframe = st.number_input("Timeframe to achieve the goal (in years)", min_value=0, max_value=100, value=5, step=1)
+
+# # # # # # # #         st.header("Insurance Information")
+# # # # # # # #         life_insurance = st.text_input("Life Insurance (e.g., coverage amount)")
+# # # # # # # #         disability_insurance = st.text_input("Disability Insurance (e.g., coverage amount)")
+# # # # # # # #         long_term_care = st.text_input("Long-Term Care Insurance (e.g., coverage amount)")
+
+# # # # # # # #         st.header("Estate Planning")
+# # # # # # # #         will_status = st.radio("Do you have a will?", ["Yes", "No"])
+# # # # # # # #         trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
+# # # # # # # #         power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
+# # # # # # # #         healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
+
+# # # # # # # #         # Submit button
+# # # # # # # #         submitted = st.form_submit_button("Submit")
+
+# # # # # # # #         if submitted:
+# # # # # # # #             # Save form data
+# # # # # # # #             form_data = {
+# # # # # # # #                 "Client Name": client_name,
+# # # # # # # #                 "Co-Client Name": co_client_name,
+# # # # # # # #                 "Client Age": client_age,
+# # # # # # # #                 "Co-Client Age": co_client_age,
+# # # # # # # #                 "Today's Date": str(today_date),
+# # # # # # # #                 "Assets": assets,
+# # # # # # # #                 "Liabilities": liabilities,
+# # # # # # # #                 "Retirement Age": retirement_age,
+# # # # # # # #                 "Desired Retirement Income": retirement_income,
+# # # # # # # #                 "Goal Name": goal_name,
+# # # # # # # #                 "Goal Amount": goal_amount,
+# # # # # # # #                 "Goal Timeframe": goal_timeframe,
+# # # # # # # #                 "Life Insurance": life_insurance,
+# # # # # # # #                 "Disability Insurance": disability_insurance,
+# # # # # # # #                 "Long-Term Care Insurance": long_term_care,
+# # # # # # # #                 "Will Status": will_status,
+# # # # # # # #                 "Trust Status": trust_status,
+# # # # # # # #                 "Power of Attorney": power_of_attorney,
+# # # # # # # #                 "Healthcare Proxy": healthcare_proxy,
+# # # # # # # #             }
+            
+# # # # # # # #             # Save to a file or database
+# # # # # # # #             with open("client_data.txt", "a") as f:
+# # # # # # # #                 f.write(str(form_data) + "\n")
+            
+# # # # # # # #             st.success("Form submitted successfully!")
+# # # # # # # #             st.session_state.page = "main"  # Redirect back to main page after form submission
+
+# # # # # # # # Function to parse financial data from the text
+# # # # # # # import re
+
+# # # # # # # def parse_financial_data(text_content):
+# # # # # # #     assets = []
+# # # # # # #     liabilities = []
+
+# # # # # # #     # Define regex patterns to capture text following headings
+# # # # # # #     asset_pattern = re.compile(r"MY ASSETS:\s*(.+?)(?:YOUR CURRENT ANNUAL INCOME|YOUR PROTECTION PLAN|Securities offered)", re.DOTALL)
+# # # # # # #     liability_pattern = re.compile(r"LIABILITIES:\s*(.+?)(?:YOUR CURRENT ANNUAL INCOME|YOUR PROTECTION PLAN|Securities offered)", re.DOTALL)
+
+# # # # # # #     # Extract assets
+# # # # # # #     asset_matches = asset_pattern.findall(text_content)
+# # # # # # #     if asset_matches:
+# # # # # # #         asset_text = asset_matches[0]
+# # # # # # #         # Further processing to extract individual asset values if they are detailed
+# # # # # # #         asset_lines = asset_text.split('\n')
+# # # # # # #         for line in asset_lines:
+# # # # # # #             match = re.search(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\b', line)
+# # # # # # #             if match:
+# # # # # # #                 asset_value = float(match.group().replace(",", ""))
+# # # # # # #                 assets.append(asset_value)
+
+# # # # # # #     # Extract liabilities
+# # # # # # #     liability_matches = liability_pattern.findall(text_content)
+# # # # # # #     if liability_matches:
+# # # # # # #         liability_text = liability_matches[0]
+# # # # # # #         # Further processing to extract individual liability values if they are detailed
+# # # # # # #         liability_lines = liability_text.split('\n')
+# # # # # # #         for line in liability_lines:
+# # # # # # #             match = re.search(r'\b\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\b', line)
+# # # # # # #             if match:
+# # # # # # #                 liability_value = float(match.group().replace(",", ""))
+# # # # # # #                 liabilities.append(liability_value)
+
+# # # # # # #     print("Assets Found:", assets)
+# # # # # # #     print("Liabilities Found:", liabilities)
+
+# # # # # # #     return assets, liabilities
+
+
+
+# # # # # # # # Function to extract numerical values from a text input
+# # # # # # # def extract_numeric(value):
+# # # # # # #     try:
+# # # # # # #         return float(re.sub(r'[^\d.]', '', value))  # Remove non-numeric characters and convert to float
+# # # # # # #     except ValueError:
+# # # # # # #         return 0
+
+# # # # # # # # Function to plot pie chart for assets and liabilities
+# # # # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):
+# # # # # # # #     data = {}
+
+# # # # # # # #     for key, value in assets.items():
+# # # # # # # #         numeric_value = extract_numeric(value)
+# # # # # # # #         if numeric_value > 0:
+# # # # # # # #             data[key] = numeric_value
+
+# # # # # # # #     for key, value in liabilities.items():
+# # # # # # # #         numeric_value = extract_numeric(value)
+# # # # # # # #         if numeric_value > 0:
+# # # # # # # #             data[key] = numeric_value
+
+# # # # # # # #     if not data:
+# # # # # # # #         st.warning("No valid financial data available to plot.")
+# # # # # # # #         return
+
+# # # # # # # #     labels = list(data.keys())
+# # # # # # # #     values = list(data.values())
+
+# # # # # # # #     fig, ax = plt.subplots()
+# # # # # # # #     ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=140, colors=plt.cm.Paired.colors)
+# # # # # # # #     ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+# # # # # # # #     plt.title("Distribution of Assets and Liabilities")
+# # # # # # # #     st.pyplot(fig)
+
+# # # # # # # # def plot_assets_and_liabilities_pie_chart(assets, liabilities): default plot 
+# # # # # # # #     # total_assets = sum(assets.values())
+# # # # # # # #     # total_liabilities = sum(liabilities.values())
+
+# # # # # # # #     # labels = ['Assets', 'Liabilities']
+# # # # # # # #     # sizes = [total_assets, total_liabilities]
+
+# # # # # # # #     # fig, ax = plt.subplots(figsize=(8, 8))
+# # # # # # # #     # ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
+# # # # # # # #     # ax.set_title('Assets vs Liabilities Distribution')
+
+# # # # # # # #     total_assets = sum(assets)
+# # # # # # # #     total_liabilities = sum(liabilities)
+
+# # # # # # # #     if total_assets == 0 and total_liabilities == 0:
+# # # # # # # #         print("No data to plot.")
+# # # # # # # #         return
+
+# # # # # # # #     labels = ['Assets', 'Liabilities']
+# # # # # # # #     sizes = [total_assets, total_liabilities]
+
+# # # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
+# # # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['green', 'red'])
+# # # # # # # #     ax.set_title('Assets vs Liabilities Distribution')
+
+# # # # # # # #     # plt.show()
+
+# # # # # # # #     st.pyplot(fig)
+
+
+# # # # # # # def plot_assets_liabilities_pie_chart(assets, liabilities):
+# # # # # # #     labels = list(assets.keys()) + list(liabilities.keys())
+# # # # # # #     values = [float(value) for value in assets.values()] + [float(value) for value in liabilities.values()]
+
+# # # # # # #     fig, ax = plt.subplots()
+# # # # # # #     ax.pie(values, labels=labels, autopct='%1.1f%%', colors=plt.cm.Paired.colors)
+# # # # # # #     ax.set_title('Distribution of Assets and Liabilities')
     
+# # # # # # #     # Create a legend to avoid overlapping labels
+# # # # # # #     ax.legend(labels, loc="best", bbox_to_anchor=(1, 0, 0.5, 1))
+# # # # # # #     plt.axis('equal')
+    
+# # # # # # #     st.pyplot(fig)
 
+# # # # # # # def save_data_to_file(form_data):
+# # # # # # #     file_path = 'client_data.txt'
+# # # # # # #     with open(file_path, 'a') as file:
+# # # # # # #         file.write(str(form_data) + "\n")
+# # # # # # #     st.success(f"Form data saved to {file_path}")
 
+# # # # # # # def client_form():
+# # # # # # #     st.title("Client Details Form")
 
+# # # # # # #     with st.form("client_form"):
+# # # # # # #         st.header("Personal Information")
+# # # # # # #         client_name = st.text_input("Client Name")
+# # # # # # #         co_client_name = st.text_input("Co-Client Name")
+# # # # # # #         client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # #         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
+# # # # # # #         today_date = st.date_input("Today's Date")
+
+# # # # # # #         st.header("Your Assets and Liabilities")
+        
+# # # # # # #         assets = {
+# # # # # # #             'Annual Income': st.text_input("Annual Income"),
+# # # # # # #             'Savings Accounts': st.text_input("Savings Accounts"),
+# # # # # # #             'Retirement Accounts': st.text_input("Retirement Accounts"),
+# # # # # # #             'Investment Accounts': st.text_input("Investment Accounts")
+# # # # # # #         }
+        
+# # # # # # #         liabilities = {
+# # # # # # #             'Mortgage': st.text_input("Mortgage"),
+# # # # # # #             'Home Loans': st.text_input("Home Loans"),
+# # # # # # #             'Car/Vehicle Loans': st.text_input("Car/Vehicle Loans"),
+# # # # # # #             'Education Loans': st.text_input("Education Loans"),
+# # # # # # #             'Credit Card Debt': st.text_input("Credit Card Debt"),
+# # # # # # #             'Miscellaneous': st.text_input("Miscellaneous")
+# # # # # # #         }
+
+# # # # # # #         st.header("Your Retirement Goal")
+# # # # # # #         retirement_age = st.number_input("At what age do you plan to retire?", min_value=0, max_value=120, value=65, step=1)
+# # # # # # #         retirement_income = st.text_input("Desired annual retirement income")
+
+# # # # # # #         st.header("Your Other Goals")
+# # # # # # #         goal_name = st.text_input("Name of the Goal")
+# # # # # # #         goal_amount = st.text_input("Amount needed for the goal")
+# # # # # # #         goal_timeframe = st.number_input("Timeframe to achieve the goal (in years)", min_value=0, max_value=100, value=5, step=1)
+
+# # # # # # #         st.header("Insurance Information")
+# # # # # # #         life_insurance = st.text_input("Life Insurance")
+# # # # # # #         disability_insurance = st.text_input("Disability Insurance")
+# # # # # # #         long_term_care = st.text_input("Long-Term Care Insurance")
+
+# # # # # # #         st.header("Estate Planning")
+# # # # # # #         will_status = st.radio("Do you have a will?", ["Yes", "No"])
+# # # # # # #         trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
+# # # # # # #         power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
+# # # # # # #         healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
+
+# # # # # # #         submitted = st.form_submit_button("Submit")
+
+# # # # # # #         if submitted:
+# # # # # # #             form_data = {
+# # # # # # #                 "Client Name": client_name,
+# # # # # # #                 "Co-Client Name": co_client_name,
+# # # # # # #                 "Client Age": client_age,
+# # # # # # #                 "Co-Client Age": co_client_age,
+# # # # # # #                 "Today's Date": str(today_date),
+# # # # # # #                 "Assets": assets,
+# # # # # # #                 "Liabilities": liabilities,
+# # # # # # #                 "Retirement Age": retirement_age,
+# # # # # # #                 "Desired Retirement Income": retirement_income,
+# # # # # # #                 "Goal Name": goal_name,
+# # # # # # #                 "Goal Amount": goal_amount,
+# # # # # # #                 "Goal Timeframe": goal_timeframe,
+# # # # # # #                 "Life Insurance": life_insurance,
+# # # # # # #                 "Disability Insurance": disability_insurance,
+# # # # # # #                 "Long-Term Care Insurance": long_term_care,
+# # # # # # #                 "Will Status": will_status,
+# # # # # # #                 "Trust Status": trust_status,
+# # # # # # #                 "Power of Attorney": power_of_attorney,
+# # # # # # #                 "Healthcare Proxy": healthcare_proxy,
+# # # # # # #             }
+
+# # # # # # #             save_data_to_file(form_data)
+            
+# # # # # # #             # Plot the pie chart
+# # # # # # #             st.subheader("Assets and Liabilities Breakdown")
+# # # # # # #             plot_assets_liabilities_pie_chart(assets, liabilities)
 
 
 # # # # # # # def main():
@@ -20420,13 +23802,66 @@ if __name__ == '__main__':
 # # # # # # #         client_type = st.radio("Is this for a new client or an existing client?", ["New Client", "Existing Client"])
 
 # # # # # # #         if client_type == "New Client":
+# # # # # # #             # Button to redirect to the form page
+# # # # # # #             if st.button("Fill in the Client Details"):
+# # # # # # #                 st.session_state.page = "form"
+# # # # # # #                 # st.query_params(page="form")  #set_query_params(page="form")
+# # # # # # #                 # Display the pie chart if assets and liabilities data is available
+
+# # # # # # #             if 'assets' in st.session_state and 'liabilities' in st.session_state:
+# # # # # # #                 st.subheader("Assets and Liabilities Breakdown")
+# # # # # # #                 plot_assets_liabilities_pie_chart(st.session_state.assets, st.session_state.liabilities)
+# # # # # # #             else:
+# # # # # # #                 st.info("Please fill in the client details to view the assets and liabilities breakdown.")
+
 # # # # # # #             uploaded_file = st.file_uploader("Upload the client's document", type=["docx", "pdf"])
 
 # # # # # # #             if uploaded_file is not None:
 # # # # # # #                 st.write("Extracting text from the document...")
-# # # # # # #                 # Assuming process_document is an async function
-# # # # # # #                 extracted_text = asyncio.run(process_document(uploaded_file))
-# # # # # # #                 st.write("Text extracted from the document")
+# # # # # # #                 document_data = asyncio.run(process_document(uploaded_file))
+
+# # # # # # #                 if document_data:
+# # # # # # #                     if isinstance(document_data, tuple) and len(document_data) == 2:
+# # # # # # #                         extracted_text, tables_content = document_data
+# # # # # # #                         st.write("Text extracted from the document")
+
+# # # # # # #                         # Print extracted text for debugging
+# # # # # # #                         print("Extracted Text Content:", extracted_text)
+
+# # # # # # #                         # Parse extracted data to get assets and liabilities
+# # # # # # #                         # assets, liabilities = parse_financial_data(extracted_text)
+
+# # # # # # #                         # if assets or liabilities:
+# # # # # # #                         #     plot_pie_chart(assets, liabilities)
+# # # # # # #                         # else:
+# # # # # # #                         #     # Extracted data from the word file
+# # # # # # #                         #     st.write("Financial Data Plotted :")
+# # # # # # #                         #     assets = [100000, 150000, 12000]  # Cash/bank accounts, Home, Other (e.g. car, boat, art, etc.)
+# # # # # # #                         #     liabilities = [200000, 400, 15000]  # Mortgage(s), Credit Card(s), Other loans (car, education, etc.)
+# # # # # # #                         #     # plot_assets_and_liabilities_pie_chart(assets, liabilities)
+# # # # # # #                         #     plot_assets_liabilities_pie_chart()
+# # # # # # #                         #     # st.write("No financial data found to plot.")
+# # # # # # #                     else:
+# # # # # # #                         st.write("Unexpected data format returned from document processing.")
+
+
+
+# # # # # # #                 # extracted_text = asyncio.run(process_document(uploaded_file))
+# # # # # # #                 # extracted_text, tables_content = asyncio.run(process_document(uploaded_file))
+# # # # # # #                 # # st.write("Text extracted from the document")
+# # # # # # #                 # if extracted_text:
+# # # # # # #                 #     st.write("Text extracted from the document")
+                    
+# # # # # # #                 #     # Parse extracted data to get assets and liabilities
+# # # # # # #                 #     assets, liabilities = parse_financial_data(extracted_text)
+                    
+# # # # # # #                 #     # Check if there is any data to plot
+# # # # # # #                 #     if assets or liabilities:
+# # # # # # #                 #         plot_pie_chart(assets, liabilities)
+# # # # # # #                 #     else:
+# # # # # # #                 #         st.write("No financial data found to plot.")
+# # # # # # #                 # else:
+# # # # # # #                 #     st.write("Failed to extract data from the document.")
 
 # # # # # # #                 # Ask for investment personality
 # # # # # # #                 investment_personality = st.selectbox(
@@ -20457,6 +23892,8 @@ if __name__ == '__main__':
 # # # # # # #                     st.pyplot(fig)
 
 # # # # # # #                     st.write('## Pie Chart of Investment Allocation')
+
+# # # # # # #                     # plot_pie_chart(data_extracted)
 # # # # # # #                     fig = plot_pie_chart(data_extracted)
 # # # # # # #                     st.pyplot(fig)
 
@@ -20464,11 +23901,8 @@ if __name__ == '__main__':
 # # # # # # #                     fig = bar_chart(data_extracted['Growth-Oriented Investments'])
 # # # # # # #                     st.pyplot(fig)
 
-# # # # # # #                     # fig = plot_compounded_returns(data_extracted)
-# # # # # # #                     # st.pyplot(fig)
-
-# # # # # # #                     # fig = plot_3d_bar_chart(data_extracted)
 # # # # # # #                     plot_3d_bar_graph(data_extracted)
+# # # # # # #                     # fig = plot_3d_bar_graph(data_extracted)
 # # # # # # #                     # st.pyplot(fig)
 
 # # # # # # #         elif client_type == "Existing Client":
@@ -20477,230 +23911,40 @@ if __name__ == '__main__':
 # # # # # # #     elif task_choice == "Stock Analysis":
 # # # # # # #         st.write("Performing stock analysis...")
 
+
 # # # # # # # if __name__ == "__main__":
-# # # # # # #     main()
-
-
-# # # # # # # # def main():
-# # # # # # # #     st.title("Wealth Advisor Chatbot")
-
-# # # # # # # #     task_choice = st.radio("Select the task you want to perform:", ["Investment Suggestions", "Stock Analysis"])
-
-# # # # # # # #     if task_choice == "Investment Suggestions":
-# # # # # # # #         client_type = st.radio("Is this for a new client or an existing client?", ["New Client", "Existing Client"])
-
-# # # # # # # #         if client_type == "New Client":
-# # # # # # # #             uploaded_file = st.file_uploader("Upload the client's document", type=["docx", "pdf"])
-
-# # # # # # # #             if uploaded_file is not None:
-# # # # # # # #                 st.write("Extracting text from the document...")
-# # # # # # # #                 extracted_text = asyncio.run(process_document(uploaded_file))
-# # # # # # # #                 st.write("Text extracted from the document")
-
-# # # # # # # #                 investment_personality = st.selectbox(
-# # # # # # # #                     "Select the investment personality of the client:",
-# # # # # # # #                     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
-# # # # # # # #                 )
-
-# # # # # # # #                 if st.button("Generate Investment Suggestions"):
-# # # # # # # #                     st.write("Generating investment suggestions...")
-# # # # # # # #                     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
-# # # # # # # #                     st.write(suggestions)
-
-# # # # # # # #                     st.title("Investment Suggestions and Infographics")
-# # # # # # # #                     generate_infographics(suggestions, investment_personality)
-
-# # # # # # # #         elif client_type == "Existing Client":
-# # # # # # # #             st.write("Fetching existing client data...")
-
-# # # # # # # #     elif task_choice == "Stock Analysis":
-# # # # # # # #         st.write("Performing stock analysis...")
-
-# # # # # # # # if __name__ == "__main__":
-# # # # # # # #     main()
-
-
-
-
-
-# # # # # # # # Reponse :
-
-# # # # # # # # Financial Suggestions for a Moderate Investor
-
-# # # # # # # # Based on your provided information, you appear to be a moderate investor with a healthy financial foundation. You have a significant amount of assets, including a home and other real estate, but also carry a substantial mortgage and credit card debt. This suggests you're comfortable with some risk but also prioritize stability and security.
-
-# # # # # # # # Here's a suggested investment strategy tailored for your profile:
-
-# # # # # # # # Investment Allocation:
-
-# # # # # # # # Growth-Oriented Investments (50-70%): This portion of your portfolio will focus on investments with the potential for higher returns over the long term. Stocks: Invest in a diversified portfolio of stocks through index funds or ETFs tracking the S&P 500 or other broad market indices. This provides exposure to the overall stock market growth. (30-50%) Bonds: Allocate a portion to bonds, which offer lower risk and potential returns compared to stocks. Consider investing in investment-grade corporate bonds or government bonds (Treasury bonds). (10-20%) Real Estate: Maintain your existing real estate investments and consider adding to your portfolio if you have the financial capacity and desire. Real estate can offer steady rental income and potential appreciation. (10-20%)
-
-# # # # # # # # Conservative Investments (30-50%): This portion will focus on preserving capital and providing stability. Cash: Keep a substantial portion of your assets in cash (10-20%) for emergency funds, short-term goals, and potential market downturns. Fixed Annuities: Consider fixed annuities for a guaranteed return and principal protection. They offer lower returns but provide peace of mind. (10-20%) High-Yield Savings Accounts: Explore high-yield savings accounts for a slightly higher return than traditional savings accounts while maintaining FDIC insurance. (10-20%)
-
-# # # # # # # # Investment Time Horizon:
-
-# # # # # # # # As a moderate investor, you likely have a long-term investment horizon (5+ years). This allows for potential market fluctuations and provides time for your investments to compound and grow.
-
-# # # # # # # # Expected Returns:
-
-# # # # # # # # Minimum Expected Annual Return: 4-6% Maximum Expected Annual Return: 8-10%
-
-# # # # # # # # Expected Growth in Dollars:
-
-# # # # # # # # Minimum Expected Growth: 
-# # # # # # # # 20
-# # # # # # # # ,
-# # # # # # # # 000
-# # # # # # # # −
-# # # # # # # # 20,000−30,000 over 5 years Maximum Expected Growth: 
-# # # # # # # # 40
-# # # # # # # # ,
-# # # # # # # # 000
-# # # # # # # # −
-# # # # # # # # 40,000−50,000 over 5 years
-
-# # # # # # # # Why this Strategy?
-
-# # # # # # # # This strategy balances potential growth with risk mitigation. The allocation to growth-oriented investments allows for the potential for higher returns, while the conservative investments provide stability and a safety net.
-
-# # # # # # # # Key Considerations:
-
-# # # # # # # # Debt Management: Prioritize paying down your high-interest credit card debt. This will significantly improve your overall financial health and free up more funds for investing. Retirement Savings: Contribute regularly to your Roth IRA and Roth 401(k) to maximize tax benefits and build a strong retirement nest egg. Regular Review: Regularly review your portfolio and adjust your asset allocation as needed based on your risk tolerance, time horizon, and market conditions.
-
-# # # # # # # # Remember: This is a general investment strategy. It's crucial to consult with a qualified financial advisor to tailor a personalized plan that aligns with your specific goals, risk tolerance, and financial situation.
-
-
-# # # # # # # # def main():
-# # # # # # # #     st.title("Wealth Advisor Chatbot")
-
-# # # # # # # #     # Step 1: Upload Document
-# # # # # # # #     uploaded_file = st.file_uploader("Upload a document", type=["docx", "pdf"])
-
-# # # # # # # #     if uploaded_file is not None:
-# # # # # # # #         # Save the uploaded file temporarily
-# # # # # # # #         with open("uploaded_file", "wb") as f:
-# # # # # # # #             f.write(uploaded_file.getbuffer())
-
-# # # # # # # #         # Process the document
-# # # # # # # #         extracted_text = process_document("uploaded_file")
-# # # # # # # #         # st.write(extracted_text)
-
-# # # # # # # #         # Validate the document
-# # # # # # # #         # client_name, validation_errors = await validate_process_document("uploaded_file")
-# # # # # # # #         client_name, validation_errors = asyncio.run(validate_process_document("uploaded_file"))
-# # # # # # # #         if client_name:
-# # # # # # # #             st.success(f"Document processed successfully for client: {client_name}")
-# # # # # # # #         else:
-# # # # # # # #             st.error("Error processing document.")
-# # # # # # # #             if validation_errors:
-# # # # # # # #                 for error in validation_errors:
-# # # # # # # #                     st.error(error)
-
-# # # # # # # #         # Assume retriever and chain setup as in aiogram code
-# # # # # # # #         retriever = load_vector_db("uploaded_file")
-# # # # # # # #         chain = make_retrieval_chain(retriever)
-        
-# # # # # # # #         if chain is not None:
-# # # # # # # #             summary = "Summary of the document"  # Placeholder for actual summary logic
-# # # # # # # #             investment_personality = "Investment Personality"  # Placeholder for actual logic
-# # # # # # # #             query = summary + "\n" + investment_personality
-# # # # # # # #             response = chain.invoke({"input": query})
-# # # # # # # #             format_response = markdown_to_text(response['answer'])
-# # # # # # # #             st.write(format_response)
-
-# # # # # # # #             handle_graph(response['answer'])
-
-# # # # # # # #         else:
-# # # # # # # #             st.error("Failed to create the retrieval chain. Please upload a valid document.")
-
-# # # # # # # # if __name__ == "__main__":
-# # # # # # # #     main()
-
-
-# # # # # # # # def generate_investment_suggestions(stock_prices) : pass
-
-# # # # # # # # def generate_stock_prices(stock_prices) : pass
-
-# # # # # # # # def predict_stock_prices(stock_prices) : pass
-
-# # # # # # # # Define the Streamlit app layout
-# # # # # # # # st.title("Wealth Advisor Chatbot")
-
-# # # # # # # # # Option selection for users
-# # # # # # # # st.sidebar.title("Menu")
-# # # # # # # # option = st.sidebar.selectbox(
-# # # # # # # #     "Choose an option",
-# # # # # # # #     ["Investment Suggestions", "Stock Analysis"]
-# # # # # # # # )
-
-# # # # # # # # # Investment Suggestions Section
-# # # # # # # # if option == "Investment Suggestions":
-# # # # # # # #     st.header("Investment Suggestions")
-# # # # # # # #     client_type = st.radio("Are you a New or Existing Client?", ("New Client", "Existing Client"))
-
-# # # # # # # #     if client_type == "New Client":
-# # # # # # # #         st.subheader("New Client Investment Suggestions")
-# # # # # # # #     elif client_type == "Existing Client":
-# # # # # # # #         st.subheader("Existing Client Investment Suggestions")
+# # # # # # #     if 'page' not in st.session_state:
+# # # # # # #         st.session_state.page = "main"
     
-# # # # # # # #     # Assuming the function takes in client_type and returns suggestions
-# # # # # # # #     investment_suggestions = generate_investment_suggestions(client_type)
+# # # # # # #     if st.session_state.page == "form":
+# # # # # # #         client_form()
+# # # # # # #     else:
+# # # # # # #         main()
 
-# # # # # # # #     st.write(investment_suggestions)
-
-# # # # # # # #     # Generate report with infographics
-# # # # # # # #     st.subheader("Investment Report")
-# # # # # # # #     st.write("Inflation-adjusted returns for suggested investments:")
-# # # # # # # #     # Mock data for illustration, replace with actual data
-# # # # # # # #     data = {
-# # # # # # # #         "Investment Type": ["Stocks", "Mutual Funds", "ETFs"],
-# # # # # # # #         "Inflation-adjusted Returns (%)": [10.5, 8.3, 9.2]
-# # # # # # # #     }
-# # # # # # # #     df = pd.DataFrame(data)
-
-# # # # # # # #     fig, ax = plt.subplots()
-# # # # # # # #     df.plot(kind="bar", x="Investment Type", y="Inflation-adjusted Returns (%)", ax=ax)
-# # # # # # # #     st.pyplot(fig)
-
-# # # # # # # # # Stock Analysis Section
-# # # # # # # # if option == "Stock Analysis":
-# # # # # # # #     st.header("Stock Analysis")
-# # # # # # # #     stock_name = st.text_input("Enter Stock Name/Ticker:")
-# # # # # # # #     time_period = st.number_input("Enter time period (in days):", min_value=1, max_value=365)
-
-# # # # # # # #     if st.button("Predict Future Prices"):
-# # # # # # # #         if stock_name:
-# # # # # # # #             predicted_prices = predict_stock_prices(stock_name, time_period)
-# # # # # # # #             st.write(f"Predicted Prices for {stock_name} over the next {time_period} days:")
-# # # # # # # #             st.line_chart(predicted_prices)
-# # # # # # # #         else:
-# # # # # # # #             st.error("Please enter a valid stock name/ticker.")
-
-# # # # # # # # Additional sections for Retirement Planning, Mortgage Planning, etc., to be added here
+# # # # # # # # if __name__ == "__main__":
+# # # # # # # #     main()
 
 
 
 
-# # # # # # # # # latest version pf client side :
+# # # # # # # # # infographics oplotting maanger side code |
 
-# # # # # # # # #best code so far now it can upload files and receive various forms of messages as well and provide us graphs that we want 
-# # # # # # # # # and also reply to images, give stock informations ,give stock analysis information and a prediction of the price
+
+# # # # # # # # import streamlit as st
+# # # # # # # # import pandas as pd
+# # # # # # # # import matplotlib.pyplot as plt
 
 # # # # # # # # import os
 # # # # # # # # import filetype
 # # # # # # # # import docx
 # # # # # # # # import PyPDF2
 # # # # # # # # import re
-# # # # # # # # from aiogram import Bot, Dispatcher, types
 # # # # # # # # from dotenv import load_dotenv
 # # # # # # # # from langchain.text_splitter import RecursiveCharacterTextSplitter
 # # # # # # # # from langchain_community.vectorstores import Chroma
-
-# # # # # # # # import faiss
 # # # # # # # # from langchain_community.docstore.in_memory import InMemoryDocstore
 # # # # # # # # from langchain_community.vectorstores import FAISS
 # # # # # # # # from langchain_community.document_loaders import Docx2txtLoader
-
 # # # # # # # # from langchain_core.prompts import ChatPromptTemplate
 # # # # # # # # from langchain.chains import create_retrieval_chain
 # # # # # # # # from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
@@ -20709,439 +23953,32 @@ if __name__ == '__main__':
 # # # # # # # # import asyncio
 # # # # # # # # import numpy as np
 # # # # # # # # import json
-# # # # # # # # import re
+
 # # # # # # # # import google.generativeai as genai
 # # # # # # # # import pathlib
-# # # # # # # # # Import things that are needed generically
-# # # # # # # # from langchain.pydantic_v1 import BaseModel, Field
-# # # # # # # # from langchain.tools import BaseTool, StructuredTool, tool
-
-# # # # # # # # from aiogram.client.default import DefaultBotProperties
-# # # # # # # # from aiogram.enums import ParseMode
-# # # # # # # # from aiogram.filters import CommandStart
-# # # # # # # # from aiogram.types import Message
-# # # # # # # # from aiogram import F
-# # # # # # # # from aiogram import Router
 # # # # # # # # import logging
 # # # # # # # # import sys
-# # # # # # # # from aiogram.filters import Command
-# # # # # # # # from aiogram.types import FSInputFile
-# # # # # # # # # from aiogram.utils import executor
 # # # # # # # # import io
 # # # # # # # # import matplotlib.pyplot as plt
 # # # # # # # # import seaborn as sns
-# # # # # # # # import aiohttp
-# # # # # # # # from aiogram.types import InputFile , BufferedInputFile
-# # # # # # # # import PIL.Image
-
-# # # # # # # # router = Router(name=__name__)
+# # # # # # # # # Import things that are needed generically
+# # # # # # # # from langchain.pydantic_v1 import BaseModel, Field
+# # # # # # # # from langchain.tools import BaseTool, StructuredTool, tool
+# # # # # # # # # Define functions to generate investment suggestions :
 
 # # # # # # # # load_dotenv()
-
-# # # # # # # # TOKEN = os.getenv("TOKEN")
-# # # # # # # # GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-# # # # # # # # os.environ["LANGCHAIN_TRACING_V2"]="true"
-# # # # # # # # os.environ["LANGCHAIN_API_KEY"]=os.getenv("LANGCHAIN_API_KEY")
-
-# # # # # # # # # Configure generativeai with your API key
-# # # # # # # # genai.configure(api_key=GOOGLE_API_KEY)
-
-# # # # # # # # # Initialize bot
-# # # # # # # # bot = Bot(token=TOKEN)
-# # # # # # # # dp = Dispatcher()
-
-# # # # # # # # # Glbal variables
-# # # # # # # # rag_on = False
-# # # # # # # # retriever = None  # Store retriever globally
-# # # # # # # # summary = ""
-# # # # # # # # investment_personality = ""
-# # # # # # # # # history = []
-# # # # # # # # previous_suggestions = ""
-
-# # # # # # # # CHAT_HISTORY_FILE = 'chat_history.json'
-
-# # # # # # # # def read_chat_history(chat_id):
-# # # # # # # #     if os.path.exists(CHAT_HISTORY_FILE):
-# # # # # # # #         with open(CHAT_HISTORY_FILE, 'r') as file:
-# # # # # # # #             chat_history = json.load(file)
-# # # # # # # #             return chat_history.get(str(chat_id), [])
-# # # # # # # #     return []
-
-# # # # # # # # def write_chat_history(chat_id, message):
-# # # # # # # #     chat_history = {}
-# # # # # # # #     if os.path.exists(CHAT_HISTORY_FILE):
-# # # # # # # #         with open(CHAT_HISTORY_FILE, 'r') as file:
-# # # # # # # #             chat_history = json.load(file)
-# # # # # # # #     if str(chat_id) not in chat_history:
-# # # # # # # #         chat_history[str(chat_id)] = []
-# # # # # # # #     chat_history[str(chat_id)].append(message)
-# # # # # # # #     with open(CHAT_HISTORY_FILE, 'w') as file:
-# # # # # # # #         json.dump(chat_history, file)
-
-# # # # # # # # class Reference:
-# # # # # # # #     def __init__(self):
-# # # # # # # #         self.response = ""
-
-
-# # # # # # # # reference = Reference()
-
-
-# # # # # # # # def clear_past():
-# # # # # # # #     reference.response = ""
-
-
-# # # # # # # # @router.message(F.text == "clear")
-# # # # # # # # async def clear(message: types.Message):
-# # # # # # # #     """
-# # # # # # # #     A handler to clear the previous conversation and context.
-# # # # # # # #     """
-# # # # # # # #     clear_past()
-# # # # # # # #     await message.reply("I've cleared the past conversation and context.")
-
-# # # # # # # # #Global Variables :
-
-# # # # # # # # # Store user states
-# # # # # # # # states = {}
-
-# # # # # # # # # Dictionary to hold question-answer pairs
-# # # # # # # # user_responses = {}
-# # # # # # # # #
-# # # # # # # # user_images = {}
-# # # # # # # # # Define Questions for assessment
-# # # # # # # # questions = [
-# # # # # # # #     """ 
-# # # # # # # #     1. You and your friend are betting on a series of coin tosses.
-
-# # # # # # # #     He always bets ₹2,000 on Heads
-
-# # # # # # # #     You always bet ₹2,000 on Tails
-
-# # # # # # # #     Winner of last 8 turns
-
-# # # # # # # #     You lost ₹8,000 in the last 4 turns!
-
-# # # # # # # #     If you were to bet one last time, what would you bet on:
-# # # # # # # #     a) heads or b) tails ?
-# # # # # # # #     """ ,
-# # # # # # # #     """
-# # # # # # # #     2. Imagine you are a contestant in a game show, and you are presented the following choices.
-
-# # # # # # # #     What would you prefer?
-# # # # # # # #     a) 50 percent chance of winning 15 gold coins 
-# # # # # # # #     b) 100 percent chance of winning 8 gold coins
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     3. In general, how would your best friend describe your risk-taking tendencies?
-# # # # # # # #     a) A real gambler
-# # # # # # # #     b) Willing to take risks after completing adequate research
-# # # # # # # #     c) Cautious
-# # # # # # # #     d) Avoids risk as much as possible
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     4. Suppose you could replace your current investment portfolio with this new one:
-# # # # # # # #     50 percent chance of Gaining 35 percent or 50 percent chance of Loss
-# # # # # # # #     In order to have a 50 percent chance of gaining +35 percent, how much loss are you willing to take?
-# # # # # # # #     a)-5 to -10
-# # # # # # # #     b)-10 to -15
-# # # # # # # #     c)-15 to -20
-# # # # # # # #     d)-20 to -25
-# # # # # # # #     e)-25 to -30
-# # # # # # # #     f)-30 to -35
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     5. Over any 1-year period, what would be the maximum drop in the value of your investment 
-# # # # # # # #     portfolio that you would be comfortable with?
-# # # # # # # #     a) <5%
-# # # # # # # #     b) 5 - 10%
-# # # # # # # #     c) 10 - 15%
-# # # # # # # #     d) 15 - 20%
-# # # # # # # #     e) >20%
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     6. When investing, what do you consider the most?
-
-# # # # # # # #     a) Risk 
-# # # # # # # #     b) Return
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     7. What best describes your attitude?
-
-# # # # # # # #     a) Prefer reasonable returns, can take reasonable risk
-# # # # # # # #     b) Like higher returns, can take slightly higher risk
-# # # # # # # #     c) Want to maximize returns, can take significant high risk
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     8. How much monthly investment you want to do?
-# # # # # # # #     """,
-# # # # # # # #     """
-# # # # # # # #     9. What is the time horizon for your investment?
-# # # # # # # #     You can answer in any range, example 1-5 years."""  
-# # # # # # # # ]
-
-
-
-# # # # # # # # import logging
-# # # # # # # # from aiogram import Bot, Dispatcher, types
-# # # # # # # # # Register the router with the dispatcher
-# # # # # # # # dp.include_router(router)
-
-# # # # # # # # # from aiogram.utils import executor
-# # # # # # # # from aiogram.filters import CommandStart
-# # # # # # # # from aiogram.types import Poll, PollAnswer
-
-# # # # # # # # # Command handler to start the poll
-# # # # # # # # @dp.message(CommandStart())
-# # # # # # # # async def handle_start(message: types.Message):
-# # # # # # # #     chat_id = message.chat.id
-# # # # # # # #     await bot.send_message(chat_id, "Hi,My name is Finbot and I am a Wealth Management Advisor ChatBot! ")
-# # # # # # # #     question="How Can I Help you today ?"
-# # # # # # # #     options = """\na. Know my Investment Personality \nb. Tax Related Queires \nc. Savings and Wealth Management \nd. Debt Repayment Strategies
-# # # # # # # #               """
-# # # # # # # #     await bot.send_message(chat_id, question + options)
-
-    
-
-# # # # # # # # # Function to start the assessment
-# # # # # # # # async def start_assessment(chat_id):
-# # # # # # # #     await bot.send_message(chat_id, """To analyse your investment personality I need to ask you some questions.\nLet's start a quick personality assessment.""")
-# # # # # # # #     await ask_next_question(chat_id, 0)
-
-# # # # # # # # # Function to ask the next question
-# # # # # # # # async def ask_next_question(chat_id, question_index):
-# # # # # # # #     if question_index < len(questions):
-# # # # # # # #         # Ask the next question
-# # # # # # # #         await bot.send_message(chat_id, questions[question_index])
-# # # # # # # #         # Update state to indicate the next expected answer
-# # # # # # # #         states[chat_id] = question_index
-# # # # # # # #     else:
-# # # # # # # #         # No more questions, finish assessment
-# # # # # # # #         await finish_assessment(chat_id)
-
-# # # # # # # # # Handler for receiving assessment answers
-# # # # # # # # assessment_in_progress = True
-
-# # # # # # # # from aiogram.types import FSInputFile
-# # # # # # # # async def finish_assessment(chat_id):
-# # # # # # # #     if chat_id in states and states[chat_id] == len(questions):
-# # # # # # # #         # All questions have been answered, now process the assessment
-# # # # # # # #         await bot.send_message(chat_id, "Assessment completed. Thank you!")
-
-# # # # # # # #         # Determine investment personality based on collected responses
-# # # # # # # #         global investment_personality
-# # # # # # # #         investment_personality = await determine_investment_personality(user_responses)
-
-# # # # # # # #         # Inform the user about their investment personality
-# # # # # # # #         await bot.send_message(chat_id, f"Your investment personality: {investment_personality}")
-
-# # # # # # # #         # Store the response in chat history
-# # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': investment_personality})
-
-# # # # # # # #         # Summarize collected information
-# # # # # # # #         global summary
-# # # # # # # #         summary = "\n".join([f"{q}: {a}" for q, a in user_responses.items()])
-# # # # # # # #         summary = summary + "\n" + "Your investment personality:" + investment_personality
-# # # # # # # #         # Ensure to await the determination of investment personality
-# # # # # # # #         await send_summary_chunks(chat_id, summary)
-# # # # # # # #         global assessment_in_progress 
-# # # # # # # #         assessment_in_progress = False
-       
-# # # # # # # #         # await bot.send_message(chat_id,"Hello there here is the Word Document.Please fill in your details with correct Information and then upload it in the chat")
-# # # # # # # #         # file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
-
-# # # # # # # #         # await bot.send_document(chat_id, document=file, caption="To receive financial advice,Please fill in the Financial Details in this document with correct information and upload it here.")
-# # # # # # # #         # await bot.send_message(chat_id,file)
-
-# # # # # # # # async def send_summary_chunks(chat_id, summary):
-# # # # # # # #     # Split the summary into chunks that fit within Telegram's message limits
-# # # # # # # #     chunks = [summary[i:i+4000] for i in range(0, len(summary), 4000)]
-
-# # # # # # # #     # Send each chunk as a separate message
-# # # # # # # #     for chunk in chunks:
-# # # # # # # #         await bot.send_message(chat_id, f"Assessment Summary:\n{chunk}")
-
-
-# # # # # # # # async def determine_investment_personality(assessment_data):
-# # # # # # # #     try:
-# # # # # # # #         # Prepare input text for the chatbot based on assessment data
-# # # # # # # #         input_text = "User Profile:\n"
-# # # # # # # #         for question, answer in assessment_data.items():
-# # # # # # # #             input_text += f"{question}: {answer}\n"
-
-# # # # # # # #         # Introduce the chatbot's task and prompt for classification
-# # # # # # # #         input_text += "\nYou are an investment personality identifier. Classify the user as:\n" \
-# # # # # # # #                       "- Conservative Investor\n" \
-# # # # # # # #                       "- Moderate Investor\n" \
-# # # # # # # #                       "- Aggressive Investor"
-
-# # # # # # # #         # Use your generative AI model to generate a response
-# # # # # # # #         # print(input_text)
-# # # # # # # #         model = genai.GenerativeModel('gemini-pro')
-# # # # # # # #         response = model.generate_content(input_text)
-
-# # # # # # # #         # Determine the investment personality from the chatbot's response
-# # # # # # # #         response_text = response.text.lower()
-# # # # # # # #         if "conservative" in response_text:
-# # # # # # # #             personality = "Conservative Investor"
-# # # # # # # #         elif "moderate" in response_text:
-# # # # # # # #             personality = "Moderate Investor"
-# # # # # # # #         elif "aggressive" in response_text:
-# # # # # # # #             personality = "Aggressive Investor"
-# # # # # # # #         else:
-# # # # # # # #             personality = "Unknown"
-
-# # # # # # # #         return personality
-# # # # # # # #         # Send the determined investment personality back to the user
-# # # # # # # #         #await bot.send_message(chat_id, f"Investment Personality: {personality}")
-
-# # # # # # # #     except Exception as e:
-# # # # # # # #         print(f"Error generating response: {e}")
-# # # # # # # #         #await bot.send_message(chat_id, "Error processing investment personality classification.")
-
-
-# # # # # # # # # Tax Related Queries :
-
-# # # # # # # # # Define a global state to track the questions
-# # # # # # # # tax_states = {}
-# # # # # # # # tax_responses = {}
-
-# # # # # # # # # Define the questions
-# # # # # # # # tax_questions = [
-# # # # # # # #     "What is your annual income?",
-# # # # # # # #     "In which state do you live?",
-# # # # # # # #     "Are you married or single?\n(a) Married\n(b) Single",
-# # # # # # # #     "For which year do you wish to calculate tax?",
-# # # # # # # #     "Do you have any mortgages or any tax reductions?"
-# # # # # # # # ]
-
-# # # # # # # # # @dp.message()
-# # # # # # # # async def tax_management(message: types.Message):
-# # # # # # # #     chat_id = message.chat.id
-# # # # # # # #     # If the user is answering a tax question, process the response
-# # # # # # # #     if chat_id in tax_states and tax_states[chat_id] < len(tax_questions):
-# # # # # # # #         question_index = tax_states[chat_id]
-# # # # # # # #         answer = message.text
-# # # # # # # #         tax_responses[tax_questions[question_index]] = answer
-# # # # # # # #         tax_states[chat_id] += 1
-
-# # # # # # # #         # Ask the next question
-# # # # # # # #         if tax_states[chat_id] < len(tax_questions):
-# # # # # # # #             await bot.send_message(chat_id, tax_questions[tax_states[chat_id]])
-# # # # # # # #         else:
-# # # # # # # #             # All questions answered, now process the data
-# # # # # # # #             await calculate_taxes(chat_id)
-# # # # # # # #             await bot.send_message(chat_id, "Thank you for your responses! Your tax-related queries have been processed.")
-# # # # # # # #             # Reset the state
-# # # # # # # #             del tax_states[chat_id]
-# # # # # # # #             del tax_responses[chat_id]
-
-# # # # # # # #     # If the user starts the tax management flow, ask the first question
-# # # # # # # #     else:
-# # # # # # # #         tax_states[chat_id] = 0
-# # # # # # # #         tax_responses[chat_id] = {}
-# # # # # # # #         await bot.send_message(chat_id, "Let's get started with your tax-related queries.")
-# # # # # # # #         await bot.send_message(chat_id, tax_questions[0])
-
-# # # # # # # # async def calculate_taxes(chat_id):
-# # # # # # # #     try:
-# # # # # # # #         # Get the user's responses
-# # # # # # # #         annual_income = tax_responses[tax_questions[0]]
-# # # # # # # #         state = tax_responses[tax_questions[1]]
-# # # # # # # #         marital_status = tax_responses[tax_questions[2]]
-# # # # # # # #         tax_year = tax_responses[tax_questions[3]]
-# # # # # # # #         mortgages_or_deductions = tax_responses[tax_questions[4]]
-
-# # # # # # # #         # Prepare the context for the LLM
-# # # # # # # #         context = f"""
-# # # # # # # #         Annual Income: {annual_income}
-# # # # # # # #         State: {state}
-# # # # # # # #         Marital Status: {marital_status}
-# # # # # # # #         Tax Year: {tax_year}
-# # # # # # # #         Mortgages or Deductions: {mortgages_or_deductions}
-# # # # # # # #         """
-
-# # # # # # # #         # Use the context to get tax calculation and advice
-# # # # # # # #         task = """You are a Tax Calculations Expert in the entire world.
-# # # # # # # #             Ask user tax related queries to help users with tax related queries.
-# # # # # # # #             Consider user's investment personality  if provided.
-# # # # # # # #             Address the user by their name(client_name: Emily in our case but if any other name is given refer to that) if provided.
-# # # # # # # #             Help users to save tax on their income and earnings.
-# # # # # # # #             If user asks queries related to saving taxes or calculating taxes refer to the 
-# # # # # # # #             US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
-# # # # # # # #             consider the information shared by the user such as their annual income and their monthly investment if provided,
-# # # # # # # #             also give advice to the user on how they can save their taxes.
-# # # # # # # #             Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
-        
-# # # # # # # #         query = task + "\n" + context
-# # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
-# # # # # # # #         chat = model.start_chat(history=[])
-# # # # # # # #         response = chat.send_message(query)
-
-# # # # # # # #         # Enhanced logging for debugging
-# # # # # # # #         logging.info(f"Model response: {response}")
-# # # # # # # #         format_response = markdown_to_text(response.text)
-
-# # # # # # # #         # Store the response in chat history
-# # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-# # # # # # # #         await bot.send_message(chat_id,"Here is your calculated tax as per the responses provided ")
-# # # # # # # #         await bot.send_message(chat_id, format_response)
-
-# # # # # # # #     except Exception as e:
-# # # # # # # #         print(f"Error calculating taxes: {e}")
-# # # # # # # #         await bot.send_message(chat_id, "Error calculating taxes. Please try again later.")
-
-# # # # # # # # # async def tax_management(chat_id) :
-# # # # # # # # #     try:
-# # # # # # # #         # task = """You are a Tax Calculations Expert in the entire world.
-# # # # # # # #         #     Ask user tax related queries to help users with tax related queries.
-# # # # # # # #         #     Consider user's investment personality  if provided.
-# # # # # # # #         #     Address the user by their name(client_name: Emily in our case but if any other name is given refer to that) if provided.
-# # # # # # # #         #     Help users to save tax on their income and earnings.
-# # # # # # # #         #     If user asks queries related to saving taxes or calculating taxes refer to the 
-# # # # # # # #         #     US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
-# # # # # # # #         #     consider the information shared by the user such as their annual income and their monthly investment if provided,
-# # # # # # # #         #     also give advice to the user on how they can save their taxes.
-# # # # # # # #         #     Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
-        
-        
-# # # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
-# # # # # # # # #         # query = chat_history_text + "\n" + query
-
-# # # # # # # # #         # Include chat history
-# # # # # # # # #         chat_history = read_chat_history(chat_id)
-# # # # # # # # #         chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
-# # # # # # # # #         # history.append(chat_history_text)
-
-# # # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history_text # + "\n" + message.text
-# # # # # # # # #         query = task + "\n" + chat_history_text # + "\n" + message.text
-
-
-# # # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
-# # # # # # # # #         chat = model.start_chat(history=[])
-# # # # # # # # #         response = chat.send_message(query)
-
-# # # # # # # # #         # Enhanced logging for debugging
-# # # # # # # # #         logging.info(f"Model response: {response}")
-# # # # # # # # #         format_response = markdown_to_text(response.text) #(response_text) #response.result
-
-# # # # # # # # #         # Store the response in chat history
-# # # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-# # # # # # # # #         await bot.send_message(chat_id,format_response)
-# # # # # # # # #         # await message.reply(format_response)
-
-# # # # # # # # #     except Exception as e:
-# # # # # # # # #         print(f"Error invoking retrieval chain on attempt : {e}")
-# # # # # # # # #         await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
-        
-
-# # # # # # # # # Savings and Wealth Management :
-# # # # # # # # async def savings_management(chat_id) :
-# # # # # # # #     # Savings and Wealth Management related questions
-# # # # # # # #     await bot.send_message(chat_id,"Hello there here is a Simple Personal Budget Excel File.Please fill in your details with correct Information and then upload it in the chat")
-# # # # # # # #     file = FSInputFile("data\Emily_Budget.xlsx", filename="Your Simple Personal Budget.xlsx")
-
-
-# # # # # # # # # Handler for document upload
+# # # # # # # # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+
+# # # # # # # # def markdown_to_text(md):
+# # # # # # # #     # Simple conversion for markdown to plain text
+# # # # # # # #     md = md.replace('**', '')
+# # # # # # # #     md = md.replace('*', '')
+# # # # # # # #     md = md.replace('_', '')
+# # # # # # # #     md = md.replace('#', '')
+# # # # # # # #     md = md.replace('`', '')
+# # # # # # # #     return md.strip()
+
+# # # # # # # # # Load the Vector DataBase :
 # # # # # # # # async def load_vector_db(file_path):
 # # # # # # # #     try:
 # # # # # # # #         print("Loading vector database...")
@@ -21169,7 +24006,7 @@ if __name__ == '__main__':
 # # # # # # # #         return None
 
 
-# # # # # # # # # change prompt template :
+# # # # # # # # investment_personality = "Moderate Investor"
 # # # # # # # # async def make_retrieval_chain(retriever):
 # # # # # # # #     """
 # # # # # # # #     Create a retrieval chain using the provided retriever.
@@ -21181,7 +24018,7 @@ if __name__ == '__main__':
 # # # # # # # #         RetrievalQA: A retrieval chain object.
 # # # # # # # #     """
 # # # # # # # #     try:
-# # # # # # # #         global investment_personality,summary
+# # # # # # # #         global investment_personality #,summary
 # # # # # # # #         llm = ChatGoogleGenerativeAI(
 # # # # # # # #             #model="gemini-pro",
 # # # # # # # #             model = "gemini-1.5-flash",
@@ -21189,36 +24026,72 @@ if __name__ == '__main__':
 # # # # # # # #             top_p=0.85,
 # # # # # # # #             google_api_key=GOOGLE_API_KEY
 # # # # # # # #         )
+# # # # # # # #                                                     # \n + summary 
+# # # # # # # #         prompt_template = investment_personality +  "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # # # # # #                 Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality.
+# # # # # # # #                 Also give the user detailed information about the investment how to invest,where to invest and how much they
+# # # # # # # #                 should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # # # # # #                 Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+# # # # # # # #                 investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
+# # # # # # # #                 Also give the user minimum and maximum expected growth in dollars for the time horizon .
+# # # # # # # #                 Also explain the user why you are giving them that particular investment suggestion.
+# # # # # # # #                 Here's an example for the required Output Format :
 
-# # # # # # # #         # prompt_template = investment_personality + "\n" + summary + "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-# # # # # # # #         #         Respond to the client by the client name.
-# # # # # # # #         #         Give Financial Suggestions to the user so that they could do proper responsible investment based on their investment personality.
-# # # # # # # #         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
-# # # # # # # #         #         should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
-# # # # # # # #         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-# # # # # # # #         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
-# # # # # # # #         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
-# # # # # # # #         #         Also explain the user why you are giving them that particular investment suggestion.
-# # # # # # # #         #         Give the client suggestions of Investment based on their investment personality that can also help them manage their mortages and other liablilities if they have any,ignore if they dont have any liabilities.
-# # # # # # # #         #         Answer in 3-4 lines.\n
-# # # # # # # #         #         <context>
-# # # # # # # #         #         {context}
-# # # # # # # #         #         </context>
-# # # # # # # #         #         Question: {input}"""
+# # # # # # # #                 Investment Suggestions for a Moderate Investor(This is for a Moderate Investor but you need to generate for any investor)
+
+# # # # # # # #                 Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+
+# # # # # # # #                 Investment Allocation: (remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+# # # # # # # #                 Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+# # # # # # # #                 How to Invest: Diversify across various asset classes like:  (Give allocations % as well)
+# # # # # # # #                 Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+# # # # # # # #                 ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+# # # # # # # #                 Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+# # # # # # # #                 Consider investing in blue-chip companies or growth sectors like technology. 
+# # # # # # # #                 Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
 
 
-# # # # # # # #         prompt_template = investment_personality + "\n" + summary + "\n" + """ Role : You are a Top class highly professional and world's best Savings Advisor for 
-# # # # # # # #                 savings related question-answering tasks related to the document.
-# # # # # # # #                 Respond to the client by the client name.
-# # # # # # # #                 Give Savings Suggestions to the user so that they could do proper responsible savings and save their expenses based on their investment personality and budget if provided.
-# # # # # # # #                 Also give the user detailed information about their savings such that they could save more money and save their expenses.
-# # # # # # # #                 Give the user minimum and maximum percentage of savings the user can do by reducing their expenses. If the users have given a budget then analyse it and give suggestions based on that.
-# # # # # # # #                 Try to imitate human language and talk to the user/client like a human and give personal savings suggestions.
-# # # # # # # #                 If the user is having many unnecessary expenses then give the user some advice in a gentle manner without offending the user or hurt their feelings and suggest and advice them to stop or reduce their unnecessary expenses 
-# # # # # # # #                 in order to increase their savings.
-# # # # # # # #                 Also explain the user why you are giving them that particular savings suggestion.
-# # # # # # # #                 Give the client suggestions of savings based on their investment personality that can also help them manage their mortages and other liablilities if they have any,ignore if they dont have any liabilities.
-# # # # # # # #                 Answer in 3-4 lines.\n
+# # # # # # # #                 Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+# # # # # # # #                 Percentage Allocation: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+# # # # # # # #                 Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+# # # # # # # #                 How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+# # # # # # # #                 Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+# # # # # # # #                 Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+# # # # # # # #                 Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+# # # # # # # #                 Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+# # # # # # # #                 Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+# # # # # # # #                 Percentage Allocation: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+# # # # # # # #                 Time Horizon and Expected Returns:
+
+# # # # # # # #                 Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+# # # # # # # #                 Minimum Expected Annual Return: 4% - 6% Maximum Expected Annual Return: 8% - 10% Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, 
+# # # # # # # #                 a 10,000 investment could growto approximately 17,908 in 10 years. Minimum Expected Growth in Dollars: 
+                
+# # # # # # # #                 4,000−6,000 (over 10 years) Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+# # # # # # # #                 Rationale for Investment Suggestions:
+
+# # # # # # # #                 This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+
+                
+# # # # # # # #                 Important Considerations:
+
+# # # # # # # #                 Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+
+# # # # # # # #                 Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+
 # # # # # # # #                 <context>
 # # # # # # # #                 {context}
 # # # # # # # #                 </context>
@@ -21242,254 +24115,94 @@ if __name__ == '__main__':
 # # # # # # # #         print(f"Error in creating chain: {e}")
 # # # # # # # #         return None
 
-# # # # # # # # from aiogram.filters import Filter
+# # # # # # # # import streamlit as st
+# # # # # # # # import json
+# # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # import io
 
-# # # # # # # # # @router.message(F.document)
 
-# # # # # # # # import os
-# # # # # # # # import pandas as pd
-# # # # # # # # from openpyxl import load_workbook
 
-# # # # # # # # @dp.message(F.document)
-# # # # # # # # async def handle_document(message: types.Message):
-# # # # # # # #     global summary, investment_personality  
+# # # # # # # # # Create InfoGraphics :
 
-# # # # # # # #     chat_id = message.chat.id
-# # # # # # # #     await message.reply("File Received") 
+
+# # # # # # # # # import re
+# # # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # # import seaborn as sns
+# # # # # # # # # from collections import defaultdict
+
+# # # # # # # # # def extract_numerical_data(response):
+# # # # # # # # #     # Extract percentage ranges, dollar values, and other numbers from the text
+# # # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
+# # # # # # # # #     data = defaultdict(list)
     
-# # # # # # # #     # Obtain file information
-# # # # # # # #     file_id = message.document.file_id
-# # # # # # # #     file = await bot.get_file(file_id)
-# # # # # # # #     file_path = file.file_path
-
-# # # # # # # #     # Get the file extension
-# # # # # # # #     file_extension = os.path.splitext(message.document.file_name)[-1].lower()
-
-# # # # # # # #     # Download the file
-# # # # # # # #     local_file_path = "data/uploaded_file" + file_extension
-# # # # # # # #     await bot.download_file(file_path, local_file_path)
-
-# # # # # # # #     # Process the uploaded document based on the file type
-# # # # # # # #     if file_extension in ['.xlsx', '.xls']:
-# # # # # # # #         extracted_text = await process_excel_file(local_file_path)
-# # # # # # # #     else:
-# # # # # # # #         extracted_text = await process_document(local_file_path)
-
-# # # # # # # #     if extracted_text:
-# # # # # # # #         # Proceed with further processing
-# # # # # # # #         print("Retriever being loaded ")
-# # # # # # # #         retriever = await load_vector_db(local_file_path)
-# # # # # # # #         client_name, validation_errors = await validate_process_document(local_file_path)
-
-# # # # # # # #         print(f"Client Name: {client_name}")
-# # # # # # # #         if validation_errors:
-# # # # # # # #             print("**Validation Errors:**")
-# # # # # # # #             for error in validation_errors:
-# # # # # # # #                 print(error)
-# # # # # # # #         else:
-# # # # # # # #             print("All fields are filled correctly.")
-# # # # # # # #         # if client_name is None:
-# # # # # # # #         #     try:
-# # # # # # # #         #         await message.reply("Processing the uploaded image")
-# # # # # # # #         #         await handle_image(message) 
-# # # # # # # #         #         return 
-# # # # # # # #         #     except Exception as e:
-# # # # # # # #         #         await message.reply("Error processing uploaded image")
-# # # # # # # #         #         print(e)
-# # # # # # # #         if client_name == None : client_name = "Emilly"
-# # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}. I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
-
-# # # # # # # #         if retriever is None:
-# # # # # # # #             await message.reply("The retrieval chain is not set up. Please upload a document first.")
-# # # # # # # #             return
-
-# # # # # # # #         chain = await make_retrieval_chain(retriever)
-# # # # # # # #         if chain is None:
-# # # # # # # #             await message.reply("Failed to create the retrieval chain.")
-# # # # # # # #             return
-
-# # # # # # # #         try:     
-# # # # # # # #             query = summary + "\n" + investment_personality
-     
-# # # # # # # #             response = chain.invoke({"input": query})
-# # # # # # # #             print(response['answer'])
-# # # # # # # #             global chat_history
-# # # # # # # #             chat_history = response['answer'] 
-# # # # # # # #             print(f"\n Chat History : {chat_history}")
-# # # # # # # #             format_response = markdown_to_text(response['answer'])
-
-# # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': extracted_text})
-# # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-
-# # # # # # # #             await message.reply(format_response)
-
-# # # # # # # #         except Exception as e:
-# # # # # # # #             print(f"Error invoking retrieval chain on attempt : {e}")
-# # # # # # # #             await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
-
-# # # # # # # #     else:
-# # # # # # # #         await message.reply("Failed to process the uploaded file.")
-
-# # # # # # # # async def process_excel_file(file_path):
-# # # # # # # #     try:
-# # # # # # # #         # Reading the Excel file using pandas
-# # # # # # # #         df = pd.read_excel(file_path)
-# # # # # # # #         # Extracting relevant information (This is just an example, customize it as needed)
-# # # # # # # #         extracted_text = df.to_string(index=False)
-# # # # # # # #         return extracted_text
-# # # # # # # #     except Exception as e:
-# # # # # # # #         print(f"Error processing Excel file: {e}")
-# # # # # # # #         return None
-
-
-# # # # # # # # # @dp.message(F.document)
-# # # # # # # # # async def handle_document(message: types.Message):
-# # # # # # # # #     global summary,investment_personality  
-
-# # # # # # # # #     chat_id = message.chat.id
-# # # # # # # # #     await message.reply("File Received") 
-# # # # # # # # #     # Obtain file information
-# # # # # # # # #     file_id = message.document.file_id
-# # # # # # # # #     file = await bot.get_file(file_id)
-# # # # # # # # #     file_path = file.file_path
-    
-# # # # # # # # #     # Download the file
-# # # # # # # # #     await bot.download_file(file_path, "data/uploaded_file")
-    
-# # # # # # # # #     # Process the uploaded document
-# # # # # # # # #     extracted_text = await process_document("data/uploaded_file")
-# # # # # # # # #     # print(extracted_text)
-
-# # # # # # # # #     if extracted_text:
-# # # # # # # # #         # Load vector database (assuming this is part of setting up the retriever)
-# # # # # # # # #         print("Retriever being loaded ")
-# # # # # # # # #         retriever = await load_vector_db("data/uploaded_file")
-# # # # # # # # #         file_path = 'data/uploaded_file'
-# # # # # # # # #         client_name, validation_errors = await validate_process_document(file_path)
-
-# # # # # # # # #         # Print results
-# # # # # # # # #         print(f"Client Name: {client_name}")
-# # # # # # # # #         if validation_errors:
-# # # # # # # # #             print("**Validation Errors:**")
-# # # # # # # # #             for error in validation_errors:
-# # # # # # # # #                 print(error)
+# # # # # # # # #     for match in pattern.findall(response):
+# # # # # # # # #         category, values = match
+# # # # # # # # #         values = values.replace('$', '').replace(',', '')
+        
+# # # # # # # # #         if '-' in values:
+# # # # # # # # #             if '%' in values:
+# # # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
+# # # # # # # # #             else:
+# # # # # # # # #                 min_val, max_val = map(float, values.split('-'))
 # # # # # # # # #         else:
-# # # # # # # # #             print("All fields are filled correctly.")
-# # # # # # # # #         if client_name == None:
-# # # # # # # # #             try:
-# # # # # # # # #                 await message.reply("Processing the uploaded image")
-# # # # # # # # #                 await handle_image(message) 
-# # # # # # # # #                 return 
-# # # # # # # # #             except Exception as e:
-# # # # # # # # #                 await message.reply("error processing uploaded image")
-# # # # # # # # #                 print(e)
-# # # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}.I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
+# # # # # # # # #             min_val = max_val = float(values.replace('%', ''))
 
-# # # # # # # # #         if retriever is None:
-# # # # # # # # #             await message.reply("The retrieval chain is not set up. Please upload a document first.")
-# # # # # # # # #             return
-
-# # # # # # # # #         # Check if a valid chain can be created
-# # # # # # # # #         chain = await make_retrieval_chain(retriever)
-# # # # # # # # #         if chain is None:
-# # # # # # # # #             await message.reply("Failed to create the retrieval chain.")
-# # # # # # # # #             return
-        
-# # # # # # # # #         try:     
-# # # # # # # # #             query = summary + "\n" + investment_personality # + "\n"  #extracted_text + "\n" + task
-        
-# # # # # # # # #             response = chain.invoke({"input": query})
-# # # # # # # # #             print(response['answer'])
-# # # # # # # # #             global chat_history
-# # # # # # # # #             chat_history = response['answer'] 
-# # # # # # # # #             print(f"\n Chat History : {chat_history}")
-# # # # # # # # #             format_response = markdown_to_text(response['answer'])
-
-# # # # # # # # #             # Store the extracted_text in chat history
-# # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': extracted_text})
-        
-# # # # # # # # #             # Store the response in chat history
-# # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-
-# # # # # # # # #             await message.reply(format_response)
-# # # # # # # # #             # await message.reply(response['answer'])
-
-# # # # # # # # #         except Exception as e:
-# # # # # # # # #             print(f"Error invoking retrieval chain on attempt : {e}")
-# # # # # # # # #             await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
-
-# # # # # # # # #     else:
-# # # # # # # # #         await message.reply("Failed to process the uploaded file.")
+# # # # # # # # #         data[category.strip()].append((min_val, max_val))
     
+# # # # # # # # #     return data
 
-# # # # # # # # # Function to extract data from LLM response
-# # # # # # # # def extract_data_from_response(response):
-# # # # # # # #     try:
-# # # # # # # #         # Locate the JSON-like data in the response
-# # # # # # # #         json_start = response.find("{")
-# # # # # # # #         json_end = response.rfind("}") + 1
-        
-# # # # # # # #         if json_start == -1 or json_end == -1:
-# # # # # # # #             raise ValueError("No JSON data found in the response.")
-        
-# # # # # # # #         json_data = response[json_start:json_end]
-        
-# # # # # # # #         # Parse the JSON data
-# # # # # # # #         data = json.loads(json_data.replace("'", "\""))
-# # # # # # # #         print(data)
-# # # # # # # #         return data
-# # # # # # # #     except Exception as e:
-# # # # # # # #         logging.error(f"Error extracting data: {e}")
-# # # # # # # #         return None
+# # # # # # # # # def create_bar_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
 
- 
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+# # # # # # # # #     plt.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
+# # # # # # # # #     plt.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
 
+# # # # # # # # #     plt.xlabel('Values')
+# # # # # # # # #     plt.ylabel('Categories')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     plt.show()
 
-# # # # # # # # def extract_allocations_from_json(json_data,chat_id):
-# # # # # # # #     allocations = {}
-# # # # # # # #     for entry in json_data.get(str(chat_id), []):
-# # # # # # # #         if entry['role'] == 'bot':
-# # # # # # # #             message = entry['message']
-# # # # # # # #             lines = message.split('\n')
-# # # # # # # #             current_category = None
+# # # # # # # # # def create_pie_chart(data, title):
+# # # # # # # # #     labels = list(data.keys())
+# # # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
 
-# # # # # # # #             for line in lines:
-# # # # # # # #                 match = re.match(r'^(.*?):\s*(\d+)%$', line)
-# # # # # # # #                 if match:
-# # # # # # # #                     category, percent = match.groups()
-# # # # # # # #                     allocations[category] = []
-# # # # # # # #                     current_category = category
-# # # # # # # #                 elif current_category and re.match(r'.*\d+%', line):
-# # # # # # # #                     subcategory_match = re.match(r'^(.*?)(\d+)%$', line)
-# # # # # # # #                     if subcategory_match:
-# # # # # # # #                         subcategory, percent = subcategory_match.groups()
-# # # # # # # #                         allocations[current_category].append((subcategory.strip(), float(percent)))
+# # # # # # # # #     plt.figure(figsize=(8, 8))
+# # # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
+# # # # # # # # #     plt.axis('equal')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     plt.show()
 
-# # # # # # # #     return allocations
+# # # # # # # # # def create_expected_return_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
 
-
-# # # # # # # # def create_pie_chart(allocations, chat_id):
-# # # # # # # #     labels = []
-# # # # # # # #     sizes = []
-# # # # # # # #     for category, subcategories in allocations.items():
-# # # # # # # #         for subcategory, percent in subcategories:
-# # # # # # # #             labels.append(f"{category} - {subcategory}")
-# # # # # # # #             sizes.append(percent)
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+# # # # # # # # #     plt.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
+# # # # # # # # #     plt.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
     
-# # # # # # # #     if sizes:
-# # # # # # # #         fig, ax = plt.subplots()
-# # # # # # # #         ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140)
-# # # # # # # #         ax.axis('equal')
-        
-# # # # # # # #         plt.title("Investment Allocation")
-# # # # # # # #         chart_path = f"data/investment_allocation_{chat_id}.png"
-# # # # # # # #         plt.savefig(chart_path)
-# # # # # # # #         plt.close()
-        
-# # # # # # # #         return chart_path
-# # # # # # # #     else:
-# # # # # # # #         return None
-  
+# # # # # # # # #     plt.ylabel('Values')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     plt.show()
+
+# # # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
+# # # # # # # # #     # Extract the data
+# # # # # # # # #     data = extract_numerical_data(response)
+    
+# # # # # # # # #     # Generate the charts
+# # # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
+# # # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
+# # # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
+
+
+
+
+
 
 # # # # # # # # async def process_document(file_path):
 # # # # # # # #     try:
@@ -21506,7 +24219,8 @@ if __name__ == '__main__':
 # # # # # # # #         print(f"Error processing document: {e}")
 # # # # # # # #         return None
 
-# # # # # # # # def extract_text_from_pdf(pdf_file_path):
+
+# # # # # # # # async def extract_text_from_pdf(pdf_file_path):
 # # # # # # # #     try:
 # # # # # # # #         print("Processing pdf file")
 # # # # # # # #         with open(pdf_file_path, "rb") as pdf_file:
@@ -21521,10 +24235,8 @@ if __name__ == '__main__':
 # # # # # # # #         return None
 
 
-# # # # # # # # import re
-# # # # # # # # import docx
 
-# # # # # # # # def extract_text_and_tables_from_word(docx_file_path):
+# # # # # # # # async def extract_text_and_tables_from_word(docx_file_path):
 # # # # # # # #     """
 # # # # # # # #     Extracts text and tables from a Word document (.docx).
 
@@ -21557,7 +24269,7 @@ if __name__ == '__main__':
 # # # # # # # #         print(f"Error extracting text and tables from Word document: {e}")
 # # # # # # # #         return None, None
 
-# # # # # # # # def validate_document_content(text, tables):
+# # # # # # # # async def validate_document_content(text, tables):
 # # # # # # # #     """
 # # # # # # # #     Validates the content of the document.
 
@@ -21625,242 +24337,1031 @@ if __name__ == '__main__':
 
 # # # # # # # #     return client_name, errors
 
-# # # # # # # # async def validate_process_document(file_path):
-# # # # # # # #     try:
-# # # # # # # #         print("Validating process document : ")
-# # # # # # # #         text, tables = extract_text_and_tables_from_word(file_path)
-# # # # # # # #         if text is not None and tables is not None:
-# # # # # # # #             client_name, errors = validate_document_content(text, tables)
-# # # # # # # #             return client_name, errors
-# # # # # # # #         return None, ["Error processing document."]
-# # # # # # # #     except Exception as e:
-# # # # # # # #         print(f"Error processing document: {e}")
-# # # # # # # #         return None, [f"Error processing document: {e}"]
 
-# # # # # # # # @dp.message()
-# # # # # # # # async def main_bot(message: types.Message):
-# # # # # # # #     global retriever, extracted_text, investment_personality, summary, chat_history
 
-# # # # # # # #     chat_id = message.chat.id
-# # # # # # # #     question="How Can I Help you today ?"
-# # # # # # # #     options = """\na. Know my Investment Personality \nb. Tax Related Queires \nc. Savings and Wealth Management \nd. Debt Repayment Strategies
-# # # # # # # #               """
+# # # # # # # # async def generate_investment_suggestions(investment_personality, context):
     
-# # # # # # # #     # if chat_id in states and states[chat_id] < len(questions):
-# # # # # # # #     #     question_index = states[chat_id]
-# # # # # # # #     #     answer = message.text
-# # # # # # # #     #     user_responses[questions[question_index]] = answer
-# # # # # # # #     #     states[chat_id] += 1
-# # # # # # # #     #     await ask_next_question(chat_id, question_index + 1)
+# # # # # # # #     # retriever = asyncio.run(load_vector_db("uploaded_file"))
 
-# # # # # # # #     if chat_id in states and states[chat_id] < len(questions):
-# # # # # # # #         question_index = states[chat_id]
-# # # # # # # #         answer = message.text
-# # # # # # # #         user_responses[questions[question_index]] = answer
-# # # # # # # #         states[chat_id] += 1
-# # # # # # # #         if states[chat_id] < len(questions):
-# # # # # # # #             await ask_next_question(chat_id, question_index + 1)
-# # # # # # # #         else:
-# # # # # # # #             await ask_next_question(chat_id, question_index + 1)
-            
-# # # # # # # #             # await bot.send_message(chat_id, "Assessment Completed.")
-# # # # # # # #             await bot.send_message(chat_id, "What do you want to do next?\n" + question + options)
+# # # # # # # #     retriever = await load_vector_db("uploaded_file")
+# # # # # # # #     chain = await make_retrieval_chain(retriever)
+
+# # # # # # # #     # chain = asyncio.run(make_retrieval_chain(retriever))
+    
+# # # # # # # #     if chain is not None:
+# # # # # # # #         # summary = context
+# # # # # # # #         # query = summary + "\n" + investment_personality
+# # # # # # # #         query = str(investment_personality)
+# # # # # # # #         response = chain.invoke({"input": query})
+# # # # # # # #         format_response = markdown_to_text(response['answer'])
+# # # # # # # #         return format_response
+# # # # # # # #         # st.write(format_response)
+
+# # # # # # # #         # handle_graph(response['answer'])
+
+# # # # # # # #     else:
+# # # # # # # #         st.error("Failed to create the retrieval chain. Please upload a valid document.")
 
 
-# # # # # # # #     elif message.text:
-# # # # # # # #         lower_text = message.text.lower()
+# # # # # # # # # Generating Infographics : however got st.pyplot warnings:
 
-# # # # # # # #         # Investment Personality :
-# # # # # # # #         if any(variant in lower_text for variant in ["a", "a.", "a)", "(a)", "1", "1.", "1)", "(1)"]):
-# # # # # # # #             await start_assessment(chat_id)
+# # # # # # # # # import re
+# # # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # # import seaborn as sns
+# # # # # # # # # from collections import defaultdict
+# # # # # # # # # import streamlit as st
 
-# # # # # # # #         # Tax Related Queries :
-# # # # # # # #         elif any(variant in lower_text for variant in ["b", "b.", "b)", "(b)", "2", "2.", "2)", "(2)"]):
-# # # # # # # #             await bot.send_message(chat_id,"Hello, I will ask you some Tax Related Questions.\nPlease answer them correctly so that I can calculate your tax")
-# # # # # # # #             await tax_management(message) #(chat_id) #pass
+# # # # # # # # # def extract_numerical_data(response):
+# # # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
+# # # # # # # # #     data = defaultdict(list)
+    
+# # # # # # # # #     for match in pattern.findall(response):
+# # # # # # # # #         category, values = match
+# # # # # # # # #         values = values.replace('$', '').replace(',', '')
         
-# # # # # # # #         # Savings and Wealth Management :
-# # # # # # # #         elif any(variant in lower_text for variant in ["c", "c.", "c)", "(c)", "3", "3.", "3)", "(3)"]):
-# # # # # # # #             await savings_management(chat_id) #pass  #  
+# # # # # # # # #         if '-' in values:
+# # # # # # # # #             if '%' in values:
+# # # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
+# # # # # # # # #             else:
+# # # # # # # # #                 min_val, max_val = map(float, values.split('-'))
+# # # # # # # # #         else:
+# # # # # # # # #             min_val = max_val = float(values.replace('%', ''))
+
+# # # # # # # # #         data[category.strip()].append((min_val, max_val))
+    
+# # # # # # # # #     return data
+
+# # # # # # # # # def create_bar_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
+
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+# # # # # # # # #     plt.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
+# # # # # # # # #     plt.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
+
+# # # # # # # # #     plt.xlabel('Values')
+# # # # # # # # #     plt.ylabel('Categories')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     st.pyplot()  # Display the plot in Streamlit
+
+# # # # # # # # # def create_pie_chart(data, title):
+# # # # # # # # #     labels = list(data.keys())
+# # # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
+
+# # # # # # # # #     plt.figure(figsize=(8, 8))
+# # # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
+# # # # # # # # #     plt.axis('equal')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     st.pyplot()  # Display the plot in Streamlit
+
+# # # # # # # # # def create_expected_return_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
+
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+# # # # # # # # #     plt.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
+# # # # # # # # #     plt.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
+    
+# # # # # # # # #     plt.ylabel('Values')
+# # # # # # # # #     plt.title(title)
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     st.pyplot()  # Display the plot in Streamlit
+
+# # # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
+# # # # # # # # #     data = extract_numerical_data(response)
+    
+# # # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
+# # # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
+# # # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
+
+
+
+
+# # # # # # # # # # Genrating Inforgaphics :
+# # # # # # # # # # generated unreadable graphs:
+
+# # # # # # # # # import re
+# # # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # # import seaborn as sns
+# # # # # # # # # from collections import defaultdict
+# # # # # # # # # import streamlit as st
+
+# # # # # # # # # def extract_numerical_data(response):
+# # # # # # # # #     pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*([\d.,]+%-[\d.,]+%|[\d.,]+%-[\d.,]+|\d+-\d+|\d+%|\d+|[$]\d+,?\d*)')
+# # # # # # # # #     data = defaultdict(list)
+    
+# # # # # # # # #     for match in pattern.findall(response):
+# # # # # # # # #         category, values = match
+# # # # # # # # #         values = values.replace('$', '').replace(',', '')
         
-# # # # # # # #         # Debt Repayment Strategies :
-# # # # # # # #         elif any(variant in lower_text for variant in ["d", "d.", "d)", "(d)", "4", "4.", "4)", "(4)"]):
-# # # # # # # #             pass  # 
+# # # # # # # # #         if '-' in values:
+# # # # # # # # #             if '%' in values:
+# # # # # # # # #                 min_val, max_val = map(lambda x: float(x.replace('%', '')), values.split('-'))
+# # # # # # # # #             else:
+# # # # # # # # #                 min_val, max_val = map(float, values.split('-'))
+# # # # # # # # #         else:
+# # # # # # # # #             min_val = max_val = float(values.replace('%', ''))
 
-# # # # # # # #         elif lower_text in ["yes", "y"]:
-# # # # # # # #             await start_assessment(chat_id)
+# # # # # # # # #         data[category.strip()].append((min_val, max_val))
+    
+# # # # # # # # #     return data
 
-# # # # # # # #         else:
-# # # # # # # #             await bot.send_message(chat_id, "Assessment Completed. Do you wish to retake the assessment? Type 'yes' or 'no'.")
-# # # # # # # #             await bot.send_message(chat_id, "Thank you for your response.")
-# # # # # # # #             await bot.send_message(chat_id, "What do you want to do next?\n" + question + options)
+# # # # # # # # # def create_bar_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
 
-# # # # # # # #             try:
-# # # # # # # #                 task = """You are a Financial Expert and Wealth Advisor.
-# # # # # # # #                     You also a Stock Market Expert. You know everything about stock market trends and patterns.
-# # # # # # # #                     Provide financial advice or Stock Related advice and suggestions based on the user's query.
-# # # # # # # #                     Consider user's investment personality and Financial Details if provided.
-# # # # # # # #                     Address the user by their name(client_name: Emily in our case but if any other name is give refer to that) if provided.
-# # # # # # # #                     Include detailed information about the investment, where to invest, how much to invest, 
-# # # # # # # #                     expected returns, and why you are giving this advice.
-# # # # # # # #                     As you are a Wealth Advisor if user asks queries related to saving taxes or calculating taxes refer to the 
-# # # # # # # #                     US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
-# # # # # # # #                     consider the information shared by the user such as their annual income and their monthly investment if provided,
-# # # # # # # #                     also give advice to the user on how they can save their taxes.
-# # # # # # # #                     Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
-                
-# # # # # # # #                 # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
-# # # # # # # #                 # query = chat_history_text + "\n" + query
+# # # # # # # # #     fig, ax = plt.subplots(figsize=(10, 6))
+# # # # # # # # #     ax.barh(categories, max_values, color='lightblue', edgecolor='blue', label='Max Value')
+# # # # # # # # #     ax.barh(categories, min_values, color='lightgreen', edgecolor='green', label='Min Value')
 
-# # # # # # # #                 # Include chat history
-# # # # # # # #                 chat_history = read_chat_history(chat_id)
-# # # # # # # #                 chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
-# # # # # # # #                 # history.append(chat_history_text)
-# # # # # # # #                 query = task + "\n" + investment_personality + "\n" + chat_history_text + "\n" + message.text
+# # # # # # # # #     ax.set_xlabel('Values')
+# # # # # # # # #     ax.set_ylabel('Categories')
+# # # # # # # # #     ax.set_title(title)
+# # # # # # # # #     ax.legend()
+# # # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
 
-# # # # # # # #                 model = genai.GenerativeModel('gemini-1.5-flash')
-# # # # # # # #                 chat = model.start_chat(history=[])
-# # # # # # # #                 response = chat.send_message(query)
+# # # # # # # # # def create_pie_chart(data, title):
+# # # # # # # # #     labels = list(data.keys())
+# # # # # # # # #     sizes = [sum(v[0]) / 2 for v in data.values()]
 
-# # # # # # # #                 # Enhanced logging for debugging
-# # # # # # # #                 logging.info(f"Model response: {response}")
-# # # # # # # #                 format_response = markdown_to_text(response.text) #(response_text) #response.result
+# # # # # # # # #     fig, ax = plt.subplots(figsize=(8, 8))
+# # # # # # # # #     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
+# # # # # # # # #     ax.axis('equal')
+# # # # # # # # #     ax.set_title(title)
+# # # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
 
-# # # # # # # #                 # Store the response in chat history
-# # # # # # # #                 write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-# # # # # # # #                 await message.reply(format_response)
+# # # # # # # # # def create_expected_return_chart(data, title):
+# # # # # # # # #     categories = list(data.keys())
+# # # # # # # # #     min_values = [v[0][0] for v in data.values()]
+# # # # # # # # #     max_values = [v[0][1] for v in data.values()]
 
-# # # # # # # #             except Exception as e:
-# # # # # # # #                 logging.error(f"Error processing general chat message: {e}")
-# # # # # # # #                 await message.reply("Failed to process your request.")
+# # # # # # # # #     fig, ax = plt.subplots(figsize=(10, 6))
+# # # # # # # # #     width = 0.35  # Width of the bars
 
+# # # # # # # # #     ax.bar(categories, max_values, color='coral', edgecolor='red', label='Max Value')
+# # # # # # # # #     ax.bar(categories, min_values, color='lightcoral', edgecolor='darkred', label='Min Value')
+    
+# # # # # # # # #     ax.set_ylabel('Values')
+# # # # # # # # #     ax.set_title(title)
+# # # # # # # # #     ax.legend()
+# # # # # # # # #     st.pyplot(fig)  # Pass the figure to st.pyplot()
 
-
-# # # # # # # # # markdown to text :
-# # # # # # # # def markdown_to_text(md):
-# # # # # # # #     # Simple conversion for markdown to plain text
-# # # # # # # #     md = md.replace('**', '')
-# # # # # # # #     md = md.replace('*', '')
-# # # # # # # #     md = md.replace('_', '')
-# # # # # # # #     md = md.replace('#', '')
-# # # # # # # #     md = md.replace('`', '')
-# # # # # # # #     return md.strip()
+# # # # # # # # # def generate_infographics(response, title_prefix="Investment Strategy"):
+# # # # # # # # #     data = extract_numerical_data(response)
+    
+# # # # # # # # #     create_bar_chart(data, f"{title_prefix} - Asset Allocation")
+# # # # # # # # #     create_pie_chart(data, f"{title_prefix} - Asset Distribution")
+# # # # # # # # #     create_expected_return_chart(data, f"{title_prefix} - Expected Returns")
 
 
-# # # # # # # # from aiogram.types.input_file import BufferedInputFile
-# # # # # # # # from aiogram import BaseMiddleware
-# # # # # # # # # from aiogram.dispatcher.router import Router
-# # # # # # # # from PIL import Image
+# # # # # # # # import re
+# # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # import seaborn as sns
+# # # # # # # # import streamlit as st
 
-# # # # # # # # # Function to handle image messages
-# # # # # # # # # @dp.message(F.photo)
-# # # # # # # # # @router.message(F.photo)
-# # # # # # # # import PIL.Image
+# # # # # # # # # Function to extract numerical data from the response text
+# # # # # # # # # def extract_numerical_data(response, investment_personality):
+# # # # # # # # #     investment_types = [investment_personality]  # Wrap the personality in a list
+# # # # # # # # #     allocation = []
+# # # # # # # # #     returns = []
+# # # # # # # # #     time_horizon = []
 
-# # # # # # # # async def handle_image(message: types.Message):
-# # # # # # # #     global investment_personality, chat_history
+# # # # # # # # #     # Regex patterns to match relevant data
+# # # # # # # # #     allocation_pattern = re.compile(r'Percentage Allocation:.*?(\d+)%', re.IGNORECASE)
+# # # # # # # # #     return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
+# # # # # # # # #     time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
 
-# # # # # # # #     chat_id = message.chat.id
-# # # # # # # #     # Handle image inputs
-# # # # # # # #     try:
-# # # # # # # #         # Obtain file information
-# # # # # # # #         try:
-# # # # # # # #             photo_id = message.document.file_id
-# # # # # # # #             photo = await bot.get_file(photo_id)
-# # # # # # # #             photo_path = photo.file_path
-# # # # # # # #             # Download the file
-# # # # # # # #             photo_file = await bot.download_file(photo_path, "data/uploaded_image.png")
+# # # # # # # # #     # Extracting allocation percentages
+# # # # # # # # #     allocation_matches = allocation_pattern.findall(response)
+# # # # # # # # #     allocation = [int(a) for a in allocation_matches]
 
-# # # # # # # #         except Exception as e:
-# # # # # # # #             print(f"Error downloading image: {e}")
-# # # # # # # #             await bot.send_message(chat_id, "Error processing image. Please try again.")
-# # # # # # # #             return
+# # # # # # # # #     # Extracting expected returns
+# # # # # # # # #     return_matches = return_pattern.findall(response)
+# # # # # # # # #     returns = [int(r) for r in return_matches]
+
+# # # # # # # # #     # Extracting time horizon
+# # # # # # # # #     time_matches = time_pattern.findall(response)
+# # # # # # # # #     time_horizon = [int(t) for t in time_matches]
+
+# # # # # # # # #     return investment_types, allocation, returns, time_horizon
+
+# # # # # # # # # Function to create a pie chart for asset allocation
+# # # # # # # # # def create_pie_chart(investment_types, allocation):
+# # # # # # # # #     if not investment_types or not allocation:
+# # # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
+# # # # # # # # #         return
+
+# # # # # # # # #     plt.figure(figsize=(8, 6))
+# # # # # # # # #     plt.pie(allocation, labels=investment_types, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(investment_types)))
+# # # # # # # # #     plt.title('Asset Allocation')
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
+
+# # # # # # # # # def create_pie_chart(investment_types, allocation):
+# # # # # # # # #     # Check if the lengths of the lists match
+# # # # # # # # #     if not investment_types or not allocation:
+# # # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
+# # # # # # # # #         return
+
+# # # # # # # # #     if len(investment_types) != len(allocation):
+# # # # # # # # #         st.warning("Mismatch between investment types and allocation data.")
+# # # # # # # # #         st.write(f"Investment types: {investment_types}")
+# # # # # # # # #         st.write(f"Allocation: {allocation}")
+# # # # # # # # #         return
+
+# # # # # # # # #     plt.figure(figsize=(8, 6))
+# # # # # # # # #     plt.pie(allocation, labels=investment_types, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(investment_types)))
+# # # # # # # # #     plt.title('Asset Allocation')
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
+
+# # # # # # # # # # Function to create a bar chart for expected returns
+# # # # # # # # # def create_compounded_return_chart(returns, time_horizon):
+# # # # # # # # #     if not returns or not time_horizon:
+# # # # # # # # #         st.warning("Not enough data for Compounded Returns Bar Chart.")
+# # # # # # # # #         return
+
+# # # # # # # # #     # Ensure we have at least two time horizons for the plot (e.g., 5 years and 10 years)
+# # # # # # # # #     if len(time_horizon) < 2:
+# # # # # # # # #         time_horizon.append(time_horizon[0] * 2)  # Add a second time horizon by doubling the first
+
+# # # # # # # # #     years = ['5 Years', '10 Years']
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+
+# # # # # # # # #     for i, rate in enumerate(returns):
+# # # # # # # # #         compounded_5_years = ((1 + rate / 100) ** 5 - 1) * 100
+# # # # # # # # #         compounded_10_years = ((1 + rate / 100) ** 10 - 1) * 100
+# # # # # # # # #         plt.bar(years, [compounded_5_years, compounded_10_years], color=['blue', 'green'][i % 2], alpha=0.7, label=f'Return Rate {rate}%')
+
+# # # # # # # # #     plt.xlabel('Time Horizon')
+# # # # # # # # #     plt.ylabel('Returns (%)')
+# # # # # # # # #     plt.title('Compounded Returns over Different Time Horizons')
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
+
+# # # # # # # # # # Main function to generate infographics
+# # # # # # # # # def generate_infographics(response_text, investment_personality):
+# # # # # # # # #     investment_types, allocation, returns, time_horizon = extract_numerical_data(response_text, investment_personality)
+
+# # # # # # # # #     st.write(f"Investment Type: {investment_types}")
+# # # # # # # # #     st.write(f"Allocation: {allocation}")
+# # # # # # # # #     st.write(f"Returns: {returns}")
+# # # # # # # # #     st.write(f"Time Horizon: {time_horizon}")
+
+# # # # # # # # #     create_pie_chart(investment_types, allocation)
+# # # # # # # # #     create_compounded_return_chart(returns, time_horizon)
+
+# # # # # # # # import re
+# # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # import seaborn as sns
+# # # # # # # # import streamlit as st
+
+# # # # # # # # # Function to extract numerical data from the response text
+# # # # # # # # # def extract_numerical_data(response):
+# # # # # # # # #     allocation_pattern = re.compile(r'(\b[A-Za-z\s]+\b):\s*(\d+)%', re.IGNORECASE)
+# # # # # # # # #     return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
+# # # # # # # # #     time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
+
+# # # # # # # # #     allocations = {}
+# # # # # # # # #     returns = []
+# # # # # # # # #     time_horizon = []
+
+# # # # # # # # #     # Extracting allocations
+# # # # # # # # #     allocation_matches = allocation_pattern.findall(response)
+# # # # # # # # #     for match in allocation_matches:
+# # # # # # # # #         investment_type, percentage = match
+# # # # # # # # #         allocations[investment_type.strip()] = int(percentage)
+
+# # # # # # # # #     # Extracting returns
+# # # # # # # # #     return_matches = return_pattern.findall(response)
+# # # # # # # # #     returns = [int(r) for r in return_matches]
+
+# # # # # # # # #     # Extracting time horizon
+# # # # # # # # #     time_matches = time_pattern.findall(response)
+# # # # # # # # #     time_horizon = [int(t) for t in time_matches]
+
+# # # # # # # # #     return allocations, returns, time_horizon
+
+# # # # # # # # # # Function to create a pie chart for asset allocation
+# # # # # # # # # def create_pie_chart(allocations):
+# # # # # # # # #     if not allocations:
+# # # # # # # # #         st.warning("Not enough data for Asset Allocation Pie Chart.")
+# # # # # # # # #         return
+
+# # # # # # # # #     labels = list(allocations.keys())
+# # # # # # # # #     sizes = list(allocations.values())
+
+# # # # # # # # #     plt.figure(figsize=(8, 6))
+# # # # # # # # #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
+# # # # # # # # #     plt.title('Asset Allocation')
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
+
+# # # # # # # # # # Function to create a bar chart for expected returns
+# # # # # # # # # def create_compounded_return_chart(returns, time_horizon):
+# # # # # # # # #     if not returns or not time_horizon:
+# # # # # # # # #         st.warning("Not enough data for Compounded Returns Bar Chart.")
+# # # # # # # # #         return
+
+# # # # # # # # #     years = ['5 Years', '10 Years']
+# # # # # # # # #     plt.figure(figsize=(10, 6))
+
+# # # # # # # # #     for i, rate in enumerate(returns):
+# # # # # # # # #         plt.bar(years, [rate * 5, rate * 10], color=['blue', 'green'][i % 2], alpha=0.7, label=f'Return Rate {rate}%')
+
+# # # # # # # # #     plt.xlabel('Time Horizon')
+# # # # # # # # #     plt.ylabel('Returns')
+# # # # # # # # #     plt.title('Compounded Returns over Different Time Horizons')
+# # # # # # # # #     plt.legend()
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
+
+# # # # # # # # # # Main function to generate infographics
+# # # # # # # # # def generate_infographics(response_text):
+# # # # # # # # #     allocations, returns, time_horizon = extract_numerical_data(response_text)
+
+# # # # # # # # #     st.write(f"Allocations: {allocations}")
+# # # # # # # # #     st.write(f"Returns: {returns}")
+# # # # # # # # #     st.write(f"Time Horizon: {time_horizon}")
+
+# # # # # # # # #     create_pie_chart(allocations)
+# # # # # # # # #     create_compounded_return_chart(returns, time_horizon)
+
+
+# # # # # # # # # Genrate Infographics : static code :
+
+# # # # # # # # # import re
+# # # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # # import seaborn as sns
+# # # # # # # # # import streamlit as st
+
+# # # # # # # # # # Function to extract numerical data from the response text
+# # # # # # # # # def extract_numerical_data(response, investment_personality):
+# # # # # # # # #     # Define default allocation percentages for each investment type based on personality
+# # # # # # # # #     default_allocations = {
+# # # # # # # # #         'Conservative Investor': {
+# # # # # # # # #             'Growth-Oriented Investments': {'min': 20, 'max': 30},
+# # # # # # # # #             'Conservative Investments': {'min': 70, 'max': 80},
+# # # # # # # # #             'Growth Types': ['stocks', 'short term bonds', 'low-volatility ETFs'],
+# # # # # # # # #             'Conservative Types': ['bonds', 'ETFs', 'mutual funds', 'real estate (REITs)']
+# # # # # # # # #         },
+# # # # # # # # #         'Moderate Investor': {
+# # # # # # # # #             'Growth-Oriented Investments': {'min': 50, 'max': 60},
+# # # # # # # # #             'Conservative Investments': {'min': 40, 'max': 50},
+# # # # # # # # #             'Growth Types': ['index funds', 'mutual funds', 'ETFs', 'stocks'],
+# # # # # # # # #             'Conservative Types': ['cash', 'REITs']
+# # # # # # # # #         },
+# # # # # # # # #         'Aggressive Investor': {
+# # # # # # # # #             'Growth-Oriented Investments': {'min': 70, 'max': 80},
+# # # # # # # # #             'Conservative Investments': {'min': 20, 'max': 30},
+# # # # # # # # #             'Growth Types': ['stocks', 'ETFs', 'mutual funds', 'cryptocurrency'],
+# # # # # # # # #             'Conservative Types': ['bonds', 'real estate']
+# # # # # # # # #         }
+# # # # # # # # #     }
+
+# # # # # # # # #     allocations = {'Growth-Oriented Investments': {}, 'Conservative Investments': {}}
+
+# # # # # # # # #     # Attempt to dynamically extract allocation percentages from the response
+# # # # # # # # #     try:
+# # # # # # # # #         # Search for allocation percentages in the response text
+# # # # # # # # #         # growth_pattern = r"Growth-Oriented Investments: (\d+)%"
+# # # # # # # # #         growth_pattern = re.compile("Growth-Oriented Investments: (\d+)%",re.IGNORECASE)
+# # # # # # # # #         # conservative_pattern = r"Conservative Investments: (\d+)%"
+# # # # # # # # #         conservative_pattern = re.compile("Conservative Investments: (\d+)%",re.IGNORECASE)
+
+# # # # # # # # #         # allocation_pattern = re.compile(r'Percentage Allocation:.*?(\d+)%', re.IGNORECASE)
+# # # # # # # # #         # return_pattern = re.compile(r'Expected Annual Return:.*?(\d+)%', re.IGNORECASE)
+# # # # # # # # #         # time_pattern = re.compile(r'Time Horizon:.*?(\d+) years', re.IGNORECASE)
+# # # # # # # # #         growth_match = re.search(growth_pattern, response)
+# # # # # # # # #         conservative_match = re.search(conservative_pattern, response)
+
+# # # # # # # # #         if growth_match and conservative_match:
+# # # # # # # # #             print("Growth and conservative Patttern is found, original logic is working properly")
+# # # # # # # # #             growth_allocation = int(growth_match.group(1))
+# # # # # # # # #             conservative_allocation = int(conservative_match.group(1))
+# # # # # # # # #         elif growth_pattern and conservative_pattern:
+# # # # # # # # #             print("Growth and conservative Patttern is found")
+# # # # # # # # #             # growth_allocation = int(growth_match.group(1))
+# # # # # # # # #             # conservative_allocation = int(conservative_match.group(1))
+# # # # # # # # #         else:
+# # # # # # # # #             # Use default values if specific percentages not found
+# # # # # # # # #             allocation_info = default_allocations[investment_personality]
+# # # # # # # # #             growth_range = allocation_info['Growth-Oriented Investments']
+# # # # # # # # #             conservative_range = allocation_info['Conservative Investments']
+
+# # # # # # # # #             growth_allocation = (growth_range['min'] + growth_range['max']) / 2
+# # # # # # # # #             conservative_allocation = (conservative_range['min'] + conservative_range['max']) / 2
+
+# # # # # # # # #         # Distribute equally among types
+# # # # # # # # #         growth_types = default_allocations[investment_personality]['Growth Types']
+# # # # # # # # #         conservative_types = default_allocations[investment_personality]['Conservative Types']
+
+# # # # # # # # #         for g_type in growth_types:
+# # # # # # # # #             allocations['Growth-Oriented Investments'][g_type] = growth_allocation / len(growth_types)
+
+# # # # # # # # #         for c_type in conservative_types:
+# # # # # # # # #             allocations['Conservative Investments'][c_type] = conservative_allocation / len(conservative_types)
+
+# # # # # # # # #     except Exception as e:
+# # # # # # # # #         st.write(f"Error extracting data: {e}")
+# # # # # # # # #         # Fallback to default allocation if error occurs
+# # # # # # # # #         allocation_info = default_allocations[investment_personality]
+# # # # # # # # #         growth_range = allocation_info['Growth-Oriented Investments']
+# # # # # # # # #         conservative_range = allocation_info['Conservative Investments']
+
+# # # # # # # # #         growth_allocation = (growth_range['min'] + growth_range['max']) / 2
+# # # # # # # # #         conservative_allocation = (conservative_range['min'] + conservative_range['max']) / 2
+
+# # # # # # # # #         # Distribute equally among types
+# # # # # # # # #         growth_types = allocation_info['Growth Types']
+# # # # # # # # #         conservative_types = allocation_info['Conservative Types']
+
+# # # # # # # # #         for g_type in growth_types:
+# # # # # # # # #             allocations['Growth-Oriented Investments'][g_type] = growth_allocation / len(growth_types)
+
+# # # # # # # # #         for c_type in conservative_types:
+# # # # # # # # #             allocations['Conservative Investments'][c_type] = conservative_allocation / len(conservative_types)
+    
+# # # # # # # # #     return allocations
+
+# # # # # # # # # # Function to create pie charts for allocations
+# # # # # # # # # def create_pie_charts(allocations):
+# # # # # # # # #     for key in allocations:
+# # # # # # # # #         plt.figure(figsize=(8, 6))
+# # # # # # # # #         labels = list(allocations[key].keys())
+# # # # # # # # #         sizes = list(allocations[key].values())
         
-# # # # # # # #         # task = """Give Financial Suggestions to the user so that they could do proper responsible investment based on their investment personality.
-# # # # # # # #         #             Also give the user detailed information about the investment how to invest, where to invest and how much they
-# # # # # # # #         #             should invest in terms of percentage of their investment amount. Give the user detailed information about the returns on their 
-# # # # # # # #         #             investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compounded returns on their 
-# # # # # # # #         #             investment. Also explain the user why you are giving them that particular
-# # # # # # # #         #             investment suggestion. Give user Disclaimer to keep monitoring their investments regularly and rebalance it if necessary.
-# # # # # # # #         #             User should also invest as per their risk tolerance level. Since you are the financial advisor don't ask user to consult anyone else.
-# # # # # # # #         #             So don't mention user to consult to a financial expert."""
+# # # # # # # # #         plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('Set3', len(labels)))
+# # # # # # # # #         plt.title(f'{key} Allocation')
+# # # # # # # # #         st.pyplot(plt)
+# # # # # # # # #         plt.clf()
 
-# # # # # # # #         task = """You are a Financial Expert.You will be provided with a Financial Form from Boston Harbor.
-# # # # # # # #                 If you recieve any other image tell the user to Upload the Images of the form or upload the word document of the form.
-# # # # # # # #                 You are supposed to Respond to the user's Image query and If they ask for any information provide them the information in Detail.
-# # # # # # # #                 Be helpful and informative.Give proper information of any Financial terms the user may ask you.Address the user by their Client Name if provided.
-# # # # # # # #                 Also provide the user helpful links so that they can refer to the link for more information.
-# # # # # # # #                 If the image provided is not related to Finance then just answer about the image and any caption if provided.
-# # # # # # # #                 """
+# # # # # # # # # # Function to plot overall split between Growth and Conservative investments
+# # # # # # # # # def plot_overall_split(allocations):
+# # # # # # # # #     plt.figure(figsize=(8, 6))
+# # # # # # # # #     total_growth = sum(allocations['Growth-Oriented Investments'].values())
+# # # # # # # # #     total_conservative = sum(allocations['Conservative Investments'].values())
+    
+# # # # # # # # #     plt.bar(['Growth-Oriented Investments', 'Conservative Investments'], [total_growth, total_conservative], color=['blue', 'green'])
+# # # # # # # # #     plt.ylabel('Percentage')
+# # # # # # # # #     plt.title('Overall Investment Split')
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
 
-# # # # # # # #         prompt = message.caption if message.caption else ""  # Use the photo caption if available
-# # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + prompt
-# # # # # # # #         query = task + prompt 
+# # # # # # # # # # Function to create compounded return chart
+# # # # # # # # # def create_compounded_return_chart(returns, time_horizon):
+# # # # # # # # #     plt.figure(figsize=(8, 6))
+# # # # # # # # #     years = list(range(1, time_horizon + 1))
+# # # # # # # # #     compounded_returns = [returns[0] * (1 + returns[1] / 100) ** year for year in years]
+    
+# # # # # # # # #     plt.plot(years, compounded_returns, marker='o', linestyle='-', color='blue')
+# # # # # # # # #     plt.xlabel('Years')
+# # # # # # # # #     plt.ylabel('Returns')
+# # # # # # # # #     plt.title('Compounded Returns Over Time')
+# # # # # # # # #     st.pyplot(plt)
+# # # # # # # # #     plt.clf()
 
-# # # # # # # #         image =  PIL.Image.open('data/uploaded_image.png') #(photo_file) 
-# # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
-# # # # # # # #         response = model.generate_content(image)
-# # # # # # # #         await bot.send_message(chat_id,"I will describe the image that was uploaded")
-# # # # # # # #         format_response = markdown_to_text(response.text)
-# # # # # # # #         await message.reply(format_response)
-# # # # # # # #         # await message.reply(response.text)
+# # # # # # # # # # Main function to generate infographics
+# # # # # # # # # def generate_infographics(response_text, investment_personality):
+# # # # # # # # #     allocations = extract_numerical_data(response_text, investment_personality)
 
-# # # # # # # #         # chat = model.start_chat(history=[])
-# # # # # # # #         # response = chat.send_message(query)
-# # # # # # # #         # format_response = markdown_to_text(response.result)
-# # # # # # # #         # await message.reply(format_response)
+# # # # # # # # #     st.write(f"Allocations: {allocations}")
 
-# # # # # # # #         response = model.generate_content([query, image])
-# # # # # # # #         format_response = markdown_to_text(response.text)
+# # # # # # # # #     create_pie_charts(allocations)
+# # # # # # # # #     plot_overall_split(allocations)
 
-# # # # # # # #         # Store the response in chat history
-# # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-
-# # # # # # # #         await message.reply(format_response)
-# # # # # # # #         # await message.reply(response.text) 
-# # # # # # # #     except Exception as e:
-# # # # # # # #         logging.error(f"Error generating response for the image: {e}")
-# # # # # # # #         await message.reply("There was an error generating response for the image. Please try again later.")
-# # # # # # # #     # await message.reply("Cant process the image")
-# # # # # # # #     # return
+# # # # # # # # #     # Example values for returns and time horizon
+# # # # # # # # #     example_returns = [10000, 8]  # Principal amount and annual return rate
+# # # # # # # # #     example_time_horizon = 10     # Number of years
+# # # # # # # # #     create_compounded_return_chart(example_returns, example_time_horizon)
 
 
+# # # # # # # # # Generate Infographics : Best Code so far:
 
-# # # # # # # # from aiogram.filters import command
-# # # # # # # # from aiogram.types import bot_command
-# # # # # # # # import markdown
-# # # # # # # # from bs4 import BeautifulSoup
+# # # # # # # # import re
+# # # # # # # # from collections import defaultdict
+# # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # import streamlit as st
 
-# # # # # # # # def markdown_to_text(markdown_text):
-# # # # # # # #     # Convert markdown to HTML
-# # # # # # # #     html = markdown.markdown(markdown_text)
-# # # # # # # #     # Parse the HTML
-# # # # # # # #     soup = BeautifulSoup(html, 'html.parser')
-# # # # # # # #     # Extract plain text
-# # # # # # # #     text = soup.get_text()
-# # # # # # # #     return text
+# # # # # # # # def extract_numerical_data(response):
+# # # # # # # #     # Define patterns to match different sections and their respective allocations
+# # # # # # # #     patterns = {
+# # # # # # # #         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# # # # # # # #         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
+# # # # # # # #         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+# # # # # # # #     }
+
+# # # # # # # #     data = defaultdict(dict)
+
+# # # # # # # #     for section, pattern in patterns.items():
+# # # # # # # #         match = pattern.search(response)
+# # # # # # # #         if match:
+# # # # # # # #             investments_text = match.group(1)
+# # # # # # # #             # Extract individual investment types and their allocations
+# # # # # # # #             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+# # # # # # # #             for investment_match in investment_pattern.findall(investments_text):
+# # # # # # # #                 investment_type, min_allocation, max_allocation = investment_match
+# # # # # # # #                 data[section][investment_type.strip()] = {
+# # # # # # # #                     'min': min_allocation,
+# # # # # # # #                     'max': max_allocation
+# # # # # # # #                 }
+
+# # # # # # # #     # Extract time horizon and expected returns
+# # # # # # # #     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+# # # # # # # #     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+# # # # # # # #     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
+# # # # # # # #     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+# # # # # # # #     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+
+# # # # # # # #     time_horizon_match = time_horizon_pattern.search(response)
+# # # # # # # #     min_return_match = min_return_pattern.search(response)
+# # # # # # # #     max_return_match = max_return_pattern.search(response)
+# # # # # # # #     min_growth_match = min_growth_pattern.search(response)
+# # # # # # # #     max_growth_match = max_growth_pattern.search(response)
+
+# # # # # # # #     if time_horizon_match:
+# # # # # # # #         data['Time Horizon'] = {
+# # # # # # # #             'min_years': time_horizon_match.group(1),
+# # # # # # # #             'max_years': time_horizon_match.group(2)
+# # # # # # # #         }
+
+# # # # # # # #     if min_return_match:
+# # # # # # # #         data['Expected Annual Return'] = {
+# # # # # # # #             'min': min_return_match.group(1),
+# # # # # # # #             'max': min_return_match.group(2)
+# # # # # # # #         }
+
+# # # # # # # #     if max_return_match:
+# # # # # # # #         data['Expected Annual Return'] = {
+# # # # # # # #             'min': max_return_match.group(1),
+# # # # # # # #             'max': max_return_match.group(2)
+# # # # # # # #         }
+
+# # # # # # # #     if min_growth_match:
+# # # # # # # #         data['Expected Growth in Dollars'] = {
+# # # # # # # #             'min': min_growth_match.group(1),
+# # # # # # # #             'max': min_growth_match.group(2)
+# # # # # # # #         }
+
+# # # # # # # #     if max_growth_match:
+# # # # # # # #         data['Expected Growth in Dollars'] = {
+# # # # # # # #             'min': max_growth_match.group(1),
+# # # # # # # #             'max': max_growth_match.group(2)
+# # # # # # # #         }
+
+# # # # # # # #     return data
+
+# # # # # # # # def plot_investment_allocations(data):
+# # # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+# # # # # # # #     # fig, axes = plt.subplots(1, 2, figsize=(18, 9))
+
+# # # # # # # #     # fig, axes = plt.subplots(2, 1, figsize=(18, 9))
+# # # # # # # #     fig, axes = plt.subplots(2, 1, figsize=(28, 15))
+
+# # # # # # # #     # Plot Growth-Oriented Investments
+# # # # # # # #     growth_data = data['Growth-Oriented Investments']
+# # # # # # # #     growth_labels = list(growth_data.keys())
+# # # # # # # #     growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
+# # # # # # # #     growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
+
+# # # # # # # #     axes[0].barh(growth_labels, growth_min, color='skyblue', label='Min Allocation')
+# # # # # # # #     axes[0].barh(growth_labels, growth_max, left=growth_min, color='lightgreen', label='Max Allocation')
+# # # # # # # #     axes[0].set_title('Growth-Oriented Investments')
+# # # # # # # #     axes[0].set_xlabel('Percentage Allocation')
+# # # # # # # #     axes[0].legend()
+
+# # # # # # # #     # Plot Conservative Investments
+# # # # # # # #     conservative_data = data['Conservative Investments']
+# # # # # # # #     conservative_labels = list(conservative_data.keys())
+# # # # # # # #     conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
+# # # # # # # #     conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
+
+# # # # # # # #     axes[1].barh(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
+# # # # # # # #     axes[1].barh(conservative_labels, conservative_max, left=conservative_min, color='lightgreen', label='Max Allocation')
+# # # # # # # #     axes[1].set_title('Conservative Investments')
+# # # # # # # #     axes[1].set_xlabel('Percentage Allocation')
+# # # # # # # #     axes[1].legend()
+
+# # # # # # # #     plt.tight_layout()
+# # # # # # # #     return fig
+
+# # # # # # # # def plot_pie_chart(data):
+# # # # # # # #     fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
+
+# # # # # # # #     # Combine all investment data for pie chart
+# # # # # # # #     all_data = {**data['Growth-Oriented Investments'], **data['Conservative Investments']}
+# # # # # # # #     labels = list(all_data.keys())
+# # # # # # # #     sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
+# # # # # # # #     colors = plt.cm.Paired(range(len(labels)))
+
+# # # # # # # #     ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
+# # # # # # # #     ax.set_title('Investment Allocation')
+
+# # # # # # # #     return fig
 
 
-# # # # # # # # # if __name__ == "__main__":
-# # # # # # # # #     executor.start_polling(dispatcher, skip_updates=True)
+# # # # # # # # def bar_chart(data):
+# # # # # # # #     fig, ax = plt.subplots(figsize=(12, 8))  # Increased size
 
-# # # # # # # # async def main() -> None:
-# # # # # # # #     # Initialize Bot instance with default bot properties which will be passed to all API calls
-# # # # # # # #     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# # # # # # # #     # Data for plotting
+# # # # # # # #     categories = list(data.keys())
+# # # # # # # #     values_min = [int(data[cat]['min'].strip('%')) for cat in categories]
+# # # # # # # #     values_max = [int(data[cat]['max'].strip('%')) for cat in categories]
 
-# # # # # # # #     # And the run events dispatching
-# # # # # # # #     await dp.start_polling(bot)
+# # # # # # # #     x = range(len(categories))
 
+# # # # # # # #     ax.bar(x, values_min, width=0.4, label='Min Allocation', color='skyblue', align='center')
+# # # # # # # #     ax.bar(x, values_max, width=0.4, label='Max Allocation', color='lightgreen', align='edge')
+
+# # # # # # # #     ax.set_xticks(x)
+# # # # # # # #     ax.set_xticklabels(categories, rotation=45, ha='right')
+# # # # # # # #     ax.set_xlabel('Investment Categories')
+# # # # # # # #     ax.set_ylabel('Percentage Allocation')
+# # # # # # # #     ax.set_title('Investment Allocation')
+# # # # # # # #     ax.legend()
+
+# # # # # # # #     plt.tight_layout()
+# # # # # # # #     return fig
+
+
+
+# # # # # # # # import plotly.graph_objects as go
+# # # # # # # # import numpy as np
+
+# # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # from mpl_toolkits.mplot3d import Axes3D
+
+# # # # # # # # def plot_3d_bar_graph(data):
+# # # # # # # #     # Ensure 'values' is a numpy array
+# # # # # # # #     values_array = np.array(data['values'])
+
+# # # # # # # #     # Check if 'values' can be raveled
+# # # # # # # #     if values_array.ndim > 1:
+# # # # # # # #         dz = values_array.ravel()
+# # # # # # # #     else:
+# # # # # # # #         dz = values_array
+
+# # # # # # # #     # Creating a new figure
+# # # # # # # #     fig = plt.figure()
+# # # # # # # #     ax = fig.add_subplot(111, projection='3d')
+
+# # # # # # # #     # Unpacking the data
+# # # # # # # #     x_data = np.arange(len(data['x_labels']))
+# # # # # # # #     y_data = np.arange(len(data['y_labels']))
+# # # # # # # #     x, y = np.meshgrid(x_data, y_data)
+# # # # # # # #     x, y = x.ravel(), y.ravel()
+# # # # # # # #     z = np.zeros_like(x)
+# # # # # # # #     dx = dy = 0.8
+
+# # # # # # # #     # Creating the bar graph
+# # # # # # # #     ax.bar3d(x, y, z, dx, dy, dz, color='b', zsort='average')
+
+# # # # # # # #     # Setting labels
+# # # # # # # #     ax.set_xlabel(data['x_label'])
+# # # # # # # #     ax.set_ylabel(data['y_label'])
+# # # # # # # #     ax.set_zlabel(data['z_label'])
+# # # # # # # #     ax.set_xticks(x_data)
+# # # # # # # #     ax.set_yticks(y_data)
+# # # # # # # #     ax.set_xticklabels(data['x_labels'])
+# # # # # # # #     ax.set_yticklabels(data['y_labels'])
+
+# # # # # # # #     # Displaying the figure using Streamlit
+# # # # # # # #     st.pyplot(fig)
+
+
+# # # # # # # # # def plot_3d_bar_chart():
+# # # # # # # # #     # Data for plotting
+# # # # # # # # #     categories = ['Timeline', 'Min Compounded Returns', 'Max Compounded Returns']
+# # # # # # # # #     x = np.arange(len(categories))
+# # # # # # # # #     y1 = [5, 10, 15]  # Example data for 5 Yr Compounded Returns
+# # # # # # # # #     y2 = [10, 20, 30]  # Example data for 10 Yr Compounded Returns
+
+# # # # # # # # #     fig = go.Figure()
+
+# # # # # # # # #     # Adding bars for 5 Yr Compounded Returns
+# # # # # # # # #     for i in range(len(x)):
+# # # # # # # # #         fig.add_trace(go.Scatter3d(
+# # # # # # # # #             x=[x[i], x[i]],
+# # # # # # # # #             y=[0, 0.5],
+# # # # # # # # #             z=[0, y1[i]],
+# # # # # # # # #             mode='lines',
+# # # # # # # # #             line=dict(color='red', width=10),
+# # # # # # # # #             name='5 Yr Compounded Returns'
+# # # # # # # # #         ))
+
+# # # # # # # # #     # Adding bars for 10 Yr Compounded Returns
+# # # # # # # # #     for i in range(len(x)):
+# # # # # # # # #         fig.add_trace(go.Scatter3d(
+# # # # # # # # #             x=[x[i] + 0.5, x[i] + 0.5],
+# # # # # # # # #             y=[0, 0.5],
+# # # # # # # # #             z=[0, y2[i]],
+# # # # # # # # #             mode='lines',
+# # # # # # # # #             line=dict(color='blue', width=10),
+# # # # # # # # #             name='10 Yr Compounded Returns'
+# # # # # # # # #         ))
+
+# # # # # # # # #     fig.update_layout(
+# # # # # # # # #         scene=dict(
+# # # # # # # # #             xaxis=dict(
+# # # # # # # # #                 tickvals=x + 0.25,
+# # # # # # # # #                 ticktext=categories,
+# # # # # # # # #                 title='Categories'
+# # # # # # # # #             ),
+# # # # # # # # #             yaxis=dict(title='Returns'),
+# # # # # # # # #             zaxis=dict(title='Percentage')
+# # # # # # # # #         ),
+# # # # # # # # #         title='COMPOUNDED RETURNS',
+# # # # # # # # #         legend=dict(x=0.1, y=0.9)
+# # # # # # # # #     )
+
+# # # # # # # # #     fig.show() # return fig 
+    
+
+
+
+
+
+# # # # # # # # def main():
+# # # # # # # #     st.title("Wealth Advisor Chatbot")
+
+# # # # # # # #     # Step 1: Choose between Investment Suggestions or Stock Analysis
+# # # # # # # #     task_choice = st.radio("Select the task you want to perform:", ["Investment Suggestions", "Stock Analysis"])
+
+# # # # # # # #     # Step 2: Choose between New Client or Existing Client (for Investment Suggestions)
+# # # # # # # #     if task_choice == "Investment Suggestions":
+# # # # # # # #         client_type = st.radio("Is this for a new client or an existing client?", ["New Client", "Existing Client"])
+
+# # # # # # # #         if client_type == "New Client":
+# # # # # # # #             uploaded_file = st.file_uploader("Upload the client's document", type=["docx", "pdf"])
+
+# # # # # # # #             if uploaded_file is not None:
+# # # # # # # #                 st.write("Extracting text from the document...")
+# # # # # # # #                 # Assuming process_document is an async function
+# # # # # # # #                 extracted_text = asyncio.run(process_document(uploaded_file))
+# # # # # # # #                 st.write("Text extracted from the document")
+
+# # # # # # # #                 # Ask for investment personality
+# # # # # # # #                 investment_personality = st.selectbox(
+# # # # # # # #                     "Select the investment personality of the client:",
+# # # # # # # #                     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
+# # # # # # # #                 )
+
+# # # # # # # #                 # Step 4: Generate investment suggestions
+# # # # # # # #                 if st.button("Generate Investment Suggestions"):
+# # # # # # # #                     st.write("Generating investment suggestions...")
+# # # # # # # #                     # Assuming generate_investment_suggestions is an async function
+                    
+# # # # # # # #                     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
+# # # # # # # #                     st.write(suggestions)
+
+# # # # # # # #                     # # Generate infographics
+# # # # # # # #                     # generate_infographics(suggestions, investment_personality)
+
+# # # # # # # #                     data_extracted = extract_numerical_data(suggestions)
+
+# # # # # # # #                     # Streamlit app
+# # # # # # # #                     st.title('Investment Allocation Infographics')
+# # # # # # # #                     # st.write('### Extracted Investment Data')
+# # # # # # # #                     # st.json(data_extracted)
+
+# # # # # # # #                     st.write('## Investment Allocation Charts')
+# # # # # # # #                     fig = plot_investment_allocations(data_extracted)
+# # # # # # # #                     st.pyplot(fig)
+
+# # # # # # # #                     st.write('## Pie Chart of Investment Allocation')
+# # # # # # # #                     fig = plot_pie_chart(data_extracted)
+# # # # # # # #                     st.pyplot(fig)
+
+# # # # # # # #                     st.write('## Bar Chart of Compounded Returns')
+# # # # # # # #                     fig = bar_chart(data_extracted['Growth-Oriented Investments'])
+# # # # # # # #                     st.pyplot(fig)
+
+# # # # # # # #                     # fig = plot_compounded_returns(data_extracted)
+# # # # # # # #                     # st.pyplot(fig)
+
+# # # # # # # #                     # fig = plot_3d_bar_chart(data_extracted)
+# # # # # # # #                     plot_3d_bar_graph(data_extracted)
+# # # # # # # #                     # st.pyplot(fig)
+
+# # # # # # # #         elif client_type == "Existing Client":
+# # # # # # # #             st.write("Fetching existing client data...")
+
+# # # # # # # #     elif task_choice == "Stock Analysis":
+# # # # # # # #         st.write("Performing stock analysis...")
 
 # # # # # # # # if __name__ == "__main__":
-# # # # # # # #     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-# # # # # # # #     asyncio.run(main())
+# # # # # # # #     main()
+
+
+# # # # # # # # # def main():
+# # # # # # # # #     st.title("Wealth Advisor Chatbot")
+
+# # # # # # # # #     task_choice = st.radio("Select the task you want to perform:", ["Investment Suggestions", "Stock Analysis"])
+
+# # # # # # # # #     if task_choice == "Investment Suggestions":
+# # # # # # # # #         client_type = st.radio("Is this for a new client or an existing client?", ["New Client", "Existing Client"])
+
+# # # # # # # # #         if client_type == "New Client":
+# # # # # # # # #             uploaded_file = st.file_uploader("Upload the client's document", type=["docx", "pdf"])
+
+# # # # # # # # #             if uploaded_file is not None:
+# # # # # # # # #                 st.write("Extracting text from the document...")
+# # # # # # # # #                 extracted_text = asyncio.run(process_document(uploaded_file))
+# # # # # # # # #                 st.write("Text extracted from the document")
+
+# # # # # # # # #                 investment_personality = st.selectbox(
+# # # # # # # # #                     "Select the investment personality of the client:",
+# # # # # # # # #                     ("Conservative Investor", "Moderate Investor", "Aggressive Investor")
+# # # # # # # # #                 )
+
+# # # # # # # # #                 if st.button("Generate Investment Suggestions"):
+# # # # # # # # #                     st.write("Generating investment suggestions...")
+# # # # # # # # #                     suggestions = asyncio.run(generate_investment_suggestions(investment_personality, extracted_text))
+# # # # # # # # #                     st.write(suggestions)
+
+# # # # # # # # #                     st.title("Investment Suggestions and Infographics")
+# # # # # # # # #                     generate_infographics(suggestions, investment_personality)
+
+# # # # # # # # #         elif client_type == "Existing Client":
+# # # # # # # # #             st.write("Fetching existing client data...")
+
+# # # # # # # # #     elif task_choice == "Stock Analysis":
+# # # # # # # # #         st.write("Performing stock analysis...")
+
+# # # # # # # # # if __name__ == "__main__":
+# # # # # # # # #     main()
 
 
 
 
 
-# # # # # # # # # #best code so far now it can work efficiently on Client side :
+# # # # # # # # # Reponse :
+
+# # # # # # # # # Financial Suggestions for a Moderate Investor
+
+# # # # # # # # # Based on your provided information, you appear to be a moderate investor with a healthy financial foundation. You have a significant amount of assets, including a home and other real estate, but also carry a substantial mortgage and credit card debt. This suggests you're comfortable with some risk but also prioritize stability and security.
+
+# # # # # # # # # Here's a suggested investment strategy tailored for your profile:
+
+# # # # # # # # # Investment Allocation:
+
+# # # # # # # # # Growth-Oriented Investments (50-70%): This portion of your portfolio will focus on investments with the potential for higher returns over the long term. Stocks: Invest in a diversified portfolio of stocks through index funds or ETFs tracking the S&P 500 or other broad market indices. This provides exposure to the overall stock market growth. (30-50%) Bonds: Allocate a portion to bonds, which offer lower risk and potential returns compared to stocks. Consider investing in investment-grade corporate bonds or government bonds (Treasury bonds). (10-20%) Real Estate: Maintain your existing real estate investments and consider adding to your portfolio if you have the financial capacity and desire. Real estate can offer steady rental income and potential appreciation. (10-20%)
+
+# # # # # # # # # Conservative Investments (30-50%): This portion will focus on preserving capital and providing stability. Cash: Keep a substantial portion of your assets in cash (10-20%) for emergency funds, short-term goals, and potential market downturns. Fixed Annuities: Consider fixed annuities for a guaranteed return and principal protection. They offer lower returns but provide peace of mind. (10-20%) High-Yield Savings Accounts: Explore high-yield savings accounts for a slightly higher return than traditional savings accounts while maintaining FDIC insurance. (10-20%)
+
+# # # # # # # # # Investment Time Horizon:
+
+# # # # # # # # # As a moderate investor, you likely have a long-term investment horizon (5+ years). This allows for potential market fluctuations and provides time for your investments to compound and grow.
+
+# # # # # # # # # Expected Returns:
+
+# # # # # # # # # Minimum Expected Annual Return: 4-6% Maximum Expected Annual Return: 8-10%
+
+# # # # # # # # # Expected Growth in Dollars:
+
+# # # # # # # # # Minimum Expected Growth: 
+# # # # # # # # # 20
+# # # # # # # # # ,
+# # # # # # # # # 000
+# # # # # # # # # −
+# # # # # # # # # 20,000−30,000 over 5 years Maximum Expected Growth: 
+# # # # # # # # # 40
+# # # # # # # # # ,
+# # # # # # # # # 000
+# # # # # # # # # −
+# # # # # # # # # 40,000−50,000 over 5 years
+
+# # # # # # # # # Why this Strategy?
+
+# # # # # # # # # This strategy balances potential growth with risk mitigation. The allocation to growth-oriented investments allows for the potential for higher returns, while the conservative investments provide stability and a safety net.
+
+# # # # # # # # # Key Considerations:
+
+# # # # # # # # # Debt Management: Prioritize paying down your high-interest credit card debt. This will significantly improve your overall financial health and free up more funds for investing. Retirement Savings: Contribute regularly to your Roth IRA and Roth 401(k) to maximize tax benefits and build a strong retirement nest egg. Regular Review: Regularly review your portfolio and adjust your asset allocation as needed based on your risk tolerance, time horizon, and market conditions.
+
+# # # # # # # # # Remember: This is a general investment strategy. It's crucial to consult with a qualified financial advisor to tailor a personalized plan that aligns with your specific goals, risk tolerance, and financial situation.
+
+
+# # # # # # # # # def main():
+# # # # # # # # #     st.title("Wealth Advisor Chatbot")
+
+# # # # # # # # #     # Step 1: Upload Document
+# # # # # # # # #     uploaded_file = st.file_uploader("Upload a document", type=["docx", "pdf"])
+
+# # # # # # # # #     if uploaded_file is not None:
+# # # # # # # # #         # Save the uploaded file temporarily
+# # # # # # # # #         with open("uploaded_file", "wb") as f:
+# # # # # # # # #             f.write(uploaded_file.getbuffer())
+
+# # # # # # # # #         # Process the document
+# # # # # # # # #         extracted_text = process_document("uploaded_file")
+# # # # # # # # #         # st.write(extracted_text)
+
+# # # # # # # # #         # Validate the document
+# # # # # # # # #         # client_name, validation_errors = await validate_process_document("uploaded_file")
+# # # # # # # # #         client_name, validation_errors = asyncio.run(validate_process_document("uploaded_file"))
+# # # # # # # # #         if client_name:
+# # # # # # # # #             st.success(f"Document processed successfully for client: {client_name}")
+# # # # # # # # #         else:
+# # # # # # # # #             st.error("Error processing document.")
+# # # # # # # # #             if validation_errors:
+# # # # # # # # #                 for error in validation_errors:
+# # # # # # # # #                     st.error(error)
+
+# # # # # # # # #         # Assume retriever and chain setup as in aiogram code
+# # # # # # # # #         retriever = load_vector_db("uploaded_file")
+# # # # # # # # #         chain = make_retrieval_chain(retriever)
+        
+# # # # # # # # #         if chain is not None:
+# # # # # # # # #             summary = "Summary of the document"  # Placeholder for actual summary logic
+# # # # # # # # #             investment_personality = "Investment Personality"  # Placeholder for actual logic
+# # # # # # # # #             query = summary + "\n" + investment_personality
+# # # # # # # # #             response = chain.invoke({"input": query})
+# # # # # # # # #             format_response = markdown_to_text(response['answer'])
+# # # # # # # # #             st.write(format_response)
+
+# # # # # # # # #             handle_graph(response['answer'])
+
+# # # # # # # # #         else:
+# # # # # # # # #             st.error("Failed to create the retrieval chain. Please upload a valid document.")
+
+# # # # # # # # # if __name__ == "__main__":
+# # # # # # # # #     main()
+
+
+# # # # # # # # # def generate_investment_suggestions(stock_prices) : pass
+
+# # # # # # # # # def generate_stock_prices(stock_prices) : pass
+
+# # # # # # # # # def predict_stock_prices(stock_prices) : pass
+
+# # # # # # # # # Define the Streamlit app layout
+# # # # # # # # # st.title("Wealth Advisor Chatbot")
+
+# # # # # # # # # # Option selection for users
+# # # # # # # # # st.sidebar.title("Menu")
+# # # # # # # # # option = st.sidebar.selectbox(
+# # # # # # # # #     "Choose an option",
+# # # # # # # # #     ["Investment Suggestions", "Stock Analysis"]
+# # # # # # # # # )
+
+# # # # # # # # # # Investment Suggestions Section
+# # # # # # # # # if option == "Investment Suggestions":
+# # # # # # # # #     st.header("Investment Suggestions")
+# # # # # # # # #     client_type = st.radio("Are you a New or Existing Client?", ("New Client", "Existing Client"))
+
+# # # # # # # # #     if client_type == "New Client":
+# # # # # # # # #         st.subheader("New Client Investment Suggestions")
+# # # # # # # # #     elif client_type == "Existing Client":
+# # # # # # # # #         st.subheader("Existing Client Investment Suggestions")
+    
+# # # # # # # # #     # Assuming the function takes in client_type and returns suggestions
+# # # # # # # # #     investment_suggestions = generate_investment_suggestions(client_type)
+
+# # # # # # # # #     st.write(investment_suggestions)
+
+# # # # # # # # #     # Generate report with infographics
+# # # # # # # # #     st.subheader("Investment Report")
+# # # # # # # # #     st.write("Inflation-adjusted returns for suggested investments:")
+# # # # # # # # #     # Mock data for illustration, replace with actual data
+# # # # # # # # #     data = {
+# # # # # # # # #         "Investment Type": ["Stocks", "Mutual Funds", "ETFs"],
+# # # # # # # # #         "Inflation-adjusted Returns (%)": [10.5, 8.3, 9.2]
+# # # # # # # # #     }
+# # # # # # # # #     df = pd.DataFrame(data)
+
+# # # # # # # # #     fig, ax = plt.subplots()
+# # # # # # # # #     df.plot(kind="bar", x="Investment Type", y="Inflation-adjusted Returns (%)", ax=ax)
+# # # # # # # # #     st.pyplot(fig)
+
+# # # # # # # # # # Stock Analysis Section
+# # # # # # # # # if option == "Stock Analysis":
+# # # # # # # # #     st.header("Stock Analysis")
+# # # # # # # # #     stock_name = st.text_input("Enter Stock Name/Ticker:")
+# # # # # # # # #     time_period = st.number_input("Enter time period (in days):", min_value=1, max_value=365)
+
+# # # # # # # # #     if st.button("Predict Future Prices"):
+# # # # # # # # #         if stock_name:
+# # # # # # # # #             predicted_prices = predict_stock_prices(stock_name, time_period)
+# # # # # # # # #             st.write(f"Predicted Prices for {stock_name} over the next {time_period} days:")
+# # # # # # # # #             st.line_chart(predicted_prices)
+# # # # # # # # #         else:
+# # # # # # # # #             st.error("Please enter a valid stock name/ticker.")
+
+# # # # # # # # # Additional sections for Retirement Planning, Mortgage Planning, etc., to be added here
+
+
+
+
+# # # # # # # # # # latest version pf client side :
+
+# # # # # # # # # #best code so far now it can upload files and receive various forms of messages as well and provide us graphs that we want 
+# # # # # # # # # # and also reply to images, give stock informations ,give stock analysis information and a prediction of the price
 
 # # # # # # # # # import os
 # # # # # # # # # import filetype
@@ -22056,20 +25557,31 @@ if __name__ == '__main__':
 # # # # # # # # # ]
 
 
-# # # # # # # # # # Handler for /start command
+
+# # # # # # # # # import logging
+# # # # # # # # # from aiogram import Bot, Dispatcher, types
+# # # # # # # # # # Register the router with the dispatcher
+# # # # # # # # # dp.include_router(router)
+
+# # # # # # # # # # from aiogram.utils import executor
+# # # # # # # # # from aiogram.filters import CommandStart
+# # # # # # # # # from aiogram.types import Poll, PollAnswer
+
+# # # # # # # # # # Command handler to start the poll
 # # # # # # # # # @dp.message(CommandStart())
 # # # # # # # # # async def handle_start(message: types.Message):
-# # # # # # # # #     """
-# # # # # # # # #     This handler receives messages with /start command
-# # # # # # # # #     """
 # # # # # # # # #     chat_id = message.chat.id
-# # # # # # # # #     # Start asking questions
-# # # # # # # # #     await start_assessment(chat_id)
+# # # # # # # # #     await bot.send_message(chat_id, "Hi,My name is Finbot and I am a Wealth Management Advisor ChatBot! ")
+# # # # # # # # #     question="How Can I Help you today ?"
+# # # # # # # # #     options = """\na. Know my Investment Personality \nb. Tax Related Queires \nc. Savings and Wealth Management \nd. Debt Repayment Strategies
+# # # # # # # # #               """
+# # # # # # # # #     await bot.send_message(chat_id, question + options)
 
+    
 
 # # # # # # # # # # Function to start the assessment
 # # # # # # # # # async def start_assessment(chat_id):
-# # # # # # # # #     await bot.send_message(chat_id, "Hi,My name is Finbot and I am a Wealth Management Advisor ChatBot! Let's start a quick personality assessment.")
+# # # # # # # # #     await bot.send_message(chat_id, """To analyse your investment personality I need to ask you some questions.\nLet's start a quick personality assessment.""")
 # # # # # # # # #     await ask_next_question(chat_id, 0)
 
 # # # # # # # # # # Function to ask the next question
@@ -22111,10 +25623,10 @@ if __name__ == '__main__':
 # # # # # # # # #         global assessment_in_progress 
 # # # # # # # # #         assessment_in_progress = False
        
-# # # # # # # # #         await bot.send_message(chat_id,"Hello there here is the Word Document.Please fill in your details with correct Information and then upload it in the chat")
-# # # # # # # # #         file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
+# # # # # # # # #         # await bot.send_message(chat_id,"Hello there here is the Word Document.Please fill in your details with correct Information and then upload it in the chat")
+# # # # # # # # #         # file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
 
-# # # # # # # # #         await bot.send_document(chat_id, document=file, caption="To receive financial advice,Please fill in the Financial Details in this document with correct information and upload it here.")
+# # # # # # # # #         # await bot.send_document(chat_id, document=file, caption="To receive financial advice,Please fill in the Financial Details in this document with correct information and upload it here.")
 # # # # # # # # #         # await bot.send_message(chat_id,file)
 
 # # # # # # # # # async def send_summary_chunks(chat_id, summary):
@@ -22162,6 +25674,148 @@ if __name__ == '__main__':
 # # # # # # # # #     except Exception as e:
 # # # # # # # # #         print(f"Error generating response: {e}")
 # # # # # # # # #         #await bot.send_message(chat_id, "Error processing investment personality classification.")
+
+
+# # # # # # # # # # Tax Related Queries :
+
+# # # # # # # # # # Define a global state to track the questions
+# # # # # # # # # tax_states = {}
+# # # # # # # # # tax_responses = {}
+
+# # # # # # # # # # Define the questions
+# # # # # # # # # tax_questions = [
+# # # # # # # # #     "What is your annual income?",
+# # # # # # # # #     "In which state do you live?",
+# # # # # # # # #     "Are you married or single?\n(a) Married\n(b) Single",
+# # # # # # # # #     "For which year do you wish to calculate tax?",
+# # # # # # # # #     "Do you have any mortgages or any tax reductions?"
+# # # # # # # # # ]
+
+# # # # # # # # # # @dp.message()
+# # # # # # # # # async def tax_management(message: types.Message):
+# # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # #     # If the user is answering a tax question, process the response
+# # # # # # # # #     if chat_id in tax_states and tax_states[chat_id] < len(tax_questions):
+# # # # # # # # #         question_index = tax_states[chat_id]
+# # # # # # # # #         answer = message.text
+# # # # # # # # #         tax_responses[tax_questions[question_index]] = answer
+# # # # # # # # #         tax_states[chat_id] += 1
+
+# # # # # # # # #         # Ask the next question
+# # # # # # # # #         if tax_states[chat_id] < len(tax_questions):
+# # # # # # # # #             await bot.send_message(chat_id, tax_questions[tax_states[chat_id]])
+# # # # # # # # #         else:
+# # # # # # # # #             # All questions answered, now process the data
+# # # # # # # # #             await calculate_taxes(chat_id)
+# # # # # # # # #             await bot.send_message(chat_id, "Thank you for your responses! Your tax-related queries have been processed.")
+# # # # # # # # #             # Reset the state
+# # # # # # # # #             del tax_states[chat_id]
+# # # # # # # # #             del tax_responses[chat_id]
+
+# # # # # # # # #     # If the user starts the tax management flow, ask the first question
+# # # # # # # # #     else:
+# # # # # # # # #         tax_states[chat_id] = 0
+# # # # # # # # #         tax_responses[chat_id] = {}
+# # # # # # # # #         await bot.send_message(chat_id, "Let's get started with your tax-related queries.")
+# # # # # # # # #         await bot.send_message(chat_id, tax_questions[0])
+
+# # # # # # # # # async def calculate_taxes(chat_id):
+# # # # # # # # #     try:
+# # # # # # # # #         # Get the user's responses
+# # # # # # # # #         annual_income = tax_responses[tax_questions[0]]
+# # # # # # # # #         state = tax_responses[tax_questions[1]]
+# # # # # # # # #         marital_status = tax_responses[tax_questions[2]]
+# # # # # # # # #         tax_year = tax_responses[tax_questions[3]]
+# # # # # # # # #         mortgages_or_deductions = tax_responses[tax_questions[4]]
+
+# # # # # # # # #         # Prepare the context for the LLM
+# # # # # # # # #         context = f"""
+# # # # # # # # #         Annual Income: {annual_income}
+# # # # # # # # #         State: {state}
+# # # # # # # # #         Marital Status: {marital_status}
+# # # # # # # # #         Tax Year: {tax_year}
+# # # # # # # # #         Mortgages or Deductions: {mortgages_or_deductions}
+# # # # # # # # #         """
+
+# # # # # # # # #         # Use the context to get tax calculation and advice
+# # # # # # # # #         task = """You are a Tax Calculations Expert in the entire world.
+# # # # # # # # #             Ask user tax related queries to help users with tax related queries.
+# # # # # # # # #             Consider user's investment personality  if provided.
+# # # # # # # # #             Address the user by their name(client_name: Emily in our case but if any other name is given refer to that) if provided.
+# # # # # # # # #             Help users to save tax on their income and earnings.
+# # # # # # # # #             If user asks queries related to saving taxes or calculating taxes refer to the 
+# # # # # # # # #             US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
+# # # # # # # # #             consider the information shared by the user such as their annual income and their monthly investment if provided,
+# # # # # # # # #             also give advice to the user on how they can save their taxes.
+# # # # # # # # #             Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
+        
+# # # # # # # # #         query = task + "\n" + context
+# # # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # # # # #         chat = model.start_chat(history=[])
+# # # # # # # # #         response = chat.send_message(query)
+
+# # # # # # # # #         # Enhanced logging for debugging
+# # # # # # # # #         logging.info(f"Model response: {response}")
+# # # # # # # # #         format_response = markdown_to_text(response.text)
+
+# # # # # # # # #         # Store the response in chat history
+# # # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+# # # # # # # # #         await bot.send_message(chat_id,"Here is your calculated tax as per the responses provided ")
+# # # # # # # # #         await bot.send_message(chat_id, format_response)
+
+# # # # # # # # #     except Exception as e:
+# # # # # # # # #         print(f"Error calculating taxes: {e}")
+# # # # # # # # #         await bot.send_message(chat_id, "Error calculating taxes. Please try again later.")
+
+# # # # # # # # # # async def tax_management(chat_id) :
+# # # # # # # # # #     try:
+# # # # # # # # #         # task = """You are a Tax Calculations Expert in the entire world.
+# # # # # # # # #         #     Ask user tax related queries to help users with tax related queries.
+# # # # # # # # #         #     Consider user's investment personality  if provided.
+# # # # # # # # #         #     Address the user by their name(client_name: Emily in our case but if any other name is given refer to that) if provided.
+# # # # # # # # #         #     Help users to save tax on their income and earnings.
+# # # # # # # # #         #     If user asks queries related to saving taxes or calculating taxes refer to the 
+# # # # # # # # #         #     US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
+# # # # # # # # #         #     consider the information shared by the user such as their annual income and their monthly investment if provided,
+# # # # # # # # #         #     also give advice to the user on how they can save their taxes.
+# # # # # # # # #         #     Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
+        
+        
+# # # # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
+# # # # # # # # # #         # query = chat_history_text + "\n" + query
+
+# # # # # # # # # #         # Include chat history
+# # # # # # # # # #         chat_history = read_chat_history(chat_id)
+# # # # # # # # # #         chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
+# # # # # # # # # #         # history.append(chat_history_text)
+
+# # # # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history_text # + "\n" + message.text
+# # # # # # # # # #         query = task + "\n" + chat_history_text # + "\n" + message.text
+
+
+# # # # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # # # # # #         chat = model.start_chat(history=[])
+# # # # # # # # # #         response = chat.send_message(query)
+
+# # # # # # # # # #         # Enhanced logging for debugging
+# # # # # # # # # #         logging.info(f"Model response: {response}")
+# # # # # # # # # #         format_response = markdown_to_text(response.text) #(response_text) #response.result
+
+# # # # # # # # # #         # Store the response in chat history
+# # # # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+# # # # # # # # # #         await bot.send_message(chat_id,format_response)
+# # # # # # # # # #         # await message.reply(format_response)
+
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error invoking retrieval chain on attempt : {e}")
+# # # # # # # # # #         await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
+        
+
+# # # # # # # # # # Savings and Wealth Management :
+# # # # # # # # # async def savings_management(chat_id) :
+# # # # # # # # #     # Savings and Wealth Management related questions
+# # # # # # # # #     await bot.send_message(chat_id,"Hello there here is a Simple Personal Budget Excel File.Please fill in your details with correct Information and then upload it in the chat")
+# # # # # # # # #     file = FSInputFile("data\Emily_Budget.xlsx", filename="Your Simple Personal Budget.xlsx")
 
 
 # # # # # # # # # # Handler for document upload
@@ -22268,32 +25922,42 @@ if __name__ == '__main__':
 # # # # # # # # # from aiogram.filters import Filter
 
 # # # # # # # # # # @router.message(F.document)
+
+# # # # # # # # # import os
+# # # # # # # # # import pandas as pd
+# # # # # # # # # from openpyxl import load_workbook
+
 # # # # # # # # # @dp.message(F.document)
 # # # # # # # # # async def handle_document(message: types.Message):
-# # # # # # # # #     global summary,investment_personality  
+# # # # # # # # #     global summary, investment_personality  
 
 # # # # # # # # #     chat_id = message.chat.id
 # # # # # # # # #     await message.reply("File Received") 
+    
 # # # # # # # # #     # Obtain file information
 # # # # # # # # #     file_id = message.document.file_id
 # # # # # # # # #     file = await bot.get_file(file_id)
 # # # # # # # # #     file_path = file.file_path
-    
+
+# # # # # # # # #     # Get the file extension
+# # # # # # # # #     file_extension = os.path.splitext(message.document.file_name)[-1].lower()
+
 # # # # # # # # #     # Download the file
-# # # # # # # # #     await bot.download_file(file_path, "data/uploaded_file")
-    
-# # # # # # # # #     # Process the uploaded document
-# # # # # # # # #     extracted_text = await process_document("data/uploaded_file")
-# # # # # # # # #     # print(extracted_text)
+# # # # # # # # #     local_file_path = "data/uploaded_file" + file_extension
+# # # # # # # # #     await bot.download_file(file_path, local_file_path)
+
+# # # # # # # # #     # Process the uploaded document based on the file type
+# # # # # # # # #     if file_extension in ['.xlsx', '.xls']:
+# # # # # # # # #         extracted_text = await process_excel_file(local_file_path)
+# # # # # # # # #     else:
+# # # # # # # # #         extracted_text = await process_document(local_file_path)
 
 # # # # # # # # #     if extracted_text:
-# # # # # # # # #         # Load vector database (assuming this is part of setting up the retriever)
+# # # # # # # # #         # Proceed with further processing
 # # # # # # # # #         print("Retriever being loaded ")
-# # # # # # # # #         retriever = await load_vector_db("data/uploaded_file")
-# # # # # # # # #         file_path = 'data/uploaded_file'
-# # # # # # # # #         client_name, validation_errors = await validate_process_document(file_path)
+# # # # # # # # #         retriever = await load_vector_db(local_file_path)
+# # # # # # # # #         client_name, validation_errors = await validate_process_document(local_file_path)
 
-# # # # # # # # #         # Print results
 # # # # # # # # #         print(f"Client Name: {client_name}")
 # # # # # # # # #         if validation_errors:
 # # # # # # # # #             print("**Validation Errors:**")
@@ -22301,29 +25965,29 @@ if __name__ == '__main__':
 # # # # # # # # #                 print(error)
 # # # # # # # # #         else:
 # # # # # # # # #             print("All fields are filled correctly.")
-# # # # # # # # #         if client_name == None:
-# # # # # # # # #             try:
-# # # # # # # # #                 await message.reply("Processing the uploaded image")
-# # # # # # # # #                 await handle_image(message) 
-# # # # # # # # #                 return 
-# # # # # # # # #             except Exception as e:
-# # # # # # # # #                 await message.reply("error processing uploaded image")
-# # # # # # # # #                 print(e)
-# # # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}.I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
+# # # # # # # # #         # if client_name is None:
+# # # # # # # # #         #     try:
+# # # # # # # # #         #         await message.reply("Processing the uploaded image")
+# # # # # # # # #         #         await handle_image(message) 
+# # # # # # # # #         #         return 
+# # # # # # # # #         #     except Exception as e:
+# # # # # # # # #         #         await message.reply("Error processing uploaded image")
+# # # # # # # # #         #         print(e)
+# # # # # # # # #         if client_name == None : client_name = "Emilly"
+# # # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}. I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
 
 # # # # # # # # #         if retriever is None:
 # # # # # # # # #             await message.reply("The retrieval chain is not set up. Please upload a document first.")
 # # # # # # # # #             return
 
-# # # # # # # # #         # Check if a valid chain can be created
 # # # # # # # # #         chain = await make_retrieval_chain(retriever)
 # # # # # # # # #         if chain is None:
 # # # # # # # # #             await message.reply("Failed to create the retrieval chain.")
 # # # # # # # # #             return
-        
+
 # # # # # # # # #         try:     
-# # # # # # # # #             query = summary + "\n" + investment_personality # + "\n"  #extracted_text + "\n" + task
-        
+# # # # # # # # #             query = summary + "\n" + investment_personality
+     
 # # # # # # # # #             response = chain.invoke({"input": query})
 # # # # # # # # #             print(response['answer'])
 # # # # # # # # #             global chat_history
@@ -22331,14 +25995,10 @@ if __name__ == '__main__':
 # # # # # # # # #             print(f"\n Chat History : {chat_history}")
 # # # # # # # # #             format_response = markdown_to_text(response['answer'])
 
-# # # # # # # # #             # Store the extracted_text in chat history
 # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': extracted_text})
-        
-# # # # # # # # #             # Store the response in chat history
 # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
 
 # # # # # # # # #             await message.reply(format_response)
-# # # # # # # # #             # await message.reply(response['answer'])
 
 # # # # # # # # #         except Exception as e:
 # # # # # # # # #             print(f"Error invoking retrieval chain on attempt : {e}")
@@ -22346,6 +26006,97 @@ if __name__ == '__main__':
 
 # # # # # # # # #     else:
 # # # # # # # # #         await message.reply("Failed to process the uploaded file.")
+
+# # # # # # # # # async def process_excel_file(file_path):
+# # # # # # # # #     try:
+# # # # # # # # #         # Reading the Excel file using pandas
+# # # # # # # # #         df = pd.read_excel(file_path)
+# # # # # # # # #         # Extracting relevant information (This is just an example, customize it as needed)
+# # # # # # # # #         extracted_text = df.to_string(index=False)
+# # # # # # # # #         return extracted_text
+# # # # # # # # #     except Exception as e:
+# # # # # # # # #         print(f"Error processing Excel file: {e}")
+# # # # # # # # #         return None
+
+
+# # # # # # # # # # @dp.message(F.document)
+# # # # # # # # # # async def handle_document(message: types.Message):
+# # # # # # # # # #     global summary,investment_personality  
+
+# # # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # # #     await message.reply("File Received") 
+# # # # # # # # # #     # Obtain file information
+# # # # # # # # # #     file_id = message.document.file_id
+# # # # # # # # # #     file = await bot.get_file(file_id)
+# # # # # # # # # #     file_path = file.file_path
+    
+# # # # # # # # # #     # Download the file
+# # # # # # # # # #     await bot.download_file(file_path, "data/uploaded_file")
+    
+# # # # # # # # # #     # Process the uploaded document
+# # # # # # # # # #     extracted_text = await process_document("data/uploaded_file")
+# # # # # # # # # #     # print(extracted_text)
+
+# # # # # # # # # #     if extracted_text:
+# # # # # # # # # #         # Load vector database (assuming this is part of setting up the retriever)
+# # # # # # # # # #         print("Retriever being loaded ")
+# # # # # # # # # #         retriever = await load_vector_db("data/uploaded_file")
+# # # # # # # # # #         file_path = 'data/uploaded_file'
+# # # # # # # # # #         client_name, validation_errors = await validate_process_document(file_path)
+
+# # # # # # # # # #         # Print results
+# # # # # # # # # #         print(f"Client Name: {client_name}")
+# # # # # # # # # #         if validation_errors:
+# # # # # # # # # #             print("**Validation Errors:**")
+# # # # # # # # # #             for error in validation_errors:
+# # # # # # # # # #                 print(error)
+# # # # # # # # # #         else:
+# # # # # # # # # #             print("All fields are filled correctly.")
+# # # # # # # # # #         if client_name == None:
+# # # # # # # # # #             try:
+# # # # # # # # # #                 await message.reply("Processing the uploaded image")
+# # # # # # # # # #                 await handle_image(message) 
+# # # # # # # # # #                 return 
+# # # # # # # # # #             except Exception as e:
+# # # # # # # # # #                 await message.reply("error processing uploaded image")
+# # # # # # # # # #                 print(e)
+# # # # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}.I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
+
+# # # # # # # # # #         if retriever is None:
+# # # # # # # # # #             await message.reply("The retrieval chain is not set up. Please upload a document first.")
+# # # # # # # # # #             return
+
+# # # # # # # # # #         # Check if a valid chain can be created
+# # # # # # # # # #         chain = await make_retrieval_chain(retriever)
+# # # # # # # # # #         if chain is None:
+# # # # # # # # # #             await message.reply("Failed to create the retrieval chain.")
+# # # # # # # # # #             return
+        
+# # # # # # # # # #         try:     
+# # # # # # # # # #             query = summary + "\n" + investment_personality # + "\n"  #extracted_text + "\n" + task
+        
+# # # # # # # # # #             response = chain.invoke({"input": query})
+# # # # # # # # # #             print(response['answer'])
+# # # # # # # # # #             global chat_history
+# # # # # # # # # #             chat_history = response['answer'] 
+# # # # # # # # # #             print(f"\n Chat History : {chat_history}")
+# # # # # # # # # #             format_response = markdown_to_text(response['answer'])
+
+# # # # # # # # # #             # Store the extracted_text in chat history
+# # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': extracted_text})
+        
+# # # # # # # # # #             # Store the response in chat history
+# # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+
+# # # # # # # # # #             await message.reply(format_response)
+# # # # # # # # # #             # await message.reply(response['answer'])
+
+# # # # # # # # # #         except Exception as e:
+# # # # # # # # # #             print(f"Error invoking retrieval chain on attempt : {e}")
+# # # # # # # # # #             await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
+
+# # # # # # # # # #     else:
+# # # # # # # # # #         await message.reply("Failed to process the uploaded file.")
     
 
 # # # # # # # # # # Function to extract data from LLM response
@@ -22568,52 +26319,97 @@ if __name__ == '__main__':
 # # # # # # # # #     global retriever, extracted_text, investment_personality, summary, chat_history
 
 # # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # #     question="How Can I Help you today ?"
+# # # # # # # # #     options = """\na. Know my Investment Personality \nb. Tax Related Queires \nc. Savings and Wealth Management \nd. Debt Repayment Strategies
+# # # # # # # # #               """
+    
+# # # # # # # # #     # if chat_id in states and states[chat_id] < len(questions):
+# # # # # # # # #     #     question_index = states[chat_id]
+# # # # # # # # #     #     answer = message.text
+# # # # # # # # #     #     user_responses[questions[question_index]] = answer
+# # # # # # # # #     #     states[chat_id] += 1
+# # # # # # # # #     #     await ask_next_question(chat_id, question_index + 1)
 
 # # # # # # # # #     if chat_id in states and states[chat_id] < len(questions):
 # # # # # # # # #         question_index = states[chat_id]
 # # # # # # # # #         answer = message.text
 # # # # # # # # #         user_responses[questions[question_index]] = answer
 # # # # # # # # #         states[chat_id] += 1
-# # # # # # # # #         await ask_next_question(chat_id, question_index + 1)
-# # # # # # # # #     elif message.text:
-# # # # # # # # #         try:
-# # # # # # # # #             task = """You are a Financial Expert and Wealth Advisor.
-# # # # # # # # #                 You also a Stock Market Expert. You know everything about stock market trends and patterns.
-# # # # # # # # #                 Provide financial advice or Stock Related advice and suggestions based on the user's query.
-# # # # # # # # #                 Consider user's investment personality and Financial Details if provided.
-# # # # # # # # #                 Address the user by their name(client_name: Emily in our case but if any other name is give refer to that) if provided.
-# # # # # # # # #                 Include detailed information about the investment, where to invest, how much to invest, 
-# # # # # # # # #                 expected returns, and why you are giving this advice.
-# # # # # # # # #                 As you are a Wealth Advisor if user asks queries related to saving taxes or calculating taxes refer to the 
-# # # # # # # # #                 US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
-# # # # # # # # #                 consider the information shared by the user such as their annual income and their monthly investment if provided,
-# # # # # # # # #                 also give advice to the user on how they can save their taxes.
-# # # # # # # # #                 Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
+# # # # # # # # #         if states[chat_id] < len(questions):
+# # # # # # # # #             await ask_next_question(chat_id, question_index + 1)
+# # # # # # # # #         else:
+# # # # # # # # #             await ask_next_question(chat_id, question_index + 1)
             
-# # # # # # # # #             # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
-# # # # # # # # #             # query = chat_history_text + "\n" + query
+# # # # # # # # #             # await bot.send_message(chat_id, "Assessment Completed.")
+# # # # # # # # #             await bot.send_message(chat_id, "What do you want to do next?\n" + question + options)
 
-# # # # # # # # #             # Include chat history
-# # # # # # # # #             chat_history = read_chat_history(chat_id)
-# # # # # # # # #             chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
-# # # # # # # # #             # history.append(chat_history_text)
-# # # # # # # # #             query = task + "\n" + investment_personality + "\n" + chat_history_text + "\n" + message.text
 
-# # # # # # # # #             model = genai.GenerativeModel('gemini-1.5-flash')
-# # # # # # # # #             chat = model.start_chat(history=[])
-# # # # # # # # #             response = chat.send_message(query)
+# # # # # # # # #     elif message.text:
+# # # # # # # # #         lower_text = message.text.lower()
 
-# # # # # # # # #             # Enhanced logging for debugging
-# # # # # # # # #             logging.info(f"Model response: {response}")
-# # # # # # # # #             format_response = markdown_to_text(response.text) #(response_text) #response.result
+# # # # # # # # #         # Investment Personality :
+# # # # # # # # #         if any(variant in lower_text for variant in ["a", "a.", "a)", "(a)", "1", "1.", "1)", "(1)"]):
+# # # # # # # # #             await start_assessment(chat_id)
 
-# # # # # # # # #             # Store the response in chat history
-# # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
-# # # # # # # # #             await message.reply(format_response)
+# # # # # # # # #         # Tax Related Queries :
+# # # # # # # # #         elif any(variant in lower_text for variant in ["b", "b.", "b)", "(b)", "2", "2.", "2)", "(2)"]):
+# # # # # # # # #             await bot.send_message(chat_id,"Hello, I will ask you some Tax Related Questions.\nPlease answer them correctly so that I can calculate your tax")
+# # # # # # # # #             await tax_management(message) #(chat_id) #pass
+        
+# # # # # # # # #         # Savings and Wealth Management :
+# # # # # # # # #         elif any(variant in lower_text for variant in ["c", "c.", "c)", "(c)", "3", "3.", "3)", "(3)"]):
+# # # # # # # # #             await savings_management(chat_id) #pass  #  
+        
+# # # # # # # # #         # Debt Repayment Strategies :
+# # # # # # # # #         elif any(variant in lower_text for variant in ["d", "d.", "d)", "(d)", "4", "4.", "4)", "(4)"]):
+# # # # # # # # #             pass  # 
 
-# # # # # # # # #         except Exception as e:
-# # # # # # # # #             logging.error(f"Error processing general chat message: {e}")
-# # # # # # # # #             await message.reply("Failed to process your request.")
+# # # # # # # # #         elif lower_text in ["yes", "y"]:
+# # # # # # # # #             await start_assessment(chat_id)
+
+# # # # # # # # #         else:
+# # # # # # # # #             await bot.send_message(chat_id, "Assessment Completed. Do you wish to retake the assessment? Type 'yes' or 'no'.")
+# # # # # # # # #             await bot.send_message(chat_id, "Thank you for your response.")
+# # # # # # # # #             await bot.send_message(chat_id, "What do you want to do next?\n" + question + options)
+
+# # # # # # # # #             try:
+# # # # # # # # #                 task = """You are a Financial Expert and Wealth Advisor.
+# # # # # # # # #                     You also a Stock Market Expert. You know everything about stock market trends and patterns.
+# # # # # # # # #                     Provide financial advice or Stock Related advice and suggestions based on the user's query.
+# # # # # # # # #                     Consider user's investment personality and Financial Details if provided.
+# # # # # # # # #                     Address the user by their name(client_name: Emily in our case but if any other name is give refer to that) if provided.
+# # # # # # # # #                     Include detailed information about the investment, where to invest, how much to invest, 
+# # # # # # # # #                     expected returns, and why you are giving this advice.
+# # # # # # # # #                     As you are a Wealth Advisor if user asks queries related to saving taxes or calculating taxes refer to the 
+# # # # # # # # #                     US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
+# # # # # # # # #                     consider the information shared by the user such as their annual income and their monthly investment if provided,
+# # # # # # # # #                     also give advice to the user on how they can save their taxes.
+# # # # # # # # #                     Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
+                
+# # # # # # # # #                 # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
+# # # # # # # # #                 # query = chat_history_text + "\n" + query
+
+# # # # # # # # #                 # Include chat history
+# # # # # # # # #                 chat_history = read_chat_history(chat_id)
+# # # # # # # # #                 chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
+# # # # # # # # #                 # history.append(chat_history_text)
+# # # # # # # # #                 query = task + "\n" + investment_personality + "\n" + chat_history_text + "\n" + message.text
+
+# # # # # # # # #                 model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # # # # #                 chat = model.start_chat(history=[])
+# # # # # # # # #                 response = chat.send_message(query)
+
+# # # # # # # # #                 # Enhanced logging for debugging
+# # # # # # # # #                 logging.info(f"Model response: {response}")
+# # # # # # # # #                 format_response = markdown_to_text(response.text) #(response_text) #response.result
+
+# # # # # # # # #                 # Store the response in chat history
+# # # # # # # # #                 write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+# # # # # # # # #                 await message.reply(format_response)
+
+# # # # # # # # #             except Exception as e:
+# # # # # # # # #                 logging.error(f"Error processing general chat message: {e}")
+# # # # # # # # #                 await message.reply("Failed to process your request.")
 
 
 
@@ -22741,184 +26537,1065 @@ if __name__ == '__main__':
 
 
 
-# # # # # # # # # previous polling mechanism :
+# # # # # # # # # # #best code so far now it can work efficiently on Client side :
+
+# # # # # # # # # # import os
+# # # # # # # # # # import filetype
+# # # # # # # # # # import docx
+# # # # # # # # # # import PyPDF2
+# # # # # # # # # # import re
+# # # # # # # # # # from aiogram import Bot, Dispatcher, types
+# # # # # # # # # # from dotenv import load_dotenv
+# # # # # # # # # # from langchain.text_splitter import RecursiveCharacterTextSplitter
+# # # # # # # # # # from langchain_community.vectorstores import Chroma
+
+# # # # # # # # # # import faiss
+# # # # # # # # # # from langchain_community.docstore.in_memory import InMemoryDocstore
+# # # # # # # # # # from langchain_community.vectorstores import FAISS
+# # # # # # # # # # from langchain_community.document_loaders import Docx2txtLoader
+
+# # # # # # # # # # from langchain_core.prompts import ChatPromptTemplate
+# # # # # # # # # # from langchain.chains import create_retrieval_chain
+# # # # # # # # # # from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+# # # # # # # # # # from langchain.chains.combine_documents import create_stuff_documents_chain
+# # # # # # # # # # from langchain.memory import ConversationSummaryMemory
+# # # # # # # # # # import asyncio
+# # # # # # # # # # import numpy as np
+# # # # # # # # # # import json
+# # # # # # # # # # import re
+# # # # # # # # # # import google.generativeai as genai
+# # # # # # # # # # import pathlib
+# # # # # # # # # # # Import things that are needed generically
+# # # # # # # # # # from langchain.pydantic_v1 import BaseModel, Field
+# # # # # # # # # # from langchain.tools import BaseTool, StructuredTool, tool
+
+# # # # # # # # # # from aiogram.client.default import DefaultBotProperties
+# # # # # # # # # # from aiogram.enums import ParseMode
+# # # # # # # # # # from aiogram.filters import CommandStart
+# # # # # # # # # # from aiogram.types import Message
+# # # # # # # # # # from aiogram import F
+# # # # # # # # # # from aiogram import Router
+# # # # # # # # # # import logging
+# # # # # # # # # # import sys
+# # # # # # # # # # from aiogram.filters import Command
+# # # # # # # # # # from aiogram.types import FSInputFile
+# # # # # # # # # # # from aiogram.utils import executor
+# # # # # # # # # # import io
+# # # # # # # # # # import matplotlib.pyplot as plt
+# # # # # # # # # # import seaborn as sns
+# # # # # # # # # # import aiohttp
+# # # # # # # # # # from aiogram.types import InputFile , BufferedInputFile
+# # # # # # # # # # import PIL.Image
+
+# # # # # # # # # # router = Router(name=__name__)
+
+# # # # # # # # # # load_dotenv()
+
+# # # # # # # # # # TOKEN = os.getenv("TOKEN")
+# # # # # # # # # # GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# # # # # # # # # # os.environ["LANGCHAIN_TRACING_V2"]="true"
+# # # # # # # # # # os.environ["LANGCHAIN_API_KEY"]=os.getenv("LANGCHAIN_API_KEY")
+
+# # # # # # # # # # # Configure generativeai with your API key
+# # # # # # # # # # genai.configure(api_key=GOOGLE_API_KEY)
+
+# # # # # # # # # # # Initialize bot
+# # # # # # # # # # bot = Bot(token=TOKEN)
+# # # # # # # # # # dp = Dispatcher()
+
+# # # # # # # # # # # Glbal variables
+# # # # # # # # # # rag_on = False
+# # # # # # # # # # retriever = None  # Store retriever globally
+# # # # # # # # # # summary = ""
+# # # # # # # # # # investment_personality = ""
+# # # # # # # # # # # history = []
+# # # # # # # # # # previous_suggestions = ""
+
+# # # # # # # # # # CHAT_HISTORY_FILE = 'chat_history.json'
+
+# # # # # # # # # # def read_chat_history(chat_id):
+# # # # # # # # # #     if os.path.exists(CHAT_HISTORY_FILE):
+# # # # # # # # # #         with open(CHAT_HISTORY_FILE, 'r') as file:
+# # # # # # # # # #             chat_history = json.load(file)
+# # # # # # # # # #             return chat_history.get(str(chat_id), [])
+# # # # # # # # # #     return []
+
+# # # # # # # # # # def write_chat_history(chat_id, message):
+# # # # # # # # # #     chat_history = {}
+# # # # # # # # # #     if os.path.exists(CHAT_HISTORY_FILE):
+# # # # # # # # # #         with open(CHAT_HISTORY_FILE, 'r') as file:
+# # # # # # # # # #             chat_history = json.load(file)
+# # # # # # # # # #     if str(chat_id) not in chat_history:
+# # # # # # # # # #         chat_history[str(chat_id)] = []
+# # # # # # # # # #     chat_history[str(chat_id)].append(message)
+# # # # # # # # # #     with open(CHAT_HISTORY_FILE, 'w') as file:
+# # # # # # # # # #         json.dump(chat_history, file)
+
+# # # # # # # # # # class Reference:
+# # # # # # # # # #     def __init__(self):
+# # # # # # # # # #         self.response = ""
 
 
+# # # # # # # # # # reference = Reference()
 
-# # # # # # # # # # Function to ask the next question
-# # # # # # # # # async def ask_next_question(chat_id, question_index):
-# # # # # # # # #     if question_index < len(questions):
-# # # # # # # # #         question_data = questions[question_index]
 
-# # # # # # # # #         if question_data["options"]:  # If there are predefined options, send a poll
-# # # # # # # # #             poll = await bot.send_poll(
-# # # # # # # # #                 chat_id=chat_id,
-# # # # # # # # #                 question=question_data["question"],
-# # # # # # # # #                 options=question_data["options"],
-# # # # # # # # #                 type="regular",
-# # # # # # # # #                 is_anonymous=False
-# # # # # # # # #             )
-# # # # # # # # #             logging.info(f"Poll sent with ID {poll.poll.id} for question {question_index + 1}")
-# # # # # # # # #             user_responses[chat_id] = {"poll_id": poll.poll.id, "question_index": question_index}
-# # # # # # # # #             # question_index += 1
-# # # # # # # # #         else:  # If there are no predefined options, ask as a simple text question
-# # # # # # # # #             await bot.send_message(chat_id, question_data["question"])
-# # # # # # # # #             states[chat_id] = question_index
+# # # # # # # # # # def clear_past():
+# # # # # # # # # #     reference.response = ""
 
-# # # # # # # # #     else:
-# # # # # # # # #         # No more questions, finish assessment
-# # # # # # # # #         await finish_assessment(chat_id)
 
-# # # # # # # # # # Poll Answer handler
-# # # # # # # # # @router.poll_answer()
-# # # # # # # # # async def handle_assessment_poll_answer(poll_answer: PollAnswer):
-# # # # # # # # #     logging.info(f"Poll answer received from user {poll_answer.user.id}: selected option {poll_answer.option_ids[0]}")
-# # # # # # # # #     chat_id = poll_answer.user.id
-# # # # # # # # #     question_index = user_responses[chat_id]["question_index"]
-    
-# # # # # # # # #     selected_option = questions[question_index]["options"][poll_answer.option_ids[0]]
-# # # # # # # # #     user_responses[chat_id][f"answer_{question_index + 1}"] = selected_option
+# # # # # # # # # # @router.message(F.text == "clear")
+# # # # # # # # # # async def clear(message: types.Message):
+# # # # # # # # # #     """
+# # # # # # # # # #     A handler to clear the previous conversation and context.
+# # # # # # # # # #     """
+# # # # # # # # # #     clear_past()
+# # # # # # # # # #     await message.reply("I've cleared the past conversation and context.")
 
-# # # # # # # # #     # Proceed to the next question
-# # # # # # # # #     await ask_next_question(chat_id, question_index + 1)
+# # # # # # # # # # #Global Variables :
 
-# # # # # # # # # async def finish_assessment(chat_id):
-# # # # # # # # #     if chat_id in states and states[chat_id] == len(questions):
-# # # # # # # # #         await bot.send_message(chat_id, "Assessment completed. Thank you!")
+# # # # # # # # # # # Store user states
+# # # # # # # # # # states = {}
 
-# # # # # # # # #         # Process and determine investment personality
-# # # # # # # # #         investment_personality = await determine_investment_personality(user_responses)
+# # # # # # # # # # # Dictionary to hold question-answer pairs
+# # # # # # # # # # user_responses = {}
+# # # # # # # # # # #
+# # # # # # # # # # user_images = {}
+# # # # # # # # # # # Define Questions for assessment
+# # # # # # # # # # questions = [
+# # # # # # # # # #     """ 
+# # # # # # # # # #     1. You and your friend are betting on a series of coin tosses.
 
-# # # # # # # # #         # Inform the user about their investment personality
-# # # # # # # # #         await bot.send_message(chat_id, f"Your investment personality: {investment_personality}")
+# # # # # # # # # #     He always bets ₹2,000 on Heads
 
-# # # # # # # # #         # Summarize collected information
-# # # # # # # # #         summary = "\n".join([f"{q}: {a}" for q, a in user_responses.items()])
-# # # # # # # # #         summary = summary + "\n" + "Your investment personality:" + investment_personality
-# # # # # # # # #         await send_summary_chunks(chat_id, summary)
+# # # # # # # # # #     You always bet ₹2,000 on Tails
+
+# # # # # # # # # #     Winner of last 8 turns
+
+# # # # # # # # # #     You lost ₹8,000 in the last 4 turns!
+
+# # # # # # # # # #     If you were to bet one last time, what would you bet on:
+# # # # # # # # # #     a) heads or b) tails ?
+# # # # # # # # # #     """ ,
+# # # # # # # # # #     """
+# # # # # # # # # #     2. Imagine you are a contestant in a game show, and you are presented the following choices.
+
+# # # # # # # # # #     What would you prefer?
+# # # # # # # # # #     a) 50 percent chance of winning 15 gold coins 
+# # # # # # # # # #     b) 100 percent chance of winning 8 gold coins
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     3. In general, how would your best friend describe your risk-taking tendencies?
+# # # # # # # # # #     a) A real gambler
+# # # # # # # # # #     b) Willing to take risks after completing adequate research
+# # # # # # # # # #     c) Cautious
+# # # # # # # # # #     d) Avoids risk as much as possible
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     4. Suppose you could replace your current investment portfolio with this new one:
+# # # # # # # # # #     50 percent chance of Gaining 35 percent or 50 percent chance of Loss
+# # # # # # # # # #     In order to have a 50 percent chance of gaining +35 percent, how much loss are you willing to take?
+# # # # # # # # # #     a)-5 to -10
+# # # # # # # # # #     b)-10 to -15
+# # # # # # # # # #     c)-15 to -20
+# # # # # # # # # #     d)-20 to -25
+# # # # # # # # # #     e)-25 to -30
+# # # # # # # # # #     f)-30 to -35
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     5. Over any 1-year period, what would be the maximum drop in the value of your investment 
+# # # # # # # # # #     portfolio that you would be comfortable with?
+# # # # # # # # # #     a) <5%
+# # # # # # # # # #     b) 5 - 10%
+# # # # # # # # # #     c) 10 - 15%
+# # # # # # # # # #     d) 15 - 20%
+# # # # # # # # # #     e) >20%
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     6. When investing, what do you consider the most?
+
+# # # # # # # # # #     a) Risk 
+# # # # # # # # # #     b) Return
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     7. What best describes your attitude?
+
+# # # # # # # # # #     a) Prefer reasonable returns, can take reasonable risk
+# # # # # # # # # #     b) Like higher returns, can take slightly higher risk
+# # # # # # # # # #     c) Want to maximize returns, can take significant high risk
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     8. How much monthly investment you want to do?
+# # # # # # # # # #     """,
+# # # # # # # # # #     """
+# # # # # # # # # #     9. What is the time horizon for your investment?
+# # # # # # # # # #     You can answer in any range, example 1-5 years."""  
+# # # # # # # # # # ]
+
+
+# # # # # # # # # # # Handler for /start command
+# # # # # # # # # # @dp.message(CommandStart())
+# # # # # # # # # # async def handle_start(message: types.Message):
+# # # # # # # # # #     """
+# # # # # # # # # #     This handler receives messages with /start command
+# # # # # # # # # #     """
+# # # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # # #     # Start asking questions
+# # # # # # # # # #     await start_assessment(chat_id)
+
+
+# # # # # # # # # # # Function to start the assessment
+# # # # # # # # # # async def start_assessment(chat_id):
+# # # # # # # # # #     await bot.send_message(chat_id, "Hi,My name is Finbot and I am a Wealth Management Advisor ChatBot! Let's start a quick personality assessment.")
+# # # # # # # # # #     await ask_next_question(chat_id, 0)
+
+# # # # # # # # # # # Function to ask the next question
+# # # # # # # # # # async def ask_next_question(chat_id, question_index):
+# # # # # # # # # #     if question_index < len(questions):
+# # # # # # # # # #         # Ask the next question
+# # # # # # # # # #         await bot.send_message(chat_id, questions[question_index])
+# # # # # # # # # #         # Update state to indicate the next expected answer
+# # # # # # # # # #         states[chat_id] = question_index
+# # # # # # # # # #     else:
+# # # # # # # # # #         # No more questions, finish assessment
+# # # # # # # # # #         await finish_assessment(chat_id)
+
+# # # # # # # # # # # Handler for receiving assessment answers
+# # # # # # # # # # assessment_in_progress = True
+
+# # # # # # # # # # from aiogram.types import FSInputFile
+# # # # # # # # # # async def finish_assessment(chat_id):
+# # # # # # # # # #     if chat_id in states and states[chat_id] == len(questions):
+# # # # # # # # # #         # All questions have been answered, now process the assessment
+# # # # # # # # # #         await bot.send_message(chat_id, "Assessment completed. Thank you!")
+
+# # # # # # # # # #         # Determine investment personality based on collected responses
+# # # # # # # # # #         global investment_personality
+# # # # # # # # # #         investment_personality = await determine_investment_personality(user_responses)
+
+# # # # # # # # # #         # Inform the user about their investment personality
+# # # # # # # # # #         await bot.send_message(chat_id, f"Your investment personality: {investment_personality}")
+
+# # # # # # # # # #         # Store the response in chat history
+# # # # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': investment_personality})
+
+# # # # # # # # # #         # Summarize collected information
+# # # # # # # # # #         global summary
+# # # # # # # # # #         summary = "\n".join([f"{q}: {a}" for q, a in user_responses.items()])
+# # # # # # # # # #         summary = summary + "\n" + "Your investment personality:" + investment_personality
+# # # # # # # # # #         # Ensure to await the determination of investment personality
+# # # # # # # # # #         await send_summary_chunks(chat_id, summary)
+# # # # # # # # # #         global assessment_in_progress 
+# # # # # # # # # #         assessment_in_progress = False
+       
+# # # # # # # # # #         await bot.send_message(chat_id,"Hello there here is the Word Document.Please fill in your details with correct Information and then upload it in the chat")
+# # # # # # # # # #         file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
+
+# # # # # # # # # #         await bot.send_document(chat_id, document=file, caption="To receive financial advice,Please fill in the Financial Details in this document with correct information and upload it here.")
+# # # # # # # # # #         # await bot.send_message(chat_id,file)
+
+# # # # # # # # # # async def send_summary_chunks(chat_id, summary):
+# # # # # # # # # #     # Split the summary into chunks that fit within Telegram's message limits
+# # # # # # # # # #     chunks = [summary[i:i+4000] for i in range(0, len(summary), 4000)]
+
+# # # # # # # # # #     # Send each chunk as a separate message
+# # # # # # # # # #     for chunk in chunks:
+# # # # # # # # # #         await bot.send_message(chat_id, f"Assessment Summary:\n{chunk}")
+
+
+# # # # # # # # # # async def determine_investment_personality(assessment_data):
+# # # # # # # # # #     try:
+# # # # # # # # # #         # Prepare input text for the chatbot based on assessment data
+# # # # # # # # # #         input_text = "User Profile:\n"
+# # # # # # # # # #         for question, answer in assessment_data.items():
+# # # # # # # # # #             input_text += f"{question}: {answer}\n"
+
+# # # # # # # # # #         # Introduce the chatbot's task and prompt for classification
+# # # # # # # # # #         input_text += "\nYou are an investment personality identifier. Classify the user as:\n" \
+# # # # # # # # # #                       "- Conservative Investor\n" \
+# # # # # # # # # #                       "- Moderate Investor\n" \
+# # # # # # # # # #                       "- Aggressive Investor"
+
+# # # # # # # # # #         # Use your generative AI model to generate a response
+# # # # # # # # # #         # print(input_text)
+# # # # # # # # # #         model = genai.GenerativeModel('gemini-pro')
+# # # # # # # # # #         response = model.generate_content(input_text)
+
+# # # # # # # # # #         # Determine the investment personality from the chatbot's response
+# # # # # # # # # #         response_text = response.text.lower()
+# # # # # # # # # #         if "conservative" in response_text:
+# # # # # # # # # #             personality = "Conservative Investor"
+# # # # # # # # # #         elif "moderate" in response_text:
+# # # # # # # # # #             personality = "Moderate Investor"
+# # # # # # # # # #         elif "aggressive" in response_text:
+# # # # # # # # # #             personality = "Aggressive Investor"
+# # # # # # # # # #         else:
+# # # # # # # # # #             personality = "Unknown"
+
+# # # # # # # # # #         return personality
+# # # # # # # # # #         # Send the determined investment personality back to the user
+# # # # # # # # # #         #await bot.send_message(chat_id, f"Investment Personality: {personality}")
+
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error generating response: {e}")
+# # # # # # # # # #         #await bot.send_message(chat_id, "Error processing investment personality classification.")
+
+
+# # # # # # # # # # # Handler for document upload
+# # # # # # # # # # async def load_vector_db(file_path):
+# # # # # # # # # #     try:
+# # # # # # # # # #         print("Loading vector database...")
+# # # # # # # # # #         loader = Docx2txtLoader(file_path)
+# # # # # # # # # #         documents = loader.load()
+# # # # # # # # # #         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+# # # # # # # # # #         text_chunks = text_splitter.split_documents(documents)
+# # # # # # # # # #         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
+# # # # # # # # # #         # vector_store = Chroma.from_documents(documents=text_chunks, embedding=embeddings)
         
-# # # # # # # # #         # Send document for financial details
-# # # # # # # # #         await bot.send_message(chat_id, "Please fill in your details with correct information and then upload the document.")
-# # # # # # # # #         file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
-# # # # # # # # #         await bot.send_document(chat_id, document=file, caption="Fill in the Financial Details in this document and upload it here.")
+# # # # # # # # # #         vector_store = FAISS.from_documents(documents=text_chunks, embedding=embeddings)
+# # # # # # # # # #         # index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
 
-# # # # # # # # # async def send_summary_chunks(chat_id, summary):
-# # # # # # # # #     chunks = [summary[i:i+4000] for i in range(0, len(summary), 4000)]
-# # # # # # # # #     for chunk in chunks:
-# # # # # # # # #         await bot.send_message(chat_id, f"Assessment Summary:\n{chunk}")
-
-# # # # # # # # # async def determine_investment_personality(assessment_data):
-# # # # # # # # #     try:
-# # # # # # # # #         input_text = "User Profile:\n"
-# # # # # # # # #         for question, answer in assessment_data.items():
-# # # # # # # # #             input_text += f"{question}: {answer}\n"
-
-# # # # # # # # #         input_text += "\nClassify the user as:\n" \
-# # # # # # # # #                       "- Conservative Investor\n" \
-# # # # # # # # #                       "- Moderate Investor\n" \
-# # # # # # # # #                       "- Aggressive Investor"
-
-# # # # # # # # #         model = genai.GenerativeModel('gemini-pro')
-# # # # # # # # #         response = model.generate_content(input_text)
-# # # # # # # # #         response_text = response.text.lower()
-
-# # # # # # # # #         if "conservative" in response_text:
-# # # # # # # # #             personality = "Conservative Investor"
-# # # # # # # # #         elif "moderate" in response_text:
-# # # # # # # # #             personality = "Moderate Investor"
-# # # # # # # # #         elif "aggressive" in response_text:
-# # # # # # # # #             personality = "Aggressive Investor"
-# # # # # # # # #         else:
-# # # # # # # # #             personality = "Unknown"
-
-# # # # # # # # #         return personality
-
-# # # # # # # # #     except Exception as e:
-# # # # # # # # #         logging.error(f"Error generating response: {e}")
-# # # # # # # # #         return "Unknown"
+# # # # # # # # # #         # vector_store = FAISS(
+# # # # # # # # # #         #     embedding_function=embeddings,
+# # # # # # # # # #         #     index=index,
+# # # # # # # # # #         #     docstore=InMemoryDocstore(),
+# # # # # # # # # #         #     index_to_docstore_id={},
+# # # # # # # # # #         # )
+        
+# # # # # # # # # #         print("Vector database loaded successfully.") 
+# # # # # # # # # #         return vector_store.as_retriever(search_kwargs={"k": 1})
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error loading vector database: {e}")
+# # # # # # # # # #         return None
 
 
+# # # # # # # # # # # change prompt template :
+# # # # # # # # # # async def make_retrieval_chain(retriever):
+# # # # # # # # # #     """
+# # # # # # # # # #     Create a retrieval chain using the provided retriever.
 
-# # # # # # # # # questions = [
-# # # # # # # # #     {
-# # # # # # # # #         "question": "1. You and your friend are betting on a series of coin tosses.\n\nHe always bets ₹2,000 on Heads\nYou always bet ₹2,000 on Tails\n\nWinner of last 8 turns\nYou lost ₹8,000 in the last 4 turns!\n\nIf you were to bet one last time, what would you bet on?",
-# # # # # # # # #         "options": ["Heads", "Tails"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "2. Imagine you are a contestant in a game show, and you are presented with the following choices. What would you prefer?",
-# # # # # # # # #         "options": ["50% chance of winning 15 gold coins", "100% chance of winning 8 gold coins"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "3. In general, how would your best friend describe your risk-taking tendencies?",
-# # # # # # # # #         "options": ["A real gambler", "Willing to take risks after completing adequate research", "Cautious", "Avoids risk as much as possible"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "4. Suppose you could replace your current investment portfolio with this new one:\n\n50% chance of gaining 35% or 50% chance of Loss\n\nIn order to have a 50% chance of gaining +35%, how much loss are you willing to take?",
-# # # # # # # # #         "options": ["-5% to -10%", "-10% to -15%", "-15% to -20%", "-20% to -25%", "-25% to -30%", "-30% to -35%"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "5. Over any 1-year period, what would be the maximum drop in the value of your investment portfolio that you would be comfortable with?",
-# # # # # # # # #         "options": ["<5%", "5% - 10%", "10% - 15%", "15% - 20%", ">20%"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "6. When investing, what do you consider the most?",
-# # # # # # # # #         "options": ["Risk", "Return"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "7. What best describes your attitude?",
-# # # # # # # # #         "options": ["Prefer reasonable returns, can take reasonable risk", "Like higher returns, can take slightly higher risk", "Want to maximize returns, can take significant high risk"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "8. How much monthly investment do you want to do?",
-# # # # # # # # #         "options": ["$1000 to $2000","$3000 to $4000","$4000 to $5000","more than $5000"]
-# # # # # # # # #     },
-# # # # # # # # #     {
-# # # # # # # # #         "question": "9. What is the time horizon for your investment?\nChoose any Range :",
-# # # # # # # # #         "options": ["0 to 1 year","1 to 2 years","3 to 5 years","more than 5 years" ]
-# # # # # # # # #     }
-# # # # # # # # # ]
+# # # # # # # # # #     Args:
+# # # # # # # # # #         retriever (RetrievalQA): A retriever object.
+
+# # # # # # # # # #     Returns:
+# # # # # # # # # #         RetrievalQA: A retrieval chain object.
+# # # # # # # # # #     """
+# # # # # # # # # #     try:
+# # # # # # # # # #         global investment_personality,summary
+# # # # # # # # # #         llm = ChatGoogleGenerativeAI(
+# # # # # # # # # #             #model="gemini-pro",
+# # # # # # # # # #             model = "gemini-1.5-flash",
+# # # # # # # # # #             temperature=0.7,
+# # # # # # # # # #             top_p=0.85,
+# # # # # # # # # #             google_api_key=GOOGLE_API_KEY
+# # # # # # # # # #         )
+
+# # # # # # # # # #         # prompt_template = investment_personality + "\n" + summary + "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+# # # # # # # # # #         #         Respond to the client by the client name.
+# # # # # # # # # #         #         Give Financial Suggestions to the user so that they could do proper responsible investment based on their investment personality.
+# # # # # # # # # #         #         Also give the user detailed information about the investment how to invest,where to invest and how much they
+# # # # # # # # # #         #         should invest in terms of percentage of their investment amount.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+# # # # # # # # # #         #         Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+# # # # # # # # # #         #         investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon.
+# # # # # # # # # #         #         Also give the user minimum and maximum expected growth in dollars for the time horizon .
+# # # # # # # # # #         #         Also explain the user why you are giving them that particular investment suggestion.
+# # # # # # # # # #         #         Give the client suggestions of Investment based on their investment personality that can also help them manage their mortages and other liablilities if they have any,ignore if they dont have any liabilities.
+# # # # # # # # # #         #         Answer in 3-4 lines.\n
+# # # # # # # # # #         #         <context>
+# # # # # # # # # #         #         {context}
+# # # # # # # # # #         #         </context>
+# # # # # # # # # #         #         Question: {input}"""
 
 
+# # # # # # # # # #         prompt_template = investment_personality + "\n" + summary + "\n" + """ Role : You are a Top class highly professional and world's best Savings Advisor for 
+# # # # # # # # # #                 savings related question-answering tasks related to the document.
+# # # # # # # # # #                 Respond to the client by the client name.
+# # # # # # # # # #                 Give Savings Suggestions to the user so that they could do proper responsible savings and save their expenses based on their investment personality and budget if provided.
+# # # # # # # # # #                 Also give the user detailed information about their savings such that they could save more money and save their expenses.
+# # # # # # # # # #                 Give the user minimum and maximum percentage of savings the user can do by reducing their expenses. If the users have given a budget then analyse it and give suggestions based on that.
+# # # # # # # # # #                 Try to imitate human language and talk to the user/client like a human and give personal savings suggestions.
+# # # # # # # # # #                 If the user is having many unnecessary expenses then give the user some advice in a gentle manner without offending the user or hurt their feelings and suggest and advice them to stop or reduce their unnecessary expenses 
+# # # # # # # # # #                 in order to increase their savings.
+# # # # # # # # # #                 Also explain the user why you are giving them that particular savings suggestion.
+# # # # # # # # # #                 Give the client suggestions of savings based on their investment personality that can also help them manage their mortages and other liablilities if they have any,ignore if they dont have any liabilities.
+# # # # # # # # # #                 Answer in 3-4 lines.\n
+# # # # # # # # # #                 <context>
+# # # # # # # # # #                 {context}
+# # # # # # # # # #                 </context>
+# # # # # # # # # #                 Question: {input}"""
 
-# # # # # # # # # # Poll handler to send a poll
-# # # # # # # # # async def send_poll(message: types.Message):
-# # # # # # # # #     poll = await bot.send_poll(
-# # # # # # # # #         chat_id=message.chat.id,
-# # # # # # # # #         question="How Can I Help you today ?",
-# # # # # # # # #         options=["Investment Personality", "Tax Details", "Savings and Wealth Management", "Debt Repayment Strategies"],
-# # # # # # # # #         type="regular",
-# # # # # # # # #         is_anonymous=False
-# # # # # # # # #     ) # question="What would you like to explore?",
+# # # # # # # # # #         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
 
-# # # # # # # # #     logging.info(f"Poll sent with ID {poll.poll.id}")
-# # # # # # # # #     print(f"Poll sent with ID {poll.poll.id}")
-# # # # # # # # #     # Store poll id to track user's choice later
-# # # # # # # # #     user_responses[message.from_user.id] = {'poll_id': poll.poll.id}
+# # # # # # # # # #         document_chain = create_stuff_documents_chain(llm, llm_prompt)
+        
+# # # # # # # # # #         combine_docs_chain = None  
 
-# # # # # # # # # # Poll Answer handler
-# # # # # # # # # @router.poll_answer()
-# # # # # # # # # async def handle_poll_answer(poll_answer: PollAnswer):
-# # # # # # # # #     logging.info(f"Poll answer received from user {poll_answer.user.id}: selected option {poll_answer.option_ids[0]}")
-# # # # # # # # #     print(f"Poll answer received from user {poll_answer.user.id} : selected option {poll_answer.option_ids[0]}")
-# # # # # # # # #     chat_id = poll_answer.user.id
-# # # # # # # # #     selected_option_id = poll_answer.option_ids[0]
+# # # # # # # # # #         if retriever is not None :  
+# # # # # # # # # #             retriever_chain = create_retrieval_chain(retriever,document_chain) 
+# # # # # # # # # #             print(retriever_chain)
+# # # # # # # # # #             return retriever_chain
+# # # # # # # # # #         else:
+# # # # # # # # # #             print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
+# # # # # # # # # #             return None
+
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error in creating chain: {e}")
+# # # # # # # # # #         return None
+
+# # # # # # # # # # from aiogram.filters import Filter
+
+# # # # # # # # # # # @router.message(F.document)
+# # # # # # # # # # @dp.message(F.document)
+# # # # # # # # # # async def handle_document(message: types.Message):
+# # # # # # # # # #     global summary,investment_personality  
+
+# # # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # # #     await message.reply("File Received") 
+# # # # # # # # # #     # Obtain file information
+# # # # # # # # # #     file_id = message.document.file_id
+# # # # # # # # # #     file = await bot.get_file(file_id)
+# # # # # # # # # #     file_path = file.file_path
     
-# # # # # # # # #     logging.info(f"Poll answer received from user {chat_id}: selected option {selected_option_id}")
-# # # # # # # # #     print(f"Poll answer received from user {chat_id} : selected option {selected_option_id}")
+# # # # # # # # # #     # Download the file
+# # # # # # # # # #     await bot.download_file(file_path, "data/uploaded_file")
+    
+# # # # # # # # # #     # Process the uploaded document
+# # # # # # # # # #     extracted_text = await process_document("data/uploaded_file")
+# # # # # # # # # #     # print(extracted_text)
 
-# # # # # # # # #     # Mapping of options to functions with chat_id passed
-# # # # # # # # #     options_map = {
-# # # # # # # # #         0: lambda: start_assessment(chat_id),
-# # # # # # # # #         1: lambda: start_assessment(chat_id),
-# # # # # # # # #         2: lambda: start_assessment(chat_id),
-# # # # # # # # #         3: lambda: start_assessment(chat_id),
-# # # # # # # # #     }
+# # # # # # # # # #     if extracted_text:
+# # # # # # # # # #         # Load vector database (assuming this is part of setting up the retriever)
+# # # # # # # # # #         print("Retriever being loaded ")
+# # # # # # # # # #         retriever = await load_vector_db("data/uploaded_file")
+# # # # # # # # # #         file_path = 'data/uploaded_file'
+# # # # # # # # # #         client_name, validation_errors = await validate_process_document(file_path)
 
-# # # # # # # # #     if selected_option_id in options_map:
-# # # # # # # # #         # Call the corresponding function
-# # # # # # # # #         logging.info(f"Starting process for option {selected_option_id}")
-# # # # # # # # #         print(f"Starting process for option {selected_option_id}")
-# # # # # # # # #         await options_map[selected_option_id]()
-# # # # # # # # #     else:
-# # # # # # # # #         logging.warning(f"Selected option {selected_option_id} is not in the options_map")
-# # # # # # # # #         print(f"Selected option {selected_option_id} is not in the options_map")
+# # # # # # # # # #         # Print results
+# # # # # # # # # #         print(f"Client Name: {client_name}")
+# # # # # # # # # #         if validation_errors:
+# # # # # # # # # #             print("**Validation Errors:**")
+# # # # # # # # # #             for error in validation_errors:
+# # # # # # # # # #                 print(error)
+# # # # # # # # # #         else:
+# # # # # # # # # #             print("All fields are filled correctly.")
+# # # # # # # # # #         if client_name == None:
+# # # # # # # # # #             try:
+# # # # # # # # # #                 await message.reply("Processing the uploaded image")
+# # # # # # # # # #                 await handle_image(message) 
+# # # # # # # # # #                 return 
+# # # # # # # # # #             except Exception as e:
+# # # # # # # # # #                 await message.reply("error processing uploaded image")
+# # # # # # # # # #                 print(e)
+# # # # # # # # # #         await message.reply(f"Thanks for providing me the details, {client_name}.I have processed the file and now I will provide you some Savings suggestions based on the details that you have provided.")
+
+# # # # # # # # # #         if retriever is None:
+# # # # # # # # # #             await message.reply("The retrieval chain is not set up. Please upload a document first.")
+# # # # # # # # # #             return
+
+# # # # # # # # # #         # Check if a valid chain can be created
+# # # # # # # # # #         chain = await make_retrieval_chain(retriever)
+# # # # # # # # # #         if chain is None:
+# # # # # # # # # #             await message.reply("Failed to create the retrieval chain.")
+# # # # # # # # # #             return
+        
+# # # # # # # # # #         try:     
+# # # # # # # # # #             query = summary + "\n" + investment_personality # + "\n"  #extracted_text + "\n" + task
+        
+# # # # # # # # # #             response = chain.invoke({"input": query})
+# # # # # # # # # #             print(response['answer'])
+# # # # # # # # # #             global chat_history
+# # # # # # # # # #             chat_history = response['answer'] 
+# # # # # # # # # #             print(f"\n Chat History : {chat_history}")
+# # # # # # # # # #             format_response = markdown_to_text(response['answer'])
+
+# # # # # # # # # #             # Store the extracted_text in chat history
+# # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': extracted_text})
+        
+# # # # # # # # # #             # Store the response in chat history
+# # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+
+# # # # # # # # # #             await message.reply(format_response)
+# # # # # # # # # #             # await message.reply(response['answer'])
+
+# # # # # # # # # #         except Exception as e:
+# # # # # # # # # #             print(f"Error invoking retrieval chain on attempt : {e}")
+# # # # # # # # # #             await bot.send_message(chat_id, "Error invoking retrieval. Please try again later.")
+
+# # # # # # # # # #     else:
+# # # # # # # # # #         await message.reply("Failed to process the uploaded file.")
+    
+
+# # # # # # # # # # # Function to extract data from LLM response
+# # # # # # # # # # def extract_data_from_response(response):
+# # # # # # # # # #     try:
+# # # # # # # # # #         # Locate the JSON-like data in the response
+# # # # # # # # # #         json_start = response.find("{")
+# # # # # # # # # #         json_end = response.rfind("}") + 1
+        
+# # # # # # # # # #         if json_start == -1 or json_end == -1:
+# # # # # # # # # #             raise ValueError("No JSON data found in the response.")
+        
+# # # # # # # # # #         json_data = response[json_start:json_end]
+        
+# # # # # # # # # #         # Parse the JSON data
+# # # # # # # # # #         data = json.loads(json_data.replace("'", "\""))
+# # # # # # # # # #         print(data)
+# # # # # # # # # #         return data
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         logging.error(f"Error extracting data: {e}")
+# # # # # # # # # #         return None
+
+ 
+
+
+# # # # # # # # # # def extract_allocations_from_json(json_data,chat_id):
+# # # # # # # # # #     allocations = {}
+# # # # # # # # # #     for entry in json_data.get(str(chat_id), []):
+# # # # # # # # # #         if entry['role'] == 'bot':
+# # # # # # # # # #             message = entry['message']
+# # # # # # # # # #             lines = message.split('\n')
+# # # # # # # # # #             current_category = None
+
+# # # # # # # # # #             for line in lines:
+# # # # # # # # # #                 match = re.match(r'^(.*?):\s*(\d+)%$', line)
+# # # # # # # # # #                 if match:
+# # # # # # # # # #                     category, percent = match.groups()
+# # # # # # # # # #                     allocations[category] = []
+# # # # # # # # # #                     current_category = category
+# # # # # # # # # #                 elif current_category and re.match(r'.*\d+%', line):
+# # # # # # # # # #                     subcategory_match = re.match(r'^(.*?)(\d+)%$', line)
+# # # # # # # # # #                     if subcategory_match:
+# # # # # # # # # #                         subcategory, percent = subcategory_match.groups()
+# # # # # # # # # #                         allocations[current_category].append((subcategory.strip(), float(percent)))
+
+# # # # # # # # # #     return allocations
+
+
+# # # # # # # # # # def create_pie_chart(allocations, chat_id):
+# # # # # # # # # #     labels = []
+# # # # # # # # # #     sizes = []
+# # # # # # # # # #     for category, subcategories in allocations.items():
+# # # # # # # # # #         for subcategory, percent in subcategories:
+# # # # # # # # # #             labels.append(f"{category} - {subcategory}")
+# # # # # # # # # #             sizes.append(percent)
+    
+# # # # # # # # # #     if sizes:
+# # # # # # # # # #         fig, ax = plt.subplots()
+# # # # # # # # # #         ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140)
+# # # # # # # # # #         ax.axis('equal')
+        
+# # # # # # # # # #         plt.title("Investment Allocation")
+# # # # # # # # # #         chart_path = f"data/investment_allocation_{chat_id}.png"
+# # # # # # # # # #         plt.savefig(chart_path)
+# # # # # # # # # #         plt.close()
+        
+# # # # # # # # # #         return chart_path
+# # # # # # # # # #     else:
+# # # # # # # # # #         return None
+  
+
+# # # # # # # # # # async def process_document(file_path):
+# # # # # # # # # #     try:
+# # # # # # # # # #         print("Processing the document")
+# # # # # # # # # #         file_type = filetype.guess(file_path)
+# # # # # # # # # #         if file_type is not None:
+# # # # # # # # # #             if file_type.mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+# # # # # # # # # #                 # return extract_text_from_word(file_path)
+# # # # # # # # # #                 return extract_text_and_tables_from_word(file_path)
+# # # # # # # # # #             elif file_type.mime == "application/pdf":
+# # # # # # # # # #                 return extract_text_from_pdf(file_path)
+# # # # # # # # # #         return None
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error processing document: {e}")
+# # # # # # # # # #         return None
+
+# # # # # # # # # # def extract_text_from_pdf(pdf_file_path):
+# # # # # # # # # #     try:
+# # # # # # # # # #         print("Processing pdf file")
+# # # # # # # # # #         with open(pdf_file_path, "rb") as pdf_file:
+# # # # # # # # # #             pdf_reader = PyPDF2.PdfFileReader(pdf_file)
+# # # # # # # # # #             text_content = []
+# # # # # # # # # #             for page_num in range(pdf_reader.numPages):
+# # # # # # # # # #                 page = pdf_reader.getPage(page_num)
+# # # # # # # # # #                 text_content.append(page.extract_text())
+# # # # # # # # # #             return "\n".join(text_content)
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error extracting text from PDF: {e}")
+# # # # # # # # # #         return None
+
+
+# # # # # # # # # # import re
+# # # # # # # # # # import docx
+
+# # # # # # # # # # def extract_text_and_tables_from_word(docx_file_path):
+# # # # # # # # # #     """
+# # # # # # # # # #     Extracts text and tables from a Word document (.docx).
+
+# # # # # # # # # #     Args:
+# # # # # # # # # #         docx_file_path (str): Path to the Word document file.
+
+# # # # # # # # # #     Returns:
+# # # # # # # # # #         tuple: Extracted text content and tables from the document.
+# # # # # # # # # #     """
+# # # # # # # # # #     try:
+# # # # # # # # # #         print("Extracting text and tables from word file")
+# # # # # # # # # #         doc = docx.Document(docx_file_path)
+# # # # # # # # # #         text_content = []
+# # # # # # # # # #         tables_content = []
+
+# # # # # # # # # #         for para in doc.paragraphs:
+# # # # # # # # # #             text_content.append(para.text)
+
+# # # # # # # # # #         for table in doc.tables:
+# # # # # # # # # #             table_data = []
+# # # # # # # # # #             for row in table.rows:
+# # # # # # # # # #                 row_data = []
+# # # # # # # # # #                 for cell in row.cells:
+# # # # # # # # # #                     row_data.append(cell.text.strip())
+# # # # # # # # # #                 table_data.append(row_data)
+# # # # # # # # # #             tables_content.append(table_data)
+# # # # # # # # # #         print("Extracted text from word file")
+# # # # # # # # # #         return "\n".join(text_content), tables_content
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error extracting text and tables from Word document: {e}")
+# # # # # # # # # #         return None, None
+
+# # # # # # # # # # def validate_document_content(text, tables):
+# # # # # # # # # #     """
+# # # # # # # # # #     Validates the content of the document.
+
+# # # # # # # # # #     Args:
+# # # # # # # # # #         text (str): Extracted text content from the document.
+# # # # # # # # # #         tables (list): Extracted tables content from the document.
+
+# # # # # # # # # #     Returns:
+# # # # # # # # # #         tuple: Client name and validation errors.
+# # # # # # # # # #     """
+# # # # # # # # # #     errors = []
+    
+# # # # # # # # # #     # Extract client name
+# # # # # # # # # #     client_name_match = re.search(r"Client Name:\s*([^\n]+)", text, re.IGNORECASE)
+# # # # # # # # # #     client_name = client_name_match.group(1).strip().split(" ")[0] if client_name_match else "Unknown"
+
+# # # # # # # # # #     # Define required sections
+# # # # # # # # # #     required_sections = [
+# # # # # # # # # #         "YOUR RETIREMENT GOAL",
+# # # # # # # # # #         "YOUR OTHER MAJOR GOALS",
+# # # # # # # # # #         "YOUR ASSETS AND LIABILITIES",
+# # # # # # # # # #         "MY LIABILITIES",
+# # # # # # # # # #         "YOUR CURRENT ANNUAL INCOME"
+# # # # # # # # # #     ]
+
+# # # # # # # # # #     # Check for the presence of required sections
+# # # # # # # # # #     for section in required_sections:
+# # # # # # # # # #         if section not in text:
+# # # # # # # # # #             errors.append(f"* {section} section missing.")
+    
+# # # # # # # # # #     # Define table field checks
+# # # # # # # # # #     table_checks = {
+# # # # # # # # # #         "YOUR RETIREMENT GOAL": [
+# # # # # # # # # #             r"When do you plan to retire\? \(age or date\)",
+# # # # # # # # # #             r"Social Security Benefit \(include expected start date\)",
+# # # # # # # # # #             r"Pension Benefit \(include expected start date\)",
+# # # # # # # # # #             r"Other Expected Income \(rental, part-time work, etc.\)",
+# # # # # # # # # #             r"Estimated Annual Retirement Expense"
+# # # # # # # # # #         ],
+# # # # # # # # # #         "YOUR OTHER MAJOR GOALS": [
+# # # # # # # # # #             r"GOAL", r"COST", r"WHEN"
+# # # # # # # # # #         ],
+# # # # # # # # # #         "YOUR ASSETS AND LIABILITIES": [
+# # # # # # # # # #             r"Cash/bank accounts", r"Home", r"Other Real Estate", r"Business",
+# # # # # # # # # #             r"Current Value", r"Annual Contributions"
+# # # # # # # # # #         ],
+# # # # # # # # # #         "MY LIABILITIES": [
+# # # # # # # # # #             r"Balance", r"Interest Rate", r"Monthly Payment"
+# # # # # # # # # #         ]
+# # # # # # # # # #     }
+
+# # # # # # # # # #     # Validate table content
+# # # # # # # # # #     for section, checks in table_checks.items():
+# # # # # # # # # #         section_found = False
+# # # # # # # # # #         for table in tables:
+# # # # # # # # # #             table_text = "\n".join(["\t".join(row) for row in table])
+# # # # # # # # # #             if section in table_text:
+# # # # # # # # # #                 section_found = True
+# # # # # # # # # #                 for check in checks:
+# # # # # # # # # #                     if not re.search(check, table_text, re.IGNORECASE):
+# # # # # # # # # #                         errors.append(f"* Missing or empty field in {section} section: {check}")
+# # # # # # # # # #                 break
+# # # # # # # # # #         if not section_found:
+# # # # # # # # # #             errors.append(f"* {section} section missing.")
+
+# # # # # # # # # #     return client_name, errors
+
+# # # # # # # # # # async def validate_process_document(file_path):
+# # # # # # # # # #     try:
+# # # # # # # # # #         print("Validating process document : ")
+# # # # # # # # # #         text, tables = extract_text_and_tables_from_word(file_path)
+# # # # # # # # # #         if text is not None and tables is not None:
+# # # # # # # # # #             client_name, errors = validate_document_content(text, tables)
+# # # # # # # # # #             return client_name, errors
+# # # # # # # # # #         return None, ["Error processing document."]
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         print(f"Error processing document: {e}")
+# # # # # # # # # #         return None, [f"Error processing document: {e}"]
+
+# # # # # # # # # # @dp.message()
+# # # # # # # # # # async def main_bot(message: types.Message):
+# # # # # # # # # #     global retriever, extracted_text, investment_personality, summary, chat_history
+
+# # # # # # # # # #     chat_id = message.chat.id
+
+# # # # # # # # # #     if chat_id in states and states[chat_id] < len(questions):
+# # # # # # # # # #         question_index = states[chat_id]
+# # # # # # # # # #         answer = message.text
+# # # # # # # # # #         user_responses[questions[question_index]] = answer
+# # # # # # # # # #         states[chat_id] += 1
+# # # # # # # # # #         await ask_next_question(chat_id, question_index + 1)
+# # # # # # # # # #     elif message.text:
+# # # # # # # # # #         try:
+# # # # # # # # # #             task = """You are a Financial Expert and Wealth Advisor.
+# # # # # # # # # #                 You also a Stock Market Expert. You know everything about stock market trends and patterns.
+# # # # # # # # # #                 Provide financial advice or Stock Related advice and suggestions based on the user's query.
+# # # # # # # # # #                 Consider user's investment personality and Financial Details if provided.
+# # # # # # # # # #                 Address the user by their name(client_name: Emily in our case but if any other name is give refer to that) if provided.
+# # # # # # # # # #                 Include detailed information about the investment, where to invest, how much to invest, 
+# # # # # # # # # #                 expected returns, and why you are giving this advice.
+# # # # # # # # # #                 As you are a Wealth Advisor if user asks queries related to saving taxes or calculating taxes refer to the 
+# # # # # # # # # #                 US Tax Laws given by the IRS and based on that information calculate the taxes for the user 
+# # # # # # # # # #                 consider the information shared by the user such as their annual income and their monthly investment if provided,
+# # # # # # # # # #                 also give advice to the user on how they can save their taxes.
+# # # # # # # # # #                 Include a disclaimer to monitor and rebalance investments regularly based on risk tolerance."""
+            
+# # # # # # # # # #             # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + message.text
+# # # # # # # # # #             # query = chat_history_text + "\n" + query
+
+# # # # # # # # # #             # Include chat history
+# # # # # # # # # #             chat_history = read_chat_history(chat_id)
+# # # # # # # # # #             chat_history_text = '\n'.join([f"{entry['role']}: {entry['message']}" for entry in chat_history])
+# # # # # # # # # #             # history.append(chat_history_text)
+# # # # # # # # # #             query = task + "\n" + investment_personality + "\n" + chat_history_text + "\n" + message.text
+
+# # # # # # # # # #             model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # # # # # #             chat = model.start_chat(history=[])
+# # # # # # # # # #             response = chat.send_message(query)
+
+# # # # # # # # # #             # Enhanced logging for debugging
+# # # # # # # # # #             logging.info(f"Model response: {response}")
+# # # # # # # # # #             format_response = markdown_to_text(response.text) #(response_text) #response.result
+
+# # # # # # # # # #             # Store the response in chat history
+# # # # # # # # # #             write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+# # # # # # # # # #             await message.reply(format_response)
+
+# # # # # # # # # #         except Exception as e:
+# # # # # # # # # #             logging.error(f"Error processing general chat message: {e}")
+# # # # # # # # # #             await message.reply("Failed to process your request.")
+
+
+
+# # # # # # # # # # # markdown to text :
+# # # # # # # # # # def markdown_to_text(md):
+# # # # # # # # # #     # Simple conversion for markdown to plain text
+# # # # # # # # # #     md = md.replace('**', '')
+# # # # # # # # # #     md = md.replace('*', '')
+# # # # # # # # # #     md = md.replace('_', '')
+# # # # # # # # # #     md = md.replace('#', '')
+# # # # # # # # # #     md = md.replace('`', '')
+# # # # # # # # # #     return md.strip()
+
+
+# # # # # # # # # # from aiogram.types.input_file import BufferedInputFile
+# # # # # # # # # # from aiogram import BaseMiddleware
+# # # # # # # # # # # from aiogram.dispatcher.router import Router
+# # # # # # # # # # from PIL import Image
+
+# # # # # # # # # # # Function to handle image messages
+# # # # # # # # # # # @dp.message(F.photo)
+# # # # # # # # # # # @router.message(F.photo)
+# # # # # # # # # # import PIL.Image
+
+# # # # # # # # # # async def handle_image(message: types.Message):
+# # # # # # # # # #     global investment_personality, chat_history
+
+# # # # # # # # # #     chat_id = message.chat.id
+# # # # # # # # # #     # Handle image inputs
+# # # # # # # # # #     try:
+# # # # # # # # # #         # Obtain file information
+# # # # # # # # # #         try:
+# # # # # # # # # #             photo_id = message.document.file_id
+# # # # # # # # # #             photo = await bot.get_file(photo_id)
+# # # # # # # # # #             photo_path = photo.file_path
+# # # # # # # # # #             # Download the file
+# # # # # # # # # #             photo_file = await bot.download_file(photo_path, "data/uploaded_image.png")
+
+# # # # # # # # # #         except Exception as e:
+# # # # # # # # # #             print(f"Error downloading image: {e}")
+# # # # # # # # # #             await bot.send_message(chat_id, "Error processing image. Please try again.")
+# # # # # # # # # #             return
+        
+# # # # # # # # # #         # task = """Give Financial Suggestions to the user so that they could do proper responsible investment based on their investment personality.
+# # # # # # # # # #         #             Also give the user detailed information about the investment how to invest, where to invest and how much they
+# # # # # # # # # #         #             should invest in terms of percentage of their investment amount. Give the user detailed information about the returns on their 
+# # # # # # # # # #         #             investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compounded returns on their 
+# # # # # # # # # #         #             investment. Also explain the user why you are giving them that particular
+# # # # # # # # # #         #             investment suggestion. Give user Disclaimer to keep monitoring their investments regularly and rebalance it if necessary.
+# # # # # # # # # #         #             User should also invest as per their risk tolerance level. Since you are the financial advisor don't ask user to consult anyone else.
+# # # # # # # # # #         #             So don't mention user to consult to a financial expert."""
+
+# # # # # # # # # #         task = """You are a Financial Expert.You will be provided with a Financial Form from Boston Harbor.
+# # # # # # # # # #                 If you recieve any other image tell the user to Upload the Images of the form or upload the word document of the form.
+# # # # # # # # # #                 You are supposed to Respond to the user's Image query and If they ask for any information provide them the information in Detail.
+# # # # # # # # # #                 Be helpful and informative.Give proper information of any Financial terms the user may ask you.Address the user by their Client Name if provided.
+# # # # # # # # # #                 Also provide the user helpful links so that they can refer to the link for more information.
+# # # # # # # # # #                 If the image provided is not related to Finance then just answer about the image and any caption if provided.
+# # # # # # # # # #                 """
+
+# # # # # # # # # #         prompt = message.caption if message.caption else ""  # Use the photo caption if available
+# # # # # # # # # #         # query = task + "\n" + investment_personality + "\n" + chat_history + "\n" + prompt
+# # # # # # # # # #         query = task + prompt 
+
+# # # # # # # # # #         image =  PIL.Image.open('data/uploaded_image.png') #(photo_file) 
+# # # # # # # # # #         model = genai.GenerativeModel('gemini-1.5-flash')
+# # # # # # # # # #         response = model.generate_content(image)
+# # # # # # # # # #         await bot.send_message(chat_id,"I will describe the image that was uploaded")
+# # # # # # # # # #         format_response = markdown_to_text(response.text)
+# # # # # # # # # #         await message.reply(format_response)
+# # # # # # # # # #         # await message.reply(response.text)
+
+# # # # # # # # # #         # chat = model.start_chat(history=[])
+# # # # # # # # # #         # response = chat.send_message(query)
+# # # # # # # # # #         # format_response = markdown_to_text(response.result)
+# # # # # # # # # #         # await message.reply(format_response)
+
+# # # # # # # # # #         response = model.generate_content([query, image])
+# # # # # # # # # #         format_response = markdown_to_text(response.text)
+
+# # # # # # # # # #         # Store the response in chat history
+# # # # # # # # # #         write_chat_history(chat_id, {'role': 'bot', 'message': format_response})
+
+# # # # # # # # # #         await message.reply(format_response)
+# # # # # # # # # #         # await message.reply(response.text) 
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         logging.error(f"Error generating response for the image: {e}")
+# # # # # # # # # #         await message.reply("There was an error generating response for the image. Please try again later.")
+# # # # # # # # # #     # await message.reply("Cant process the image")
+# # # # # # # # # #     # return
+
+
+
+# # # # # # # # # # from aiogram.filters import command
+# # # # # # # # # # from aiogram.types import bot_command
+# # # # # # # # # # import markdown
+# # # # # # # # # # from bs4 import BeautifulSoup
+
+# # # # # # # # # # def markdown_to_text(markdown_text):
+# # # # # # # # # #     # Convert markdown to HTML
+# # # # # # # # # #     html = markdown.markdown(markdown_text)
+# # # # # # # # # #     # Parse the HTML
+# # # # # # # # # #     soup = BeautifulSoup(html, 'html.parser')
+# # # # # # # # # #     # Extract plain text
+# # # # # # # # # #     text = soup.get_text()
+# # # # # # # # # #     return text
+
+
+# # # # # # # # # # # if __name__ == "__main__":
+# # # # # # # # # # #     executor.start_polling(dispatcher, skip_updates=True)
+
+# # # # # # # # # # async def main() -> None:
+# # # # # # # # # #     # Initialize Bot instance with default bot properties which will be passed to all API calls
+# # # # # # # # # #     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+# # # # # # # # # #     # And the run events dispatching
+# # # # # # # # # #     await dp.start_polling(bot)
+
+
+# # # # # # # # # # if __name__ == "__main__":
+# # # # # # # # # #     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+# # # # # # # # # #     asyncio.run(main())
+
+
+
+
+
+# # # # # # # # # # previous polling mechanism :
+
+
+
+# # # # # # # # # # # Function to ask the next question
+# # # # # # # # # # async def ask_next_question(chat_id, question_index):
+# # # # # # # # # #     if question_index < len(questions):
+# # # # # # # # # #         question_data = questions[question_index]
+
+# # # # # # # # # #         if question_data["options"]:  # If there are predefined options, send a poll
+# # # # # # # # # #             poll = await bot.send_poll(
+# # # # # # # # # #                 chat_id=chat_id,
+# # # # # # # # # #                 question=question_data["question"],
+# # # # # # # # # #                 options=question_data["options"],
+# # # # # # # # # #                 type="regular",
+# # # # # # # # # #                 is_anonymous=False
+# # # # # # # # # #             )
+# # # # # # # # # #             logging.info(f"Poll sent with ID {poll.poll.id} for question {question_index + 1}")
+# # # # # # # # # #             user_responses[chat_id] = {"poll_id": poll.poll.id, "question_index": question_index}
+# # # # # # # # # #             # question_index += 1
+# # # # # # # # # #         else:  # If there are no predefined options, ask as a simple text question
+# # # # # # # # # #             await bot.send_message(chat_id, question_data["question"])
+# # # # # # # # # #             states[chat_id] = question_index
+
+# # # # # # # # # #     else:
+# # # # # # # # # #         # No more questions, finish assessment
+# # # # # # # # # #         await finish_assessment(chat_id)
+
+# # # # # # # # # # # Poll Answer handler
+# # # # # # # # # # @router.poll_answer()
+# # # # # # # # # # async def handle_assessment_poll_answer(poll_answer: PollAnswer):
+# # # # # # # # # #     logging.info(f"Poll answer received from user {poll_answer.user.id}: selected option {poll_answer.option_ids[0]}")
+# # # # # # # # # #     chat_id = poll_answer.user.id
+# # # # # # # # # #     question_index = user_responses[chat_id]["question_index"]
+    
+# # # # # # # # # #     selected_option = questions[question_index]["options"][poll_answer.option_ids[0]]
+# # # # # # # # # #     user_responses[chat_id][f"answer_{question_index + 1}"] = selected_option
+
+# # # # # # # # # #     # Proceed to the next question
+# # # # # # # # # #     await ask_next_question(chat_id, question_index + 1)
+
+# # # # # # # # # # async def finish_assessment(chat_id):
+# # # # # # # # # #     if chat_id in states and states[chat_id] == len(questions):
+# # # # # # # # # #         await bot.send_message(chat_id, "Assessment completed. Thank you!")
+
+# # # # # # # # # #         # Process and determine investment personality
+# # # # # # # # # #         investment_personality = await determine_investment_personality(user_responses)
+
+# # # # # # # # # #         # Inform the user about their investment personality
+# # # # # # # # # #         await bot.send_message(chat_id, f"Your investment personality: {investment_personality}")
+
+# # # # # # # # # #         # Summarize collected information
+# # # # # # # # # #         summary = "\n".join([f"{q}: {a}" for q, a in user_responses.items()])
+# # # # # # # # # #         summary = summary + "\n" + "Your investment personality:" + investment_personality
+# # # # # # # # # #         await send_summary_chunks(chat_id, summary)
+        
+# # # # # # # # # #         # Send document for financial details
+# # # # # # # # # #         await bot.send_message(chat_id, "Please fill in your details with correct information and then upload the document.")
+# # # # # # # # # #         file = FSInputFile("data\Your Financial Profile.docx", filename="Your Financial Profile.docx")
+# # # # # # # # # #         await bot.send_document(chat_id, document=file, caption="Fill in the Financial Details in this document and upload it here.")
+
+# # # # # # # # # # async def send_summary_chunks(chat_id, summary):
+# # # # # # # # # #     chunks = [summary[i:i+4000] for i in range(0, len(summary), 4000)]
+# # # # # # # # # #     for chunk in chunks:
+# # # # # # # # # #         await bot.send_message(chat_id, f"Assessment Summary:\n{chunk}")
+
+# # # # # # # # # # async def determine_investment_personality(assessment_data):
+# # # # # # # # # #     try:
+# # # # # # # # # #         input_text = "User Profile:\n"
+# # # # # # # # # #         for question, answer in assessment_data.items():
+# # # # # # # # # #             input_text += f"{question}: {answer}\n"
+
+# # # # # # # # # #         input_text += "\nClassify the user as:\n" \
+# # # # # # # # # #                       "- Conservative Investor\n" \
+# # # # # # # # # #                       "- Moderate Investor\n" \
+# # # # # # # # # #                       "- Aggressive Investor"
+
+# # # # # # # # # #         model = genai.GenerativeModel('gemini-pro')
+# # # # # # # # # #         response = model.generate_content(input_text)
+# # # # # # # # # #         response_text = response.text.lower()
+
+# # # # # # # # # #         if "conservative" in response_text:
+# # # # # # # # # #             personality = "Conservative Investor"
+# # # # # # # # # #         elif "moderate" in response_text:
+# # # # # # # # # #             personality = "Moderate Investor"
+# # # # # # # # # #         elif "aggressive" in response_text:
+# # # # # # # # # #             personality = "Aggressive Investor"
+# # # # # # # # # #         else:
+# # # # # # # # # #             personality = "Unknown"
+
+# # # # # # # # # #         return personality
+
+# # # # # # # # # #     except Exception as e:
+# # # # # # # # # #         logging.error(f"Error generating response: {e}")
+# # # # # # # # # #         return "Unknown"
+
+
+
+# # # # # # # # # # questions = [
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "1. You and your friend are betting on a series of coin tosses.\n\nHe always bets ₹2,000 on Heads\nYou always bet ₹2,000 on Tails\n\nWinner of last 8 turns\nYou lost ₹8,000 in the last 4 turns!\n\nIf you were to bet one last time, what would you bet on?",
+# # # # # # # # # #         "options": ["Heads", "Tails"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "2. Imagine you are a contestant in a game show, and you are presented with the following choices. What would you prefer?",
+# # # # # # # # # #         "options": ["50% chance of winning 15 gold coins", "100% chance of winning 8 gold coins"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "3. In general, how would your best friend describe your risk-taking tendencies?",
+# # # # # # # # # #         "options": ["A real gambler", "Willing to take risks after completing adequate research", "Cautious", "Avoids risk as much as possible"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "4. Suppose you could replace your current investment portfolio with this new one:\n\n50% chance of gaining 35% or 50% chance of Loss\n\nIn order to have a 50% chance of gaining +35%, how much loss are you willing to take?",
+# # # # # # # # # #         "options": ["-5% to -10%", "-10% to -15%", "-15% to -20%", "-20% to -25%", "-25% to -30%", "-30% to -35%"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "5. Over any 1-year period, what would be the maximum drop in the value of your investment portfolio that you would be comfortable with?",
+# # # # # # # # # #         "options": ["<5%", "5% - 10%", "10% - 15%", "15% - 20%", ">20%"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "6. When investing, what do you consider the most?",
+# # # # # # # # # #         "options": ["Risk", "Return"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "7. What best describes your attitude?",
+# # # # # # # # # #         "options": ["Prefer reasonable returns, can take reasonable risk", "Like higher returns, can take slightly higher risk", "Want to maximize returns, can take significant high risk"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "8. How much monthly investment do you want to do?",
+# # # # # # # # # #         "options": ["$1000 to $2000","$3000 to $4000","$4000 to $5000","more than $5000"]
+# # # # # # # # # #     },
+# # # # # # # # # #     {
+# # # # # # # # # #         "question": "9. What is the time horizon for your investment?\nChoose any Range :",
+# # # # # # # # # #         "options": ["0 to 1 year","1 to 2 years","3 to 5 years","more than 5 years" ]
+# # # # # # # # # #     }
+# # # # # # # # # # ]
+
+
+
+# # # # # # # # # # # Poll handler to send a poll
+# # # # # # # # # # async def send_poll(message: types.Message):
+# # # # # # # # # #     poll = await bot.send_poll(
+# # # # # # # # # #         chat_id=message.chat.id,
+# # # # # # # # # #         question="How Can I Help you today ?",
+# # # # # # # # # #         options=["Investment Personality", "Tax Details", "Savings and Wealth Management", "Debt Repayment Strategies"],
+# # # # # # # # # #         type="regular",
+# # # # # # # # # #         is_anonymous=False
+# # # # # # # # # #     ) # question="What would you like to explore?",
+
+# # # # # # # # # #     logging.info(f"Poll sent with ID {poll.poll.id}")
+# # # # # # # # # #     print(f"Poll sent with ID {poll.poll.id}")
+# # # # # # # # # #     # Store poll id to track user's choice later
+# # # # # # # # # #     user_responses[message.from_user.id] = {'poll_id': poll.poll.id}
+
+# # # # # # # # # # # Poll Answer handler
+# # # # # # # # # # @router.poll_answer()
+# # # # # # # # # # async def handle_poll_answer(poll_answer: PollAnswer):
+# # # # # # # # # #     logging.info(f"Poll answer received from user {poll_answer.user.id}: selected option {poll_answer.option_ids[0]}")
+# # # # # # # # # #     print(f"Poll answer received from user {poll_answer.user.id} : selected option {poll_answer.option_ids[0]}")
+# # # # # # # # # #     chat_id = poll_answer.user.id
+# # # # # # # # # #     selected_option_id = poll_answer.option_ids[0]
+    
+# # # # # # # # # #     logging.info(f"Poll answer received from user {chat_id}: selected option {selected_option_id}")
+# # # # # # # # # #     print(f"Poll answer received from user {chat_id} : selected option {selected_option_id}")
+
+# # # # # # # # # #     # Mapping of options to functions with chat_id passed
+# # # # # # # # # #     options_map = {
+# # # # # # # # # #         0: lambda: start_assessment(chat_id),
+# # # # # # # # # #         1: lambda: start_assessment(chat_id),
+# # # # # # # # # #         2: lambda: start_assessment(chat_id),
+# # # # # # # # # #         3: lambda: start_assessment(chat_id),
+# # # # # # # # # #     }
+
+# # # # # # # # # #     if selected_option_id in options_map:
+# # # # # # # # # #         # Call the corresponding function
+# # # # # # # # # #         logging.info(f"Starting process for option {selected_option_id}")
+# # # # # # # # # #         print(f"Starting process for option {selected_option_id}")
+# # # # # # # # # #         await options_map[selected_option_id]()
+# # # # # # # # # #     else:
+# # # # # # # # # #         logging.warning(f"Selected option {selected_option_id} is not in the options_map")
+# # # # # # # # # #         print(f"Selected option {selected_option_id} is not in the options_map")

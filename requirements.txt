@@ -31,3 +31,9 @@ markdown2
 bs4
 filetype
 yfinance
+flask-bcrypt 
+flask-jwt-extended 
+flask-sqlalchemy 
+flask-mail
+pyjwt
+

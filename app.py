@@ -73,12 +73,14 @@ import boto3
 # AWS keys
 aws_access_key = "AKIA6NLHKOWCE7UXAPLX"
 aws_secret_key = "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"
-S3_bucket_name = "boston-harbor-data"  # bucket name
+S3_BUCKET_NAME = "boston-harbor-data"  # bucket name
+# wealth_advisor_folder = "wealth_advisor_folder/"
 client_summary_folder = "client_summary_folder/"  # bucket name
 suggestions_folder = "suggestions_folder/"  # bucket name
 order_list_folder = "order_list_folder/"  # bucket name
 portfolio_list_folder = "portfolio_list_folder/"  # bucket name
 personality_assessment_folder = "personality_assessment_folder/"  # bucket name
+login_folder = "login_folder/"
 
 # Connecting to Amazon S3
 s3 = boto3.client(
@@ -101,7 +103,7 @@ def list_s3_keys(bucket_name, prefix=""):
         print(f"Error listing objects in S3: {e}")
 
 # Call the function
-list_s3_keys(S3_bucket_name, order_list_folder)
+list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 
 
 
@@ -118,12 +120,342 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
 from flask import Flask, request, jsonify
 
+# app = Flask(__name__)
+from flask import Flask, request, jsonify, send_file
+import asyncio
+from flask_cors import CORS
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 # Configure generativeai with your API key
 genai.configure(api_key=GOOGLE_API_KEY)
 
 import markdown
+
+########################### Sign in Sign Out ###################################################
+
+
+from flask import Flask, request, jsonify
+from flask_bcrypt import Bcrypt
+from flask_mail import Mail, Message
+import random
+import boto3
+import json
+from datetime import datetime, timedelta,timezone
+
+bcrypt = Bcrypt(app)
+
+# Email configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') # 'your_email@gmail.com'
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
+
+mail = Mail(app)
+
+
+# Helper functions
+def upload_to_s3(data, filename):
+    s3.put_object(Bucket=S3_BUCKET_NAME, Key=filename, Body=json.dumps(data))
+    return f"s3://{S3_BUCKET_NAME}/{filename}"
+
+def download_from_s3(filename):
+    try:
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        return None
+    
+def delete_from_s3(key):
+    try:
+        s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
+    except Exception as e:
+        print(f"Error deleting {key}: {e}")
+
+# API Endpoints
+from flask import Flask, request, jsonify
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+
+
+# Replace with your email credentials
+EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
+EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
+
+# In-memory storage for email and OTP (for simplicity)
+otp_store = {}
+
+def send_email(to_email, otp):
+    try:
+        # Setup email message
+        subject = "Your Verification Code"
+        message = f"Your verification code is: {otp}"
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        # Send email using SMTP
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
+
+# 1. Email Verification and send otp :
+
+@app.route('/send-otp', methods=['POST'])
+def send_otp():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    # Generate a random 6-digit OTP
+    otp = random.randint(100000, 999999)
+    otp_store[email] = otp
+
+    if send_email(email, otp):
+        return jsonify({"message": "OTP sent successfully!"}), 200
+    else:
+        return jsonify({"error": "Failed to send OTP"}), 500
+
+@app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    data = request.get_json()
+    email = data.get('email')
+    otp = data.get('otp')
+
+    if not email or not otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+
+    # Check if the provided OTP matches the stored OTP
+    if otp_store.get(email) == int(otp):
+        del otp_store[email]  # Remove OTP after successful verification
+        return jsonify({"message": "Email verified successfully!"}), 200
+    else:
+        return jsonify({"error": "Invalid OTP"}), 400
+
+
+# Previous Version
+# @app.route('/email-verification', methods=['POST'])
+# def email_verification():
+#     try:
+#         email = request.json.get('email')
+#         if not email:
+#             return jsonify({"message": "Email is required"}), 400
+        
+#         print(email)
+#         # Generate a 6-digit verification code
+#         verification_code = random.randint(100000, 999999)
+#         sign_up_link = "http://localhost:3000/signUp"
+        
+#         # Send the email with the verification code
+#         msg = Message("Sign Up Link",recipients=[email]) # Code", recipients=[email])
+#         msg.body = f"Your Email is Verified.\nUse this Link to Sign Up : {sign_up_link}" #f"Your verification code is: {verification_code}"
+#         print(msg.body)
+#         print(msg)
+#         mail.send(msg)
+#         # msg = Message("Your Verification Code", recipients=[email])
+#         # msg.body = f"Your verification code is: {verification_code}"
+#         # mail.send(msg)
+
+#         # Save the verification code in S3
+#         # data = {"email": email, "verification_code": verification_code, "timestamp": str(datetime.now())}
+#         # upload_to_s3(data, f"verification_codes/{email}.json")
+
+#         return jsonify({"message": "Verification code sent successfully"}), 200
+#     except Exception as e:
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+@app.route('/email-verification', methods=['POST'])
+def email_verification():
+    try:
+        email = request.json.get('email')  # Extract email from the request
+        if not email:
+            return jsonify({"message": "Email is required"}), 400
+
+        print(f"Processing email verification for: {email}")
+
+        # Generate the sign-up link
+        sign_up_link = "http://localhost:3000/signUp"
+
+        # Create the email message
+        msg = Message(
+            "Sign-Up Link - Verify Your Email",
+            sender="your_email@gmail.com",
+            recipients=[email]
+        )
+        msg.body = (
+            f"Hello,\n\n"
+            f"Your email has been successfully verified. Use the following link to complete your sign-up process:\n\n"
+            f"{sign_up_link}\n\n"
+            f"If you did not request this verification, please ignore this email.\n\n"
+            f"Thank you."
+        )
+        print(f"Sending email to: {email}\nContent: {msg.body}")
+        
+        # Send the email
+        mail.send(msg)
+        print("Email sent successfully.")
+
+        return jsonify({"message": "Sign-up link sent successfully"}), 200
+
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+
+
+# # 2. Sign Up
+@app.route('/sign-up', methods=['POST'])
+def sign_up():
+    try:
+        email = request.json.get('email')
+        password = request.json.get('password')
+        confirm_password = request.json.get('confirm_password')
+        verification_code = request.json.get('verification_code')
+
+        if not all([email, password, confirm_password]): #, verification_code]):
+            return jsonify({"message": "All fields are required"}), 400
+
+        if password != confirm_password:
+            return jsonify({"message": "Passwords do not match"}), 400
+
+        # Fetch and validate verification code from S3
+        verification_data = download_from_s3(f"verification_codes/{email}.json")
+        if not verification_data or str(verification_data["verification_code"]) != str(verification_code):
+            return jsonify({"message": "Invalid verification code"}), 400
+
+        # Hash the password
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        # Save user data in S3
+        user_data = {"email": email, "password": hashed_password}
+        upload_to_s3(user_data, f"users/{email}.json")
+
+        return jsonify({"message": "Sign up successful"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+# 3. Sign In
+import jwt
+# from datetime import datetime, timedelta,timezone
+
+# Secret key for signing JWT
+JWT_SECRET_KEY = "5299e52b6cbb4361bf38c2392"
+
+@app.route('/sign-in', methods=['POST'])
+def sign_in():
+    try:
+        email = request.json.get('email')
+        password = request.json.get('password')
+
+        if not all([email, password]):
+            return jsonify({"message": "Email and password are required"}), 400
+
+        # Fetch user data from S3
+        user_data = download_from_s3(f"users/{email}.json")
+        if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
+            return jsonify({"message": "Invalid email or password"}), 401
+
+        # Generate a JWT token
+        token_payload = {
+            "email": email,
+            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2),
+            "iat": datetime.datetime.now(datetime.timezone.utc),
+            "sub": "user_authentication"  # Subject of the token
+        }
+        token = jwt.encode(token_payload, JWT_SECRET_KEY, algorithm="HS256")
+
+        return jsonify({
+            "message": "Sign in successful",
+            "token": token
+        }), 200
+    except Exception as e:
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+# 4. Forgot Password
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    try:
+        email = request.json.get('email')
+        if not email:
+            return jsonify({"message": "Email is required"}), 400
+
+        # Generate a 6-digit reset code
+        reset_code = random.randint(100000, 999999)
+
+        # Send the reset code via email
+        msg = Message("Password Reset Code", recipients=[email])
+        msg.body = f"Your password reset code is: {reset_code}"
+        mail.send(msg)
+
+        # Save the reset code and timestamp in S3
+        data = {"email": email, "reset_code": reset_code, "timestamp": str(datetime.now())}
+        upload_to_s3(data, f"password_resets/{email}.json")
+
+        return jsonify({"message": "Password reset code sent successfully"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error occurred while sending reset code: {str(e)}"}), 500
+
+#5. Reset password
+@app.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        email = request.json.get('email')
+        reset_code = request.json.get('reset_code')
+        new_password = request.json.get('new_password')
+
+        if not all([email, reset_code, new_password]):
+            return jsonify({"message": "Email, reset code, and new password are required"}), 400
+
+        # Fetch reset data from S3
+        reset_data = download_from_s3(f"password_resets/{email}.json")
+        if not reset_data:
+            return jsonify({"message": "Invalid email or reset code"}), 400
+
+        # Validate the reset code
+        if str(reset_data["reset_code"]) != str(reset_code):
+            return jsonify({"message": "Invalid reset code"}), 400
+
+        # Update the password for the user
+        user_data = download_from_s3(f"users/{email}.json")
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
+
+        # Hash the new password
+        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        user_data["password"] = hashed_password
+
+        # Save the updated user data back to S3
+        upload_to_s3(user_data, f"users/{email}.json")
+
+        # Remove the reset code entry from S3
+        delete_from_s3(f"password_resets/{email}.json")
+
+        return jsonify({"message": "Password reset successfully"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error occurred while resetting password: {str(e)}"}), 500
+
+
+
+########################################################################################################################
+
 # def convert_to_markdown(raw_text):
 #     # Replace specific text patterns with markdown syntax
 #     formatted_text = raw_text.replace('\n', '\n\n')  # Ensure newlines create paragraphs
@@ -714,151 +1046,272 @@ async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthl
         
         # New Prompt Template :
         
-        prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
-                Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
-                Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
-                Also give the user detailed information about the investment how to invest,where to invest and how much they
-                should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
-                Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
-                investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
-                Also give the user minimum and maximum expected growth in dollars for the time horizon .
-                Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
-                
-                You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+        prompt_template = """ 
+                                You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
+                                Use the following instructions to ensure consistent output:
+                                ---
 
-                Step-by-Step Guidance:
-                1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
-                2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
-                3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
-                4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
-                5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
-                6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
-                7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
-                8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
-                
-                
-                Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
-                
-                Client's Financial Information :(# This is a header line have it in bold) 
-                
-                
-                Client Name: """ + clientName + """(# have the client name in underline)
+                                ### Required Output Format:
+                                
+                                #### Client Financial Details:
+                                - **Client Name**: """ + clientName + """
+                                - **Assets**:
+                                - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+                                - **Liabilities**:
+                                - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+                                - **Other Details**:
+                                - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
+                                - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
+                                - **Investment Period** `Z years`
+                                
+                                #### Investment Allocation:
+                                Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+                                - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+                                - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+                                - **Target**: Describe the purpose of the investment.
+                                - **How to Invest**: Provide instructions on how to invest in this asset.
+                                - **Where to Invest**: Specify platforms or tools for making the investment.
 
-                Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis, This is a header line have it in bold. The data below it should be displayed in a table format so make sure of that data.There must be 2 columns 1 for Category and second for Value.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
-                
-                - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
-                
-                - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
-                
-                
-                - Monthly Liabilities: (# Monthly payments derived from liabilities)
-                
-                - Total Annual Income : (# Sum of all client's anual income)
-                
-                - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
-                
-                - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
+                                **Example**:
+                                **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
+                                - **Stocks**: `20% - 30%`
+                                - **ETFs**: `10% - 15%`
+                                - **Mutual Funds**: `10% - 20%`
+                                - **Cryptocurrency**: ` 5% - 10%`
+                                - **Real Estates or REITS**: `10% - 20%`
+                                - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
+                                - *How to Invest*: Provide information on how to invest in which market 
+                                - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
+                                
+                                **Conservative Investments (Minimum X% - Maximum Y%) **:
+                                - **High-Yield Savings Account**: `30% - 40%`
+                                - **Bonds**: `10% - 20%`
+                                - **Commodities**: `5% - 10%`
+                                - **Cash**: `5% - 10%`
+                                - *Target*: Maintain liquidity for emergencies.
+                                - *How to Invest*: Provide information on how to invest.
+                                - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `X% - Y%`
+                                - **Maximum Expected Annual Return**: `X% - Y%`
+                                - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Time Horizon**: `Z years`
+
+                                ---
+
+                                ### Example Output:
+                                
+                                #### Client Financial Details:
+                                | Asset Type          | Current Value ($) | Annual Contribution ($) |
+                                |----------------------|-------------------|--------------------------|
+                                | 401(k), 403(b), 457  | 300               | 15                       |
+                                | Traditional IRA      | 200               | 15                       |
+                                | Roth IRA             | 500               | 28                       |
+                                | Cash/Bank Accounts   | 500,000           | 30,000                   |
+                                | Real Estate          | 1,000,000         | -                        |
+                                | Total Assets Value   | 1,501,000         | -                        |
+
+                                | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+                                |---------------------|-------------|--------------------|----------------------|
+                                | Mortgage            | 1,000       | 10                | 100                  |
+                                | Credit Card         | 400         | 8                 | 400                  |
+                                | Other Loans         | 500         | 6                 | 100                  |
+                                | Total Liabilities   | 1,900       | -                 | -                    |
+                                
+                                | Investrment Period | 3 years |
+                                
+                                **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
+                                - **Stocks**: `20% - 30%`
+                                - **ETFs**: `5% - 10%`
+                                - **Mutual Funds**: `5% - 20%`
+                                - **Cryptocurrency**: ` 5% - 10%`
+                                - **Real Estates or REITS**: `5% - 10%`
+                                - *Target*: Long-term growth potential aligned with the market.
+                                - *How to Invest*: Purchase low-cost index funds.
+                                - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+
+                                **Conservative Investments (Minimum 40% - Maximum 70%)**:
+                                - **High-Yield Savings Account**: `20% - 30%`
+                                - **Bonds**: `10% - 20%`
+                                - **Commodities**: `5% - 10%`
+                                - **Cash**: `5% - 10%`
+                                - *Target*: Maintain liquidity for emergencies.
+                                - *How to Invest*: Deposit funds into an FDIC-insured account.
+                                - *Where to Invest*: Ally Bank, Capital One 360.
+
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `4% - 6%`
+                                - **Maximum Expected Annual Return**: `8% - 15%`
+                                - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+                                - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
+                                - **Time Horizon**: `3 years`
+
+                                ---
+
+                                Ensure the output strictly follows this structure.
 
 
-                Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
-                (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
-                (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
-                
-                (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
-                Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
-                
-                (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
-                Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
-                I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
-                
-                (#If the financial is 1 or 2 only then give investment suggestions to the client)
-                
-                
-                
-                Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
+                            ### Rationale for Investment Suggestions:
+                            Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
 
-                Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
+                            ---
+                            <context>
+                            {context}
+                            </context>
+                            Question: {input}
 
-                
-                Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
-
-                Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
-                How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
-                
-                Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
-                
-                ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
-                
-                Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
-                
-                Consider investing in blue-chip companies or growth sectors like technology. 
-                
-                
-                Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+        """
 
 
-                Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
-                
-                
-                Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
 
-                Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
-                How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+        # #Wasnt consistent for generating the Bar Graph and Pie Chart :
+        # prompt_template = investmentPersonality +   "\n" + """You are a Financial Advisor for question-answering tasks related to the document.
+                # Give Financial Suggestions to the Wealth Manager so that they could do proper responsible investment based on their client's investment personality and Financial Document provided to you.
+                # Always Mention the Investment for the """ + clientName + """(clientName) provided to you.
+                # Also give the user detailed information about the investment how to invest,where to invest and how much they
+                # should invest in terms of percentage of their investment amount based on the clients Financial Conditions and help them to cover up their Mortgage and Debts if any.Give the user minimum and maximum percentage of growth-oriented investments alloacation.
+                # Give the user detailed information about the returns on their investment by giving them an approximate return based on the time horizon of the investment based on which calculate the compunded returns on their 
+                # investment.Also Give the user minimum and maximum expected annual return percentage for the time horizon and how it can help them accumulate wearlth overtime to achive their Financial  goals.
+                # Also give the user minimum and maximum expected growth in dollars for the time horizon .
+                # Also explain the user why you are giving them that particular investment suggestions for the client with the given investment personality.
                 
-                Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                # You are a Financial Advisor for question-answering tasks related to the document. Based on the client's investment personality and financial details provided, generate responsible investment suggestions to achieve their financial goals while managing debts.
+
+                # Step-by-Step Guidance:
+                # 1. Assets: Calculate total assets by analyzing the provided financial document in the My Assets section. Ensure you include cash, real estate, retirement accounts, brokerage accounts, and any other relevant asset types from the document.
+                # 2. Liabilities: Calculate total liabilities by analyzing the provided financial document in the My Liabilities section. Consider mortgages, credit card debts, student loans, car loans, and other liabilities. 
+                # 3. Monthly Investment Feasibility: Use the client's assets and liabilities to assess whether their planned monthly investment is feasible. If not feasible, suggest a more realistic monthly investment amount.
+                # 4. Analyze Liabilities: Determine if the client's monthly investment plan is feasible after covering liabilities and expected expenses and also considering some amount for savings. If the client's monthly investment plan is not feasible after covering expenses and savings, generate investment suggestions on a smaller monthly investment plan amount if it can help the client else mention amount is too small for the client's requirementys to be made.
+                # 5. Investment Strategy: Suggest a strategy where monthly investments can both generate returns and pay off debts effectively and helps client to achieve their financial goals.
+                # 6. Allocation: Provide detailed allocations between growth-oriented investments and conservative investments, ensuring the client can meet their monthly debt obligations and save for their future financial goals.
+                # 7. Returns: Include minimum and maximum compounded returns over 5-10 years, along with inflation-adjusted returns for clarity.
+                # 8. Suggestions: Offer advice on how to use remaining funds to build wealth after clearing liabilities and achive their financial goal.
                 
-                Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
                 
-                Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+        #         Here's an example for the required Output Format(if there are comments indicated by # in the example output format then thats a side note for your reference dont write it in the response that will be generated ) :
                 
-                Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+        #         Client's Financial Information :(# This is a header line have it in bold) 
                 
-                Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
                 
-                Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+        #         Client Name: """ + clientName + """(# have the client name in underline)
+
+        #         Financial Overview: (#the data presented is just an example for your reference do not consider it as factual refere to the document provided to you and generate data based on the provided data and only when nothing is provided assume some data for analysis, This is a header line have it in bold. The data below it should be displayed in a table format so make sure of that data.There must be 2 columns 1 for Category and second for Value.List down all the assets and liabilities along with its values and then Total of assets,liabilities,etc.)
+                
+        #         - Total Assets: (# Sum of all client assets and Annual Income . Mention all assets and their respected values.if non consider the example assets)
+                
+        #         - Total Liabilities: (# Sum of all liabilities. Mention all liabilities and their respected values if non consider the example liabilities)
+                
+                
+        #         - Monthly Liabilities: (# Monthly payments derived from liabilities)
+                
+        #         - Total Annual Income : (# Sum of all client's anual income)
+                
+        #         - Monthly Investment Amount : """ + monthly_investment + """ (# if no specific amount is specified to you then only assume  10,000 else consider the amount mention to you and just display the amount)
+                
+        #         - Investment Period : """ + investment_period + """  (# if no specific period is specified to you then only assume 3 years else consider the period mention to you and just display the period)
 
 
-                Time Horizon and Expected Returns:
+        #         Financial Analysis :(#Analyse the assets and liabilities and based on that give a suggestion for analysis generate suggestions for one of the following conditions:)
+        #         (#1st condition : Everything is Positive)Based on the given Financial Conditions the client is having a good and stable income with great assets and manageable debt and liabilities.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the clients monthly income.
+        #         (# if this condition is true then ignore the other conditions and start with the Investment Suggestions)
+                
+        #         (#2nd condition : Everything is temporarily Negative) Based on the given Financial Conditions the client is facing a low income for now but have great assets and manageable debt and liabilities.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is manageable for the client's monthly income but the client might not be able to sustain the monthly investment amount that they are planning.)
+        #         Instead I would like to recommend this amount to the client for their monthly investment : (#Mention a feasible amount to the client for monthly investment and start suggesting investments based on this amount and not the previous amount being taken into consideration)
+                
+        #         (#3rd condition : Everything is Negative) Based on the given Financial Conditions the client is facing a low income and doesnt have good assets to manage the debts and liabilities of the client and in such a condition this monthly investment amount is not feasible.
+        #         Clients monthly expenses on debts is : (#mention the calculated liabilities for a month) , which is not manageable for the client's monthly income and so the client might not be able to sustain the monthly investment amount that they are planning to do.)
+        #         I would like to recommend this amount to the client for monthly investment : (# Mention a minimum amount to the client for monthly investment if possible else just say the client should first prioritize on savings and generating more income to manage their debts and liabilities first and so dont give any investment suggestions to the client.)
+                
+        #         (#If the financial is 1 or 2 only then give investment suggestions to the client)
+                
+                
+                
+        #         Investment Suggestions for """ + clientName + """  with a Moderate Investor Personality(This is just an example for Moderate Investor but you need to generate suggestions for the given investment personality) (This must be like a Header and in Bold)
 
-                Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
-                
-                
-                Minimum Expected Annual Return: 4% - 6% 
-                
-                
-                Maximum Expected Annual Return: 8% - 10% 
-                
-                
-                Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
-                Minimum Expected Growth in Dollars: 
-                
-                4,000−6,000 (over 10 years) 
-                
-                
-                Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+        #         Based on your provided information, you appear to be a moderate investor with a healthy mix of assets and liabilities. Here's a breakdown of investment suggestions tailored to your profile:
 
                 
-                Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
+        #         Investment Allocation: (#remember these allocations is just an example you can suggest other investments dpeneding on the details and investor personality provided)
+
+        #         Growth-Oriented Investments (Minimum 40% - Maximum 60%): Target: Focus on investments with the potential for long-term growth while managing risk. 
+        #         How to Invest: Diversify across various asset classes like:  (#Give allocations % as well)
+                
+        #         Mutual Funds(5%-10%): Choose diversified index funds tracking the S&P 500 or broad market indices. 
+                
+        #         ETFs(10%-20%): Offer similar benefits to mutual funds but with lower fees and more transparency. 
+                
+        #         Individual Stocks(20%-30%): Carefully select companies with solid financials and growth potential. 
+                
+        #         Consider investing in blue-chip companies or growth sectors like technology. 
+                
+                
+        #         Where to Invest: Brokerage Accounts: Choose a reputable online broker offering research tools and low fees.
+
+
+        #         Roth IRA/Roth 401(k): Utilize these tax-advantaged accounts for long-term growth and tax-free withdrawals in retirement. 
+                
+                
+        #         Percentage Allocation for Growth-Oriented Investments: Allocate between 40% and 60% of your investable assets towards these growth-oriented investments. This range allows for flexibility based on your comfort level and market conditions.
+
+        #         Conservative Investments (Minimum 40% - Maximum 60%): Target: Prioritize safety and capital preservation with lower risk. 
+        #         How to Invest: Bonds: Invest in government or corporate bonds with varying maturities to match your time horizon. 
+                
+        #         Cash: Maintain a cash reserve in high-yield savings accounts or short-term CDs for emergencies and upcoming expenses. 
+                
+        #         Real Estate: Consider investing in rental properties or REITs (Real Estate Investment Trusts) for diversification and potential income generation. 
+                
+        #         Where to Invest: Brokerage Accounts: Invest in bond mutual funds, ETFs, or individual bonds. 
+                
+        #         Cash Accounts(20%-30%): Utilize high-yield savings accounts or short-term CDs offered by banks or credit unions. 
+                
+        #         Real Estate(20%-30%): Invest directly in rental properties or through REITs available through brokerage accounts. 
+                
+        #         Percentage Allocation for Conservative Investments: Allocate between 40% and 60% of your investable assets towards these conservative investments. This range ensures a balance between growth and security.
+
+
+        #         Time Horizon and Expected Returns:
+
+        #         Time Horizon: As a moderate investor, your time horizon is likely long-term, aiming for returns over 5-10 years or more. 
+                
+                
+        #         Minimum Expected Annual Return: 4% - 6% 
+                
+                
+        #         Maximum Expected Annual Return: 8% - 10% 
+                
+                
+        #         Compounded Returns: The power of compounding works in your favor over the long term. With a 6% average annual return, (# consider the monthly investment amount and give returns based on that only) $10,000 could grow to approximately 17,908 in 10 years.
+        #         Minimum Expected Growth in Dollars: 
+                
+        #         4,000−6,000 (over 10 years) 
+                
+                
+        #         Maximum Expected Growth in Dollars: 8,000−10,000 (over 10 years)
+
+                
+        #         Inflation Adjusted Returns:(#do not write this part inside the bracket just give answer,assume US inflation rate assume 3% if you dont know, and give the investment returns value that was suggested by you for the considered monthly investment amount after 3,5,10years of growth mention the values before adjusting and after adjusting with inflation I want it in a bulleted format)
                    
                     
-                Rationale for Investment Suggestions:
+        #         Rationale for Investment Suggestions:
 
-                This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
+        #         This investment strategy balances growth potential with risk management. The allocation towards growth-oriented investments allows for potential capital appreciation over time, while the allocation towards conservative investments provides stability and safeguards your principal.
 
                 
-                Important Considerations:
+        #         Important Considerations:
 
-                Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
+        #         Regular Review: Periodically review your portfolio and adjust your allocation as needed based on market conditions, your risk tolerance, and your financial goals. Professional Advice: Consider seeking advice from a qualified financial advisor who can provide personalized guidance and help you develop a comprehensive financial plan.
 
-                Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
+        #         Disclaimer: This information is for educational purposes only and should not be considered financial advice. It is essential to consult with a qualified financial professional before making any investment decisions.
 
-                Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
-                <context>
-                {context}
-                </context>
-                Question: {input}"""
+        #         Explain how this suggestions can help the client grow their wealth and improve their financial condition and/or cover up thier loans and in turn achive their Financial goals.
+        #         <context>
+        #         {context}
+        #         </context>
+        #         Question: {input}"""
 
         
         # # Without category and value :
@@ -1255,72 +1708,75 @@ from collections import defaultdict
 #     print(f"DATA extracted from Responses : {data}")
 #     return data
 
-# new coden:
-def extract_numerical_data(response):
-    # Patterns for different sections
-    patterns = {
-        'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
-        'Conservative Investments': re.compile(r'Conservative Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
-        'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns.*?:\s*(.*?)$', re.DOTALL)
-    }
+# new code:
+import re
+from collections import defaultdict
+import re
+from collections import defaultdict
 
+def extract_numerical_data(response):
     data = defaultdict(dict)
 
-    for section, pattern in patterns.items():
+    # Match Growth-Oriented Investments and Conservative Investments sections
+    growth_pattern = re.compile(r"<strong>Growth-Oriented Investments.*?</strong>:\s*(.*?)(<strong>|<h4>)", re.DOTALL)
+    conservative_pattern = re.compile(r"<strong>Conservative Investments.*?</strong>:\s*(.*?)(<strong>|<h4>)", re.DOTALL)
+    allocation_pattern = re.compile(r"<strong>(.*?)</strong>:\s*<code>(\d+%)\s*-\s*(\d+%)</code>")
+
+    for category, pattern in [("Growth-Oriented Investments", growth_pattern), 
+                               ("Conservative Investments", conservative_pattern)]:
         match = pattern.search(response)
         if match:
             investments_text = match.group(1)
-            # Extract investment details
-            investment_pattern = re.compile(r'([\w\s&/-]+?)\s*\((\d+%)-(\d+%)\)')
-            for investment_match in investment_pattern.findall(investments_text):
+            for investment_match in allocation_pattern.findall(investments_text):
                 investment_type, min_allocation, max_allocation = investment_match
-                data[section][investment_type.strip()] = {
-                    'min': min_allocation.strip(),
-                    'max': max_allocation.strip()
+                data[category][investment_type.strip()] = {
+                    'min': min_allocation.strip('%'),
+                    'max': max_allocation.strip('%')
                 }
 
-    # Extract additional details
-    time_horizon_pattern = re.compile(r'Time Horizon.*?(\d+)-(\d+)\s*years', re.IGNORECASE)
-    min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-    max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-    min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
-    max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
+    # Match Returns Overview
+    returns_pattern = re.compile(r"<h4>Returns Overview:</h4>\s*(.*?)\s*<h4>", re.DOTALL)
+    returns_match = returns_pattern.search(response)
+    if returns_match:
+        returns_text = returns_match.group(1)
 
-    time_horizon_match = time_horizon_pattern.search(response)
-    if time_horizon_match:
-        data['Time Horizon'] = {
-            'min_years': int(time_horizon_match.group(1)),
-            'max_years': int(time_horizon_match.group(2))
-        }
+        # Extract returns and growth data
+        min_return_match = re.search(r"Minimum Expected Annual Return</strong>:\s*<code>(\d+%)\s*-\s*(\d+%)</code>", returns_text)
+        max_return_match = re.search(r"Maximum Expected Annual Return</strong>:\s*<code>(\d+%)\s*-\s*(\d+%)</code>", returns_text)
+        min_growth_match = re.search(r"Minimum Expected Growth in Dollars</strong>:\s*<code>\$(\d+,\d+)\s*-\s*\$(\d+,\d+)</code>", returns_text)
+        max_growth_match = re.search(r"Maximum Expected Growth in Dollars</strong>:\s*<code>\$(\d+,\d+)\s*-\s*\$(\d+,\d+)</code>", returns_text)
+        time_horizon_match = re.search(r"Time Horizon</strong>:\s*<code>(\d+ years)</code>", returns_text)
 
-    min_return_match = min_return_pattern.search(response)
-    if min_return_match:
-        data['Expected Annual Return'] = {
-            'min': min_return_match.group(1),
-            'max': min_return_match.group(2)
-        }
+        if min_return_match:
+            data['Expected Annual Return'] = {
+                'min': min_return_match.group(1),
+                'max': min_return_match.group(2)
+            }
+        if max_return_match:
+            data['Expected Annual Return']['max'] = max_return_match.group(2)
 
-    max_growth_match = max_growth_pattern.search(response)
-    if max_growth_match:
-        data['Expected Growth in Dollars'] = {
-            'min': int(max_growth_match.group(1).replace(',', '')),
-            'max': int(max_growth_match.group(2).replace(',', ''))
-        }
+        if min_growth_match:
+            data['Expected Growth in Dollars'] = {
+                'min': min_growth_match.group(1).replace(',', ''),
+                'max': min_growth_match.group(2).replace(',', '')
+            }
+        if max_growth_match:
+            data['Expected Growth in Dollars']['max'] = max_growth_match.group(2).replace(',', '')
 
-    print("Section Data Extracted:", data)
-    print("Growth-Oriented Investments:", data.get('Growth-Oriented Investments', 'Not Found'))
-    print("Conservative Investments:", data.get('Conservative Investments', 'Not Found'))
-    print("Time Horizon Data:", data.get('Time Horizon', 'Not Found'))
+        if time_horizon_match:
+            data['Time Horizon'] = time_horizon_match.group(1)
 
     return data
 
 
-# def extract_numerical_data(response): # curr version but cant capture annual return 
-#     # Define patterns to match different sections and their respective allocations
+
+# just prev code :
+# def extract_numerical_data(response):
+#     # Patterns for different sections
 #     patterns = {
-#         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-#         'Conservative Investments': re.compile(r'Conservative Investments.*?How to Invest:(.*?)Where to Invest:', re.DOTALL),
-#         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns:(.*?)$', re.DOTALL)
+#         'Growth-Oriented Investments': re.compile(r'Growth-Oriented Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
+#         'Conservative Investments': re.compile(r'Conservative Investments.*?Target.*?:(.*?)Where to Invest:', re.DOTALL),
+#         'Time Horizon and Expected Returns': re.compile(r'Time Horizon and Expected Returns.*?:\s*(.*?)$', re.DOTALL)
 #     }
 
 #     data = defaultdict(dict)
@@ -1329,59 +1785,50 @@ def extract_numerical_data(response):
 #         match = pattern.search(response)
 #         if match:
 #             investments_text = match.group(1)
-#             # Extract individual investment types and their allocations
-#             investment_pattern = re.compile(r'(\w[\w\s]+?)\s*\((\d+%)-(\d+%)\)')
+#             # Extract investment details
+#             investment_pattern = re.compile(r'([\w\s&/-]+?)\s*\((\d+%)-(\d+%)\)')
 #             for investment_match in investment_pattern.findall(investments_text):
 #                 investment_type, min_allocation, max_allocation = investment_match
 #                 data[section][investment_type.strip()] = {
-#                     'min': min_allocation,
-#                     'max': max_allocation
+#                     'min': min_allocation.strip(),
+#                     'max': max_allocation.strip()
 #                 }
 
-#     # Extract time horizon and expected returns
-#     time_horizon_pattern = re.compile(r'Time Horizon:.*?(\d+)-(\d+) years', re.IGNORECASE)
+#     # Extract additional details
+#     time_horizon_pattern = re.compile(r'Time Horizon.*?(\d+)-(\d+)\s*years', re.IGNORECASE)
 #     min_return_pattern = re.compile(r'Minimum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
 #     max_return_pattern = re.compile(r'Maximum Expected Annual Return:.*?(\d+%)-(\d+%)', re.IGNORECASE)
-#     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
-#     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d+,\d+)-\$(\d+,\d+)', re.IGNORECASE)
+#     min_growth_pattern = re.compile(r'Minimum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
+#     max_growth_pattern = re.compile(r'Maximum Expected Growth in Dollars:.*?\$(\d[\d,]*)-\$(\d[\d,]*)', re.IGNORECASE)
 
 #     time_horizon_match = time_horizon_pattern.search(response)
-#     min_return_match = min_return_pattern.search(response)
-#     max_return_match = max_return_pattern.search(response)
-#     min_growth_match = min_growth_pattern.search(response)
-#     max_growth_match = max_growth_pattern.search(response)
-
 #     if time_horizon_match:
 #         data['Time Horizon'] = {
-#             'min_years': time_horizon_match.group(1),
-#             'max_years': time_horizon_match.group(2)
+#             'min_years': int(time_horizon_match.group(1)),
+#             'max_years': int(time_horizon_match.group(2))
 #         }
 
+#     min_return_match = min_return_pattern.search(response)
 #     if min_return_match:
 #         data['Expected Annual Return'] = {
 #             'min': min_return_match.group(1),
 #             'max': min_return_match.group(2)
 #         }
 
-#     if max_return_match:
-#         data['Expected Annual Return'] = {
-#             'min': max_return_match.group(1),
-#             'max': max_return_match.group(2)
-#         }
-
-#     if min_growth_match:
-#         data['Expected Growth in Dollars'] = {
-#             'min': min_growth_match.group(1),
-#             'max': min_growth_match.group(2)
-#         }
-
+#     max_growth_match = max_growth_pattern.search(response)
 #     if max_growth_match:
 #         data['Expected Growth in Dollars'] = {
-#             'min': max_growth_match.group(1),
-#             'max': max_growth_match.group(2)
+#             'min': int(max_growth_match.group(1).replace(',', '')),
+#             'max': int(max_growth_match.group(2).replace(',', ''))
 #         }
-#     print(f"Data Extracted from Response : {data}")
+
+#     print("Section Data Extracted:", data)
+#     print("Growth-Oriented Investments:", data.get('Growth-Oriented Investments', 'Not Found'))
+#     print("Conservative Investments:", data.get('Conservative Investments', 'Not Found'))
+#     print("Time Horizon Data:", data.get('Time Horizon', 'Not Found'))
+
 #     return data
+
 
 def normalize_allocations(allocations):
     total = sum(allocations)
@@ -1584,87 +2031,87 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
 
 
 
-def plot_investment_allocations(data):
-    # Create subplots with a large figure size
-    fig, axes = plt.subplots(2, 1, figsize= (16,10)) #(28, 15))  # Adjust size as needed
+# def plot_investment_allocations(data):
+#     # Create subplots with a large figure size
+#     fig, axes = plt.subplots(2, 1, figsize= (16,10)) #(28, 15))  # Adjust size as needed
 
-    # Plot Growth-Oriented Investments
-    growth_data = data['Growth-Oriented Investments']
-    growth_labels = list(growth_data.keys())
-    growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
-    growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
+#     # Plot Growth-Oriented Investments
+#     growth_data = data['Growth-Oriented Investments']
+#     growth_labels = list(growth_data.keys())
+#     growth_min = [int(growth_data[label]['min'].strip('%')) for label in growth_labels]
+#     growth_max = [int(growth_data[label]['max'].strip('%')) for label in growth_labels]
 
-    axes[0].bar(growth_labels, growth_min, color='skyblue', label='Min Allocation')
-    axes[0].bar(growth_labels, growth_max, bottom=growth_min, color='lightgreen', label='Max Allocation')
-    axes[0].set_title('Growth-Oriented Investments', fontsize=16)
-    axes[0].set_ylabel('Percentage Allocation', fontsize=14)
-    axes[0].set_xlabel('Investment Types', fontsize=14)
-    axes[0].tick_params(axis='x', rotation=45, labelsize=12)
-    axes[0].tick_params(axis='y', labelsize=12)
-    axes[0].legend()
+#     axes[0].bar(growth_labels, growth_min, color='skyblue', label='Min Allocation')
+#     axes[0].bar(growth_labels, growth_max, bottom=growth_min, color='lightgreen', label='Max Allocation')
+#     axes[0].set_title('Growth-Oriented Investments', fontsize=16)
+#     axes[0].set_ylabel('Percentage Allocation', fontsize=14)
+#     axes[0].set_xlabel('Investment Types', fontsize=14)
+#     axes[0].tick_params(axis='x', rotation=45, labelsize=12)
+#     axes[0].tick_params(axis='y', labelsize=12)
+#     axes[0].legend()
 
-    # Plot Conservative Investments
-    conservative_data = data['Conservative Investments']
-    conservative_labels = list(conservative_data.keys())
-    conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
-    conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
+#     # Plot Conservative Investments
+#     conservative_data = data['Conservative Investments']
+#     conservative_labels = list(conservative_data.keys())
+#     conservative_min = [int(conservative_data[label]['min'].strip('%')) for label in conservative_labels]
+#     conservative_max = [int(conservative_data[label]['max'].strip('%')) for label in conservative_labels]
 
-    axes[1].bar(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
-    axes[1].bar(conservative_labels, conservative_max, bottom=conservative_min, color='lightgreen', label='Max Allocation')
-    axes[1].set_title('Conservative Investments', fontsize=16)
-    axes[1].set_ylabel('Percentage Allocation', fontsize=14)
-    axes[1].set_xlabel('Investment Types', fontsize=14)
-    axes[1].tick_params(axis='x', rotation=45, labelsize=12)
-    axes[1].tick_params(axis='y', labelsize=12)
-    axes[1].legend()
+#     axes[1].bar(conservative_labels, conservative_min, color='skyblue', label='Min Allocation')
+#     axes[1].bar(conservative_labels, conservative_max, bottom=conservative_min, color='lightgreen', label='Max Allocation')
+#     axes[1].set_title('Conservative Investments', fontsize=16)
+#     axes[1].set_ylabel('Percentage Allocation', fontsize=14)
+#     axes[1].set_xlabel('Investment Types', fontsize=14)
+#     axes[1].tick_params(axis='x', rotation=45, labelsize=12)
+#     axes[1].tick_params(axis='y', labelsize=12)
+#     axes[1].legend()
 
-    # Tight layout for better spacing
-    plt.tight_layout()
-    plt.show()
-    return fig
-
-
-def plot_pie_chart(data):
-    fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
-
-    # Combine all investment data for pie chart
-    all_data = {**data['Growth-Oriented Investments'], **data['Conservative Investments']}
-    labels = list(all_data.keys())
-    sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
-    colors = plt.cm.Paired(range(len(labels)))
-
-    wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
-    ax.set_title('Investment Allocation')
-
-    # Add legend
-    ax.legend(wedges, labels, title="Investment Types", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-
-    return fig
+#     # Tight layout for better spacing
+#     plt.tight_layout()
+#     plt.show()
+#     return fig
 
 
+# def plot_pie_chart(data):
+#     fig, ax = plt.subplots(figsize=(10, 7))  # Increased size
 
-def bar_chart(data):
-    fig, ax = plt.subplots(figsize=(12, 8))  # Increased size
+#     # Combine all investment data for pie chart
+#     all_data = {**data['Growth-Oriented Investments'], **data['Conservative Investments']}
+#     labels = list(all_data.keys())
+#     sizes = [int(all_data[label]['max'].strip('%')) for label in labels]
+#     colors = plt.cm.Paired(range(len(labels)))
 
-    # Data for plotting
-    categories = list(data.keys())
-    values_min = [int(data[cat]['min'].strip('%')) for cat in categories]
-    values_max = [int(data[cat]['max'].strip('%')) for cat in categories]
+#     wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=140)
+#     ax.set_title('Investment Allocation')
 
-    x = range(len(categories))
+#     # Add legend
+#     ax.legend(wedges, labels, title="Investment Types", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
 
-    ax.bar(x, values_min, width=0.4, label='Min Allocation', color='skyblue', align='center')
-    ax.bar(x, values_max, width=0.4, label='Max Allocation', color='lightgreen', align='edge')
+#     return fig
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(categories, rotation=45, ha='right')
-    ax.set_xlabel('Investment Categories')
-    ax.set_ylabel('Percentage Allocation')
-    ax.set_title('Investment Allocation')
-    ax.legend()
 
-    plt.tight_layout()
-    return fig
+
+# def bar_chart(data):
+#     fig, ax = plt.subplots(figsize=(12, 8))  # Increased size
+
+#     # Data for plotting
+#     categories = list(data.keys())
+#     values_min = [int(data[cat]['min'].strip('%')) for cat in categories]
+#     values_max = [int(data[cat]['max'].strip('%')) for cat in categories]
+
+#     x = range(len(categories))
+
+#     ax.bar(x, values_min, width=0.4, label='Min Allocation', color='skyblue', align='center')
+#     ax.bar(x, values_max, width=0.4, label='Max Allocation', color='lightgreen', align='edge')
+
+#     ax.set_xticks(x)
+#     ax.set_xticklabels(categories, rotation=45, ha='right')
+#     ax.set_xlabel('Investment Categories')
+#     ax.set_ylabel('Percentage Allocation')
+#     ax.set_title('Investment Allocation')
+#     ax.legend()
+
+#     plt.tight_layout()
+#     return fig
 
 
 import random
@@ -2374,11 +2821,7 @@ async def generate_investment_suggestions_for_investor(investment_personality,cl
         return jsonify("response is not generated by llm model"),500
         # st.error("Failed to create the retrieval chain. Please upload a valid document.")
 
-from flask import Flask, request, jsonify, send_file
-import asyncio
-from flask_cors import CORS
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
 # CORS(app,resources={r"/api/*":{"origins":"*"}})
 # CORS(app)
 
@@ -2576,7 +3019,7 @@ def submit_client_data():
         
         # Check if the client data already exists in S3
         try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
             existing_data = json.loads(response['Body'].read().decode('utf-8'))
             is_update = True
             print(f"Existing data found for unique ID: {unique_id}")
@@ -2595,7 +3038,7 @@ def submit_client_data():
         # Save the updated or new data back to S3
         try:
             s3.put_object(
-                Bucket=S3_bucket_name,
+                Bucket=S3_BUCKET_NAME,
                 Key=s3_key,
                 Body=json.dumps(data_to_save),
                 ContentType="application/json"
@@ -2620,7 +3063,7 @@ def submit_client_data():
 def get_all_client_data():
     try:
         # List objects in the S3 bucket
-        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix="client_summary_folder")
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix="client_summary_folder")
         
         # Check if there are any objects in the bucket
         if 'Contents' in response:
@@ -2630,7 +3073,7 @@ def get_all_client_data():
                 try:
                     file_key = obj['Key']
                     # Retrieve and decode file content
-                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                     file_data = file_response['Body'].read().decode('utf-8')
                      # Parse the file content as JSON
                     data_json = json.loads(file_data)
@@ -2666,7 +3109,7 @@ def get_client_data():
 
         # Retrieve the object from S3
         try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
             # Decode and parse the JSON data
             client_data = json.loads(response['Body'].read().decode('utf-8'))
             
@@ -2711,7 +3154,7 @@ async def investor_personality_assessment():
 
         # Check for existing client data in S3 (to store investment_personality in client detail)
         try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=s3_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
             existing_data = json.loads(response['Body'].read().decode('utf-8'))
             logging.info(f"Existing data found for client ID {client_id}: {existing_data}")
         except s3.exceptions.NoSuchKey:
@@ -2726,7 +3169,7 @@ async def investor_personality_assessment():
         # Save the updated data back to S3
         try:
             s3.put_object(
-                Bucket=S3_bucket_name,
+                Bucket=S3_BUCKET_NAME,
                 Key=s3_key,
                 Body=json.dumps(existing_data),
                 ContentType='application/json'
@@ -2742,7 +3185,7 @@ async def investor_personality_assessment():
         existing_file_data = None
 
         try:
-            file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+            file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
             file_data = file_response['Body'].read().decode('utf-8')
             existing_file_data = json.loads(file_data)
             logging.info(f"Existing file data for client ID {client_id}: {existing_file_data}")
@@ -2765,7 +3208,7 @@ async def investor_personality_assessment():
         # Save the data back to S3
         try:
             s3.put_object(
-                Bucket=S3_bucket_name,
+                Bucket=S3_BUCKET_NAME,
                 Key=file_key,
                 Body=json.dumps(updated_data),
                 ContentType='application/json'
@@ -2812,7 +3255,7 @@ def get_client_data_by_id():
         logging.info(f"Looking for files in folder: {folder_path}")
 
         # List objects in the folder
-        response = s3.list_objects_v2(Bucket=S3_bucket_name, Prefix=folder_path)
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=folder_path)
         logging.debug(f"S3 list_objects_v2 response: {response}")
 
         # Check if the folder contains any objects
@@ -2831,7 +3274,7 @@ def get_client_data_by_id():
             # Fetch file content if the file matches the client_id
             if f"{client_id}.json" in file_key:
                 try:
-                    file_response = s3.get_object(Bucket=S3_bucket_name, Key=file_key)
+                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                     file_content = json.loads(file_response['Body'].read().decode('utf-8'))
                     logging.info(f"Found and retrieved data for client_id {client_id}.")
                     
@@ -2855,6 +3298,110 @@ def get_client_data_by_id():
 import logging
 # global investmentPersonality  # Global Variable
 # investmentPersonality = ""
+
+#prev version
+# def generate_chart_data(data):
+#     # Pie Chart
+#     labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
+#     max_allocations = [
+#         int(data['Growth-Oriented Investments'][label]['max']) for label in data['Growth-Oriented Investments']
+#     ] + [
+#         int(data['Conservative Investments'][label]['max']) for label in data['Conservative Investments']
+#     ]
+#     # Generate colors based on the number of labels
+#     all_labels = list({**data['Growth-Oriented Investments'], **data['Conservative Investments']}.keys())
+#     num_labels = len(all_labels)
+#     dynamic_colors = generate_colors(num_labels)
+#     pie_chart_data = {
+#         'labels': labels,
+#         'datasets': [{
+#             'label': 'Investment Allocation',
+#             'data': max_allocations,
+#             'backgroundColor': dynamic_colors,  # Example colors
+#             'hoverOffset': 4
+#         }]
+#     }
+    
+#     # pie_chart_data = {
+#     #     'labels': labels,
+#     #     'datasets': [{
+#     #         'label': 'Investment Allocation',
+#     #         'data': max_allocations,
+#     #         'backgroundColor': ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],  # Example colors
+#     #         'hoverOffset': 4
+#     #     }]
+#     # }
+
+#     # Bar Chart
+#     min_allocations = [
+#         int(data['Growth-Oriented Investments'][label]['min']) for label in data['Growth-Oriented Investments']
+#     ] + [
+#         int(data['Conservative Investments'][label]['min']) for label in data['Conservative Investments']
+#     ]
+#     bar_chart_data = {
+#         'labels': labels,
+#         'datasets': [
+#             {
+#                 'label': 'Allocation for Min returns',
+#                 'data': min_allocations,
+#                 'backgroundColor': 'skyblue'
+#             },
+#             {
+#                 'label': 'Allocation for Max returns',
+#                 'data': max_allocations,
+#                 'backgroundColor': 'lightgreen'
+#             }
+#         ]
+#     }
+#     print(f"Pie Chart Data : {pie_chart_data}")
+#     print(f"Bar Chart Data : {bar_chart_data}")
+    
+#     return pie_chart_data, bar_chart_data
+
+def generate_chart_data(data):
+    # Pie Chart Data
+    labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
+    max_allocations = [
+        int(data['Growth-Oriented Investments'][label]['max']) for label in data['Growth-Oriented Investments']
+    ] + [
+        int(data['Conservative Investments'][label]['max']) for label in data['Conservative Investments']
+    ]
+    num_labels = len(labels)
+    dynamic_colors = generate_colors(num_labels)
+    pie_chart_data = {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': max_allocations,
+            'backgroundColor': dynamic_colors, #['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],  # Example colors
+            'hoverOffset': 4
+        }]
+    }
+
+    # Bar Chart Data
+    min_allocations = [
+        int(data['Growth-Oriented Investments'][label]['min']) for label in data['Growth-Oriented Investments']
+    ] + [
+        int(data['Conservative Investments'][label]['min']) for label in data['Conservative Investments']
+    ]
+    bar_chart_data = {
+        'labels': labels,
+        'datasets': [
+            {
+                'label': 'Allocation for Min returns',
+                'data': min_allocations,
+                'backgroundColor': 'skyblue'
+            },
+            {
+                'label': 'Allocation for Max returns',
+                'data': max_allocations,
+                'backgroundColor': 'lightgreen'
+            }
+        ]
+    }
+
+    return pie_chart_data, bar_chart_data
+
 
 async def make_suggestions(investmentPersonality,clientName,financial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
     try:
@@ -2907,42 +3454,44 @@ async def make_suggestions(investmentPersonality,clientName,financial_file="data
             min_allocations = normalize_allocations(min_allocations)
             max_allocations = normalize_allocations(max_allocations)
 
-            # Update Bar Chart Data
-            bar_chart_data = {
-                'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-                'datasets': [{
-                    'label': 'Allocation for Min returns',
-                    'data': min_allocations,
-                    'backgroundColor': 'skyblue'
-                },
-                {
-                    'label': 'Allocation for Max returns',
-                    'data': max_allocations,
-                    'backgroundColor': 'lightgreen'
-                }]
-            }
-
-            # Similar changes can be made for the Pie Chart Data:
-            all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-            num_labels = len(all_labels)
-            max_allocations_for_pie = normalize_allocations(
-                [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-                [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-            )
+            bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
             
-            # Generate colors based on the number of labels
-            dynamic_colors = generate_colors(num_labels)
+            # # Update Bar Chart Data
+            # bar_chart_data = {
+            #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+            #     'datasets': [{
+            #         'label': 'Allocation for Min returns',
+            #         'data': min_allocations,
+            #         'backgroundColor': 'skyblue'
+            #     },
+            #     {
+            #         'label': 'Allocation for Max returns',
+            #         'data': max_allocations,
+            #         'backgroundColor': 'lightgreen'
+            #     }]
+            # }
 
-            # Update Pie Chart Data
-            pie_chart_data = {
-                'labels': all_labels,
-                'datasets': [{
-                    'label': 'Investment Allocation',
-                    'data': max_allocations_for_pie,
-                    'backgroundColor': dynamic_colors,
-                    'hoverOffset': 4
-                }]
-            }
+            # # Similar changes can be made for the Pie Chart Data:
+            # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+            # num_labels = len(all_labels)
+            # max_allocations_for_pie = normalize_allocations(
+            #     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+            #     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+            # )
+            
+            # # Generate colors based on the number of labels
+            # dynamic_colors = generate_colors(num_labels)
+
+            # # Update Pie Chart Data
+            # pie_chart_data = {
+            #     'labels': all_labels,
+            #     'datasets': [{
+            #         'label': 'Investment Allocation',
+            #         'data': max_allocations_for_pie,
+            #         'backgroundColor': dynamic_colors,
+            #         'hoverOffset': 4
+            #     }]
+            # }
             
             
             # Prepare the data for the line chart with inflation adjustment
@@ -3099,7 +3648,7 @@ def generate_investment_suggestions():
         
         logging.info(f"Personality of the user is: {personality}")
         
-        clientName = "Emilly Watts"
+        clientName = "Rohit Sharma" #"Emilly Watts"
         suggestions = asyncio.run(generate_investment_suggestions_for_investor(personality, clientName, financial_data, file_path))
         if "Error" in suggestions:
             raise Exception(suggestions)
@@ -3110,49 +3659,66 @@ def generate_investment_suggestions():
         formatSuggestions = markdown_to_text(htmlSuggestions)
         answer = markdown_table_to_html(formatSuggestions)
         print(answer)
+        
+        # need to change the data extraction process : 
         data_extracted = extract_numerical_data(suggestions)
+        
+        min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                        [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+        max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                        [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
 
-        # Fixing pie and bar chart generation
-        growth_investments = data_extracted.get('Growth-Oriented Investments', {})
-        conservative_investments = data_extracted.get('Conservative Investments', {})
-
-        # Generate normalized allocations
-        min_allocations = [int(growth_investments[label]['min'].strip('%')) for label in growth_investments] + \
-                        [int(conservative_investments[label]['min'].strip('%')) for label in conservative_investments]
-        max_allocations = [int(growth_investments[label]['max'].strip('%')) for label in growth_investments] + \
-                        [int(conservative_investments[label]['max'].strip('%')) for label in conservative_investments]
-
-        # Normalize
+        # Normalize allocations
         min_allocations = normalize_allocations(min_allocations)
         max_allocations = normalize_allocations(max_allocations)
 
-        # Bar Chart
-        bar_chart_data = {
-            'labels': list(growth_investments.keys()) + list(conservative_investments.keys()),
-            'datasets': [
-                {'label': 'Allocation for Min returns', 'data': min_allocations, 'backgroundColor': 'skyblue'},
-                {'label': 'Allocation for Max returns', 'data': max_allocations, 'backgroundColor': 'lightgreen'}
-            ]
-        }
+        bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
+        
+        # Sometimes Generating Pie Charts and Bar charts : 
+        # data_extracted = extract_numerical_data(suggestions)
 
-        # Pie Chart
-        all_labels = list({**growth_investments, **conservative_investments}.keys())
-        num_labels = len(all_labels)
-        max_allocations_for_pie = normalize_allocations(
-            [int(growth_investments.get(label, {}).get('max', '0').strip('%')) for label in growth_investments] +
-            [int(conservative_investments.get(label, {}).get('max', '0').strip('%')) for label in conservative_investments]
-        )
+        # # Fixing pie and bar chart generation
+        # growth_investments = data_extracted.get('Growth-Oriented Investments', {})
+        # conservative_investments = data_extracted.get('Conservative Investments', {})
 
-        # Normalize to 100% for pie chart
-        total = sum(max_allocations_for_pie)
-        max_allocations_for_pie = [(value / total) * 100 for value in max_allocations_for_pie]
+        # # Generate normalized allocations
+        # min_allocations = [int(growth_investments[label]['min'].strip('%')) for label in growth_investments] + \
+        #                 [int(conservative_investments[label]['min'].strip('%')) for label in conservative_investments]
+        # max_allocations = [int(growth_investments[label]['max'].strip('%')) for label in growth_investments] + \
+        #                 [int(conservative_investments[label]['max'].strip('%')) for label in conservative_investments]
 
-        dynamic_colors = generate_colors(num_labels)
-        pie_chart_data = {
-            'labels': all_labels,
-            'datasets': [{'label': 'Investment Allocation', 'data': max_allocations_for_pie, 'backgroundColor': dynamic_colors, 'hoverOffset': 4}]
-        }
+        # # Normalize
+        # min_allocations = normalize_allocations(min_allocations)
+        # max_allocations = normalize_allocations(max_allocations)
 
+        # # Bar Chart
+        # bar_chart_data = {
+        #     'labels': list(growth_investments.keys()) + list(conservative_investments.keys()),
+        #     'datasets': [
+        #         {'label': 'Allocation for Min returns', 'data': min_allocations, 'backgroundColor': 'skyblue'},
+        #         {'label': 'Allocation for Max returns', 'data': max_allocations, 'backgroundColor': 'lightgreen'}
+        #     ]
+        # }
+
+        # # Pie Chart
+        # all_labels = list({**growth_investments, **conservative_investments}.keys())
+        # num_labels = len(all_labels)
+        # max_allocations_for_pie = normalize_allocations(
+        #     [int(growth_investments.get(label, {}).get('max', '0').strip('%')) for label in growth_investments] +
+        #     [int(conservative_investments.get(label, {}).get('max', '0').strip('%')) for label in conservative_investments]
+        # )
+
+        # # Normalize to 100% for pie chart
+        # total = sum(max_allocations_for_pie)
+        # max_allocations_for_pie = [(value / total) * 100 for value in max_allocations_for_pie]
+
+        # dynamic_colors = generate_colors(num_labels)
+        # pie_chart_data = {
+        #     'labels': all_labels,
+        #     'datasets': [{'label': 'Investment Allocation', 'data': max_allocations_for_pie, 'backgroundColor': dynamic_colors, 'hoverOffset': 4}]
+        # }
+    #############################################################################################
+    
         print(f"Bar chart data: {bar_chart_data}")
         print(f"Pie chart data: {pie_chart_data}")
 
@@ -3750,7 +4316,7 @@ def order_placed():
 
         # Load existing data from S3 if available
         try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
             client_transactions = json.loads(response['Body'].read().decode('utf-8'))
             print(f"Loaded existing transactions for client {client_id}")
         except s3.exceptions.NoSuchKey:
@@ -3804,7 +4370,7 @@ def order_placed():
 
         # Save the updated data back to S3
         updated_data = json.dumps(client_transactions, indent=4)
-        s3.put_object(Bucket=S3_bucket_name, Key=order_list_key, Body=updated_data)
+        s3.put_object(Bucket=S3_BUCKET_NAME, Key=order_list_key, Body=updated_data)
         print(f"Saved updated transactions for client {client_id} in S3 bucket.")
 
         return jsonify({"message": "Order placed successfully", "status": 200})
@@ -3993,7 +4559,7 @@ def show_order_list():
 
         try:
             # Fetch the file from the S3 bucket
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
             file_content = response['Body'].read().decode('utf-8')
 
             # Parse the file content as JSON
@@ -4032,7 +4598,7 @@ def portfolio():
 
         #  Load existing data of order list from S3 if available
         try:
-            response = s3.get_object(Bucket=S3_bucket_name, Key=order_list_key)
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
             client_orders = json.loads(response['Body'].read().decode('utf-8'))
             print(f"client_orders {client_orders}")
 
@@ -4201,7 +4767,7 @@ def portfolio():
             
         try:
             s3.put_object(
-                Bucket=S3_bucket_name,
+                Bucket=S3_BUCKET_NAME,
                 # Key=f"responses/{clientId}_response.json",
                 Key=f"{portfolio_list_folder}/{client_id}.json",
                 Body=json.dumps(portfolio_response),
