@@ -288,7 +288,7 @@ def email_verification():
         print(f"Processing email verification for: {email}")
 
         # Generate the sign-up link
-        sign_up_link = "http://localhost:3000/signUp"
+        sign_up_link = f"http://localhost:3000/signUp/{email}"
 
         # Create the email message
         msg = Message(
@@ -401,12 +401,24 @@ def forgot_password():
         reset_code = random.randint(100000, 999999)
 
         # Send the reset code via email
-        msg = Message("Password Reset Code", recipients=[email])
-        msg.body = f"Your password reset code is: {reset_code}"
+        msg = Message(
+            "Reset Your Password",
+            sender="your_email@gmail.com",
+            recipients=[email]
+        )
+        msg.body = (
+            f"Hello,\n\n"
+            f"You are about to Reset Your Password.Use the following Reset Code to Reset Your Password:\n\n"
+            f"{reset_code}\n\n"
+            f"If you did not request this verification, please ignore this email.\n\n"
+            f"Thank you."
+        )
+        print(f"Sending email to: {email}\nContent: {msg.body}")
+        
         mail.send(msg)
 
         # Save the reset code and timestamp in S3
-        data = {"email": email, "reset_code": reset_code, "timestamp": str(datetime.now())}
+        data = {"email": email, "reset_code": reset_code, "timestamp": str(datetime.datetime.now())}
         upload_to_s3(data, f"password_resets/{email}.json")
 
         return jsonify({"message": "Password reset code sent successfully"}), 200
@@ -420,10 +432,13 @@ def reset_password():
         email = request.json.get('email')
         reset_code = request.json.get('reset_code')
         new_password = request.json.get('new_password')
-
+        # confirm_password = request.json.get('confirm_password')
         if not all([email, reset_code, new_password]):
             return jsonify({"message": "Email, reset code, and new password are required"}), 400
 
+        # if new_password != confirm_password:
+        #     return jsonify({"message": "Passwords do not match"}), 400
+        
         # Fetch reset data from S3
         reset_data = download_from_s3(f"password_resets/{email}.json")
         if not reset_data:
