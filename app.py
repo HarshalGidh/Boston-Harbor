@@ -69,18 +69,19 @@ from langchain.tools import BaseTool, StructuredTool, tool
 
 
 import boto3
+load_dotenv()
 
 # AWS keys
-aws_access_key = "AKIA6NLHKOWCE7UXAPLX"
-aws_secret_key = "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"
-S3_BUCKET_NAME = "boston-harbor-data"  # bucket name
-# wealth_advisor_folder = "wealth_advisor_folder/"
-client_summary_folder = "client_summary_folder/"  # bucket name
-suggestions_folder = "suggestions_folder/"  # bucket name
-order_list_folder = "order_list_folder/"  # bucket name
-portfolio_list_folder = "portfolio_list_folder/"  # bucket name
-personality_assessment_folder = "personality_assessment_folder/"  # bucket name
-login_folder = "login_folder/"
+aws_access_key = os.getenv('aws_access_key')
+aws_secret_key = os.getenv('aws_secret_key')
+S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+client_summary_folder = os.getenv('client_summary_folder') 
+suggestions_folder = os.getenv('suggestions_folder') 
+order_list_folder = os.getenv('order_list_folder')
+portfolio_list_folder = os.getenv('portfolio_list_folder') 
+personality_assessment_folder = os.getenv('personality_assessment_folder') 
+login_folder = os.getenv('login_folder')
+
 
 # Connecting to Amazon S3
 s3 = boto3.client(
@@ -115,7 +116,6 @@ list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 
 
 
-load_dotenv()
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
 from flask import Flask, request, jsonify
@@ -808,7 +808,7 @@ def markdown_to_text(md): # og solution code
 
 import docx
 
-# # GET Method for me POST method for Frontend
+# # st method
 def extract_responses_from_docx(personality_file): # Using text responses parsing
     """
     Extracts responses from a Word document (.docx) where the selected answers are listed as text after the options.
@@ -1022,6 +1022,7 @@ async def load_vector_db(file_path): # # GET Method
 
 
 # investment_personality = "Moderate Investor"
+# Retrieval_Chain and Promot Template for Suggestions :
 async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthly_investment=10000,investment_period=3): # GET Method
     """
     Create a retrieval chain using the provided retriever.
@@ -1501,7 +1502,7 @@ async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthl
 import json
 import io
 
-
+# Process_Documents :
 async def process_document(file_path): # GET Method
     try:
         print("Processing the document")
@@ -1627,7 +1628,9 @@ async def validate_document_content(text, tables):
 
     return client_name, errors
 
+####################################################################################################################################
 
+################################################## Extract Numerical Data for Pie Chart, Bar Graph and Line Chart #####################################
 
 import re
 from collections import defaultdict
@@ -1728,6 +1731,8 @@ import re
 from collections import defaultdict
 import re
 from collections import defaultdict
+
+# extract numerical data from responses :
 
 def extract_numerical_data(response):
     data = defaultdict(dict)
@@ -1853,7 +1858,8 @@ def normalize_allocations(allocations):
 
 # # Updated Line Chart 
 import datetime  # Import the datetime module to get the current year
-import datetime  # Import the datetime module to get the current year
+
+# line chart data code :
 
 def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
     try:
@@ -2130,6 +2136,7 @@ def prepare_combined_line_chart_data(data_extracted, initial_investment, inflati
 
 
 import random
+# generate colors for pie chart :
 
 def generate_colors(n):
     """
@@ -2279,7 +2286,7 @@ def is_float(value):
         return False
 
 
-
+# st method : 
 def plot_assets_liabilities_pie_chart(assets, liabilities, threshold=50): # best plot 
     """
     Plots separate pie charts for assets and liabilities. If there are any categories
@@ -2415,7 +2422,7 @@ def save_data_to_file(form_data):
     # st.success(f"Form data saved to {file_path}")
     print(f"Form data saved to {file_path}")
     
-
+# st method :
 def client_form():
     st.title("Client Details Form")
 
@@ -2534,6 +2541,7 @@ def client_form():
             st.success("Data submitted!\nThank You for filling the form !\nReturning to main portal...")
 
 import math
+# calculate compunded amount :
 def calculate_compounded_amount(principal, rate, time):
     """
     Calculates the compounded amount using the formula:
@@ -2592,6 +2600,7 @@ def calculate_totals(assets, liabilities):
 
     return total_assets, rounded_liabilities #total_liabilities
 
+# st method :
 def create_financial_summary_table(assets, liabilities):
     # Filter out items with zero value
     filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
@@ -2635,7 +2644,7 @@ def create_financial_summary_table(assets, liabilities):
     st.subheader("Liabilities")
     st.table(liabilities_df.style.format({'Amount ($)': '{:,.2f}'}))
 
-
+# st method :
 def plot_bar_graphs(assets, liabilities):
     # Filter out items with zero values
     filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
@@ -2762,6 +2771,7 @@ def preload_trie():
         trie.insert(name.lower(), client_id)  # Insert in lowercase for case-insensitive search
     return trie
 
+# generate suggestions :
 async def generate_investment_suggestions_for_investor(investment_personality,clientName,financial_data,financial_file,monthly_investment=10000,investment_period=3): # # GET Method for py , for front end its Post API
     
     # retriever = asyncio.run(load_vector_db("uploaded_file"))
@@ -2836,7 +2846,8 @@ async def generate_investment_suggestions_for_investor(investment_personality,cl
         return jsonify("response is not generated by llm model"),500
         # st.error("Failed to create the retrieval chain. Please upload a valid document.")
 
-
+####################################################################################################################
+# app begining :
 # CORS(app,resources={r"/api/*":{"origins":"*"}})
 # CORS(app)
 
@@ -2905,7 +2916,9 @@ import random
 # # Save details in a Word file
 import docx
 import os
+
 # #Curr version :
+
 # Financial Form
 def save_to_word_file(data, file_name):
     doc = docx.Document()
@@ -3011,7 +3024,7 @@ def save_to_word_file(data, file_name):
     file_name = os.path.join("data", file_name)
     doc.save(f"{file_name}.docx")
 
-
+# store client data in aws :
 @app.route('/submit-client-data', methods=['POST'])
 def submit_client_data():
     try:
@@ -3074,6 +3087,7 @@ def submit_client_data():
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
+# get all client data :
 @app.route('/get-all-client-data', methods=['GET'])
 def get_all_client_data():
     try:
@@ -3108,7 +3122,7 @@ def get_all_client_data():
     except Exception as e:
         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
 
-
+# get client data by client id :
 @app.route('/get-client-data-by-id', methods=['GET'])
 def get_client_data():
     try:
@@ -3140,7 +3154,7 @@ def get_client_data():
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
-
+# investor personality assessment :
 @app.route('/investor-personality-assessment', methods=['POST'])
 async def investor_personality_assessment():
     try:
@@ -3310,6 +3324,8 @@ def get_client_data_by_id():
         return jsonify({'message': 'Internal Server Error'}), 500
     
 
+##################################################################################################################################
+
 import logging
 # global investmentPersonality  # Global Variable
 # investmentPersonality = ""
@@ -3373,6 +3389,7 @@ import logging
     
 #     return pie_chart_data, bar_chart_data
 
+# generate pie chart data and bar chart data :
 def generate_chart_data(data):
     # Pie Chart Data
     labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
@@ -3418,142 +3435,443 @@ def generate_chart_data(data):
     return pie_chart_data, bar_chart_data
 
 
-async def make_suggestions(investmentPersonality,clientName,financial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
+#new retrieval_chain code :
+# async def generate_prompt_template(retriever,investmentPersonality,clientName,client_data):
+#     try:
+#         # global investment_personality #,summary
+        
+#         print(f"{investmentPersonality}\n {clientName}\n {client_data}")
+        
+        
+#         llm = ChatGoogleGenerativeAI(
+#             #model="gemini-pro",
+#             model = "gemini-1.5-flash",
+#             temperature = 0.45,
+#             # temperature=0.7,
+#             top_p=0.85,
+#             google_api_key=GOOGLE_API_KEY
+#         )
+#         # New Template 
+#         investmentPersonality = str(investmentPersonality)
+#         print(investmentPersonality)
+#         # clientName = str(clientName)
+#         print(clientName)
+#         context = str(clientName)
+        
+        
+#         # New Prompt Template :
+        
+#         prompt_template = """ 
+#                                 You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
+#                                 Use the following instructions to ensure consistent output:
+#                                 ---
+
+#                                 ### Required Output Format:
+                                
+#                                 #### Client Financial Details:
+#                                 - **Client Name**: """ + clientName + f"""
+#                                 - **Assets**:
+#                                 - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+#                                 - **Liabilities**:
+#                                 - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+#                                 - **Other Details**:
+#                                 - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
+#                                 - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
+#                                 - **Investment Period** `Z years`
+                                
+#                                 #### Investment Allocation:
+#                                 Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+#                                 - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+#                                 - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+#                                 - **Target**: Describe the purpose of the investment.
+#                                 - **How to Invest**: Provide instructions on how to invest in this asset.
+#                                 - **Where to Invest**: Specify platforms or tools for making the investment.
+
+#                                 **Example**:
+#                                 **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `10% - 15%`
+#                                 - **Mutual Funds**: `10% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `10% - 20%`
+#                                 - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
+#                                 - *How to Invest*: Provide information on how to invest in which market 
+#                                 - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
+                                
+#                                 **Conservative Investments (Minimum X% - Maximum Y%) **:
+#                                 - **High-Yield Savings Account**: `30% - 40%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Provide information on how to invest.
+#                                 - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `X% - Y%`
+#                                 - **Maximum Expected Annual Return**: `X% - Y%`
+#                                 - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Time Horizon**: `Z years`
+
+#                                 ---
+
+#                                 ### Example Output:
+                                
+#                                 #### Client Financial Details:
+#                                 | Asset Type          | Current Value ($) | Annual Contribution ($) |
+#                                 |----------------------|-------------------|--------------------------|
+#                                 | 401(k), 403(b), 457  | 300               | 15                       |
+#                                 | Traditional IRA      | 200               | 15                       |
+#                                 | Roth IRA             | 500               | 28                       |
+#                                 | Cash/Bank Accounts   | 500,000           | 30,000                   |
+#                                 | Real Estate          | 1,000,000         | -                        |
+#                                 | Total Assets Value   | 1,501,000         | -                        |
+
+#                                 | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+#                                 |---------------------|-------------|--------------------|----------------------|
+#                                 | Mortgage            | 1,000       | 10                | 100                  |
+#                                 | Credit Card         | 400         | 8                 | 400                  |
+#                                 | Other Loans         | 500         | 6                 | 100                  |
+#                                 | Total Liabilities   | 1,900       | -                 | -                    |
+                                
+#                                 | Investrment Period | 3 years |
+                                
+#                                 **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `5% - 10%`
+#                                 - **Mutual Funds**: `5% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `5% - 10%`
+#                                 - *Target*: Long-term growth potential aligned with the market.
+#                                 - *How to Invest*: Purchase low-cost index funds.
+#                                 - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+
+#                                 **Conservative Investments (Minimum 40% - Maximum 70%)**:
+#                                 - **High-Yield Savings Account**: `20% - 30%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Deposit funds into an FDIC-insured account.
+#                                 - *Where to Invest*: Ally Bank, Capital One 360.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `4% - 6%`
+#                                 - **Maximum Expected Annual Return**: `8% - 15%`
+#                                 - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+#                                 - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
+#                                 - **Time Horizon**: `3 years`
+
+#                                 ---
+
+#                                 Ensure the output strictly follows this structure.
+
+
+#                             ### Rationale for Investment Suggestions:
+#                             Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+
+#                             ---
+#                             <context>
+#                             {context}
+#                             </context>
+#                             Question: {input}
+
+#         """
+
+#         print(f"Investment Personality :{investmentPersonality}")
+        
+                
+
+#         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
+
+#         document_chain = create_stuff_documents_chain(llm, llm_prompt)
+        
+#         combine_docs_chain = None  
+
+#         if retriever is not None :  
+#             retriever_chain = create_retrieval_chain(retriever,document_chain) 
+#             # print(retriever_chain)
+#             return retriever_chain
+#         else:
+#             print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
+#             return None
+
+#     except Exception as e:
+#         print(f"Error in creating chain: {e}")
+#         return None
+
+########################################################################################################
+
+
+
+# Create Vector DB for JSON Data from cloud :
+from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+
+async def load_vector_db_from_json(json_data):
     try:
-        try:
-            # financial_file = financial_file
-            print(f"Processing the File for the client: {clientName} and the file : {financial_file}")
-            # financial_data = asyncio.run(process_document(financial_file))
-            
-            financial_data = await process_document(f"data\{financial_file}")
-            
-            print(f"Data passed : {financial_data}")
-            
-            financial_file = f"data\{financial_file}"
-            
-            print(f"Finished processing the File for the client : {financial_file}")
-            
-            # suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_file,monthly_investment,investment_period)
-            
-            suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName,financial_data,financial_file,monthly_investment,investment_period)
-            
-            
-            # print(f"Finished processing the suggestions : {suggestions}")
-           
-            htmlSuggestions = markdown.markdown(suggestions)
-            # ans = markdown_to_readable_text(htmlSuggestions)
-            # formatSuggestions = ans
-            # formatSuggestions = markdown_to_text(htmlSuggestions)
-            # print(f"HTML Suggestions: {htmlSuggestions}")
-            formatSuggestions = markdown.markdown(htmlSuggestions)
-            
-            # ---------------------------------=----------
-            # htmlSuggestions = markdown.markdown(suggestions)
-            # htmlSuggestions = markdown2.markdown(suggestions)
-            
-            # print(f"HTML Suggestions: {htmlSuggestions}")
-            
-            # formatSuggestions = markdown_to_text(suggestions)
-            
-            # print(f"The suggestions generated for the client are :\n {formatSuggestions}")
-            
-            # need to change the data extraction process : 
-            data_extracted = extract_numerical_data(suggestions)
-            
-            min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                            [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-            max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-                            [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
-
-            # Normalize allocations
-            min_allocations = normalize_allocations(min_allocations)
-            max_allocations = normalize_allocations(max_allocations)
-
-            bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
-            
-            # # Update Bar Chart Data
-            # bar_chart_data = {
-            #     'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-            #     'datasets': [{
-            #         'label': 'Allocation for Min returns',
-            #         'data': min_allocations,
-            #         'backgroundColor': 'skyblue'
-            #     },
-            #     {
-            #         'label': 'Allocation for Max returns',
-            #         'data': max_allocations,
-            #         'backgroundColor': 'lightgreen'
-            #     }]
-            # }
-
-            # # Similar changes can be made for the Pie Chart Data:
-            # all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-            # num_labels = len(all_labels)
-            # max_allocations_for_pie = normalize_allocations(
-            #     [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-            #     [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-            # )
-            
-            # # Generate colors based on the number of labels
-            # dynamic_colors = generate_colors(num_labels)
-
-            # # Update Pie Chart Data
-            # pie_chart_data = {
-            #     'labels': all_labels,
-            #     'datasets': [{
-            #         'label': 'Investment Allocation',
-            #         'data': max_allocations_for_pie,
-            #         'backgroundColor': dynamic_colors,
-            #         'hoverOffset': 4
-            #     }]
-            # }
-            
-            
-            # Prepare the data for the line chart with inflation adjustment
-            initial_investment = 10000
-            # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
-            combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-            print(f"\nThe combined chart data is : {combined_chart_data}")
-            
-            # return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
-            
-            print(f"Format suggestions : {formatSuggestions}")
-            
-            return formatSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
-            
-            
-        except Exception as e:
-            logging.info(f"Error occurred while generating investment suggestions: {e}")
-            return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
-    
-
+        print("Loading vector database from JSON data...")
         
-        # return jsonify({
-        #     "status": 200,
-        #     "message": "Success",
-        #     "investmentSuggestions": htmlSuggestions,
-        #     "pieChartData": pie_chart_data,
-        #     "barChartData": bar_chart_data,
-        #     "compoundedChartData":combined_chart_data
-        # }), 200
-        
+        # Step 1: Convert JSON to a list of Documents
+        documents = []
+        for key, value in json_data.items():
+            if isinstance(value, dict):
+                nested_text = "\n".join([f"{nested_key}: {nested_value}" for nested_key, nested_value in value.items()])
+                documents.append(Document(page_content=f"{key}:\n{nested_text}"))
+            elif isinstance(value, list):
+                list_text = "\n".join([str(item) for item in value])
+                documents.append(Document(page_content=f"{key}:\n{list_text}"))
+            else:
+                documents.append(Document(page_content=f"{key}: {value}"))
+
+        print(f"Prepared {len(documents)} documents for FAISS.")
+
+        # Step 2: Split documents into chunks
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        text_chunks = text_splitter.split_documents(documents)
+
+        # Step 3: Embed and load into FAISS
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
+        vector_store = FAISS.from_documents(text_chunks, embeddings)
+
+        print("Vector database loaded successfully.")
+        return vector_store.as_retriever(search_kwargs={"k": 3})  # Top-3 results
     except Exception as e:
-        logging.error(f"Error processing personality assessment: {e}")
-        return jsonify({'message': 'Error in generating suggestions with personality'}), 500
-        
+        print(f"Error loading vector database: {e}")
+        return None
 
+
+
+
+from langchain.prompts.chat import ChatPromptTemplate
+from langchain.chains import StuffDocumentsChain, create_retrieval_chain
+from langchain.schema.runnable import RunnableConfig, RunnableSequence
+# from langchain.chains import LLMChain
+# from langchain.schema.runnable import RunnableMap
+# from langchain.schema.runnable import RunnableSequence
+
+async def generate_prompt_with_retriever(retriever, investmentPersonality, clientName):
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            temperature=0.45,
+            top_p=0.85,
+            google_api_key=GOOGLE_API_KEY
+        )
+        clientName = clientName
+        # Define the prompt
+        prompt_template = """ 
+                                You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
+                                Use the following instructions to ensure consistent output:
+                                ---
+
+                                ### Required Output Format:
+                                
+                                #### Client Financial Details:
+                                - **Client Name**: """ + clientName + """
+                                - **Assets**:
+                                - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+                                - **Liabilities**:
+                                - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+                                - **Other Details**:
+                                - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
+                                - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
+                                - **Investment Period** `Z years`
+                                
+                                #### Investment Allocation:
+                                Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+                                - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+                                - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+                                - **Target**: Describe the purpose of the investment.
+                                - **How to Invest**: Provide instructions on how to invest in this asset.
+                                - **Where to Invest**: Specify platforms or tools for making the investment.
+
+                                **Example**:
+                                **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
+                                - **Stocks**: `20% - 30%`
+                                - **ETFs**: `10% - 15%`
+                                - **Mutual Funds**: `10% - 20%`
+                                - **Cryptocurrency**: ` 5% - 10%`
+                                - **Real Estates or REITS**: `10% - 20%`
+                                - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
+                                - *How to Invest*: Provide information on how to invest in which market 
+                                - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
+                                
+                                **Conservative Investments (Minimum X% - Maximum Y%) **:
+                                - **High-Yield Savings Account**: `30% - 40%`
+                                - **Bonds**: `10% - 20%`
+                                - **Commodities**: `5% - 10%`
+                                - **Cash**: `5% - 10%`
+                                - *Target*: Maintain liquidity for emergencies.
+                                - *How to Invest*: Provide information on how to invest.
+                                - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `X% - Y%`
+                                - **Maximum Expected Annual Return**: `X% - Y%`
+                                - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+                                - **Time Horizon**: `Z years`
+
+                                ---
+
+                                ### Example Output:
+                                
+                                #### Client Financial Details:
+                                | Asset Type          | Current Value ($) | Annual Contribution ($) |
+                                |----------------------|-------------------|--------------------------|
+                                | 401(k), 403(b), 457  | 300               | 15                       |
+                                | Traditional IRA      | 200               | 15                       |
+                                | Roth IRA             | 500               | 28                       |
+                                | Cash/Bank Accounts   | 500,000           | 30,000                   |
+                                | Real Estate          | 1,000,000         | -                        |
+                                | Total Assets Value   | 1,501,000         | -                        |
+
+                                | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+                                |---------------------|-------------|--------------------|----------------------|
+                                | Mortgage            | 1,000       | 10                | 100                  |
+                                | Credit Card         | 400         | 8                 | 400                  |
+                                | Other Loans         | 500         | 6                 | 100                  |
+                                | Total Liabilities   | 1,900       | -                 | -                    |
+                                
+                                | Investrment Period | 3 years |
+                                
+                                **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
+                                - **Stocks**: `20% - 30%`
+                                - **ETFs**: `5% - 10%`
+                                - **Mutual Funds**: `5% - 20%`
+                                - **Cryptocurrency**: ` 5% - 10%`
+                                - **Real Estates or REITS**: `5% - 10%`
+                                - *Target*: Long-term growth potential aligned with the market.
+                                - *How to Invest*: Purchase low-cost index funds.
+                                - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+
+                                **Conservative Investments (Minimum 40% - Maximum 70%)**:
+                                - **High-Yield Savings Account**: `20% - 30%`
+                                - **Bonds**: `10% - 20%`
+                                - **Commodities**: `5% - 10%`
+                                - **Cash**: `5% - 10%`
+                                - *Target*: Maintain liquidity for emergencies.
+                                - *How to Invest*: Deposit funds into an FDIC-insured account.
+                                - *Where to Invest*: Ally Bank, Capital One 360.
+
+                                #### Returns Overview:
+                                - **Minimum Expected Annual Return**: `4% - 6%`
+                                - **Maximum Expected Annual Return**: `8% - 15%`
+                                - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+                                - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
+                                - **Time Horizon**: `3 years`
+
+                                ---
+
+                                Ensure the output strictly follows this structure.
+
+
+                            ### Rationale for Investment Suggestions:
+                            Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+
+                            ---
+                            <context>
+                            {context}
+                            </context>
+                            Question: {input}
+
+        """
+                
+        
+        print("Prompt Created Successfully")
+                
+
+        llm_prompt = ChatPromptTemplate.from_template(prompt_template)
+
+        document_chain = create_stuff_documents_chain(llm, llm_prompt)
+        
+        combine_docs_chain = None  
+
+        if retriever is not None :  
+            retriever_chain = create_retrieval_chain(retriever,document_chain) 
+            print("\nRetrieval chain created successfully\n")
+            print(retriever_chain)
+            return retriever_chain
+        else:
+            print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
+            return None
+
+    except Exception as e:
+        print(f"Error in generating prompt or retrieval chain: {e}")
+        return None
+
+async def make_suggestions_using_clientid(investmentPersonality, clientName, client_data):
+    try:
+        print(f"Processing client data for {clientName}.")
+        
+        # Load vector database
+        retriever = await load_vector_db_from_json(client_data)
+        if not retriever:
+            raise Exception("Failed to load vector database.")
+
+        print(f"Created Retriever : {retriever}")
+        # Generate retriever-based prompt
+        retrieval_chain = await generate_prompt_with_retriever(retriever, investmentPersonality, clientName)
+        if not retrieval_chain:
+            raise Exception("Failed to create retrieval chain.")
+
+        # Use the chain to generate a response
+        query = f"""Generate financial suggestions for the client {clientName} based on their investment personality: {investmentPersonality} 
+                tailored to their Financial Goals and Considering their Financial Situations. Suggest 6-7 assets per category with 6-7 examples per asset."""
+        
+        
+        # response = retrieval_chain.invoke(query)
+        response = retrieval_chain.invoke({"input": query})
+        answer = response['answer']
+        print("Suggestions generated successfully.")
+        
+        # Extract Data from Response
+
+        data_extracted = extract_numerical_data(answer)
+        
+        min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                        [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+        max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                        [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+
+        # Normalize allocations
+        min_allocations = normalize_allocations(min_allocations)
+        max_allocations = normalize_allocations(max_allocations)
+
+        bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
+    
+        print(f"Bar chart data: {bar_chart_data}")
+        print(f"Pie chart data: {pie_chart_data}")
+
+        
+        # print(f"Pie Chart Data is : {pie_chart_data}")
+        # Prepare the data for the line chart with inflation adjustment
+        initial_investment = 10000
+        combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+        print(f"\nThe combined chart data is: {combined_chart_data}")
+        
+        print(f"Suggestions : {answer}")
+        
+        return answer, pie_chart_data, bar_chart_data, combined_chart_data
+            
+    except Exception as e:
+        print(f"Error generating suggestions: {e}")
+        return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 500
+
+
+        
+# api for generating suggestions with client id :
 @app.route('/personality-assessment', methods=['POST'])
 def personality_selected():
     try:
         data = request.json
-        clientName = data.get('clientName')
         try :
-            # clientId = data.get('client_id')
-            clientId = data.get('clientId')
             investmentPersonality = data.get('investmentPersonality') # investment_personality
-            financial_file = f"{clientId}.docx"
-            # financial_file = f"data\{clientId}.docx" # data\EW2400.docx
-            print(f"The clients ClientName is : {clientName} and their ClientId is : {clientId}")
+            clientName = data.get('clientName')
+            print(f"The clients ClientName is : {clientName} ")
             print(f"InvestmentPersonality received is : {investmentPersonality}")
             logging.info('Recieved Values')
             
@@ -3561,50 +3879,63 @@ def personality_selected():
             logging.info(f"Error occurred while retrieving client id: {e}")
             return jsonify({'message': f'Error occurred while retrieving client id: {e}'}), 400
 
+        # Retrieve Client Financial Form Information :
         try:
-            # monthly_investment= data.get('monthly_investment') #10000
-            # investment_period= data.get('investment_period')  #3
-            monthly_investment= 10000
-            investment_period= 3
-            formatSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
-            answer = markdown_table_to_html(formatSuggestions)
-            print(answer)
-            # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
+            # Retrieve client_id from query parameters
+            clientId = data.get('clientId')
+            print(f"Received Client Id : {clientId}")
+            # client_id = request.args.get('clientId')
             
+            # Validate the client_id
+            if not clientId:
+                return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+            # Define the S3 key for the object
+            s3_key = f"{client_summary_folder}client-data/{clientId}.json"
+
+            # Retrieve the object from S3
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                # Decode and parse the JSON data
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Received Client Data :\n{client_data}")
+                # return jsonify({
+                #     'message': 'Client data retrieved successfully.',
+                #     'data': client_data
+                # }), 200
+                
+                result,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions_using_clientid(investmentPersonality,
+                                                                                                                   clientName,client_data))
+                
+                htmlSuggestions = markdown.markdown(result)
+                logging.info(f"Suggestions for investor: \n{result}")
+                
+                formatSuggestions = markdown_to_text(htmlSuggestions)
+                answer = markdown_table_to_html(formatSuggestions)
+                print(answer)
+               
+                # Return the Results :
+                return jsonify({
+                    "status": 200,
+                    "message": "Success",
+                    "investmentSuggestions": answer, #formatSuggestions,
+                    "pieChartData": pie_chart_data,
+                    "barChartData": bar_chart_data,
+                    "compoundedChartData":combined_chart_data
+                }), 200
+                
+            except s3.exceptions.NoSuchKey:
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            except Exception as e:
+                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
         except Exception as e:
-            logging.info(f"Error occurred while processing investment data: {e}")
-            return jsonify({'message': f'Error occurred while processing investment data: {e}'}), 400
-        
-        # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName))
-        
-        # return jsonify({
-        #     "status": 200,
-        #     "message": "Success",
-        #     "investmentSuggestions": htmlSuggestions,
-        #     "pieChartData": pie_chart_data,
-        #     "barChartData": bar_chart_data,
-        #     "compoundedChartData":combined_chart_data
-        # }), 200
-        return jsonify({
-            "status": 200,
-            "message": "Success",
-            "investmentSuggestions": answer, #formatSuggestions,
-            "pieChartData": pie_chart_data,
-            "barChartData": bar_chart_data,
-            "compoundedChartData":combined_chart_data
-        }), 200
-                    
-                    
-        # return jsonify({'message':'Sab thik'}),200
-        
-        # if investmentPersonality == 'aggressiveInvestor':
-        #     pass
+            return jsonify({'message': f"An error occurred: {e}"}), 500
     
     except Exception as e:
-        logging.info(f"Error in personality assessment: {e}")
-        print(f"Error occured in Investor Personality while collecting data :\n{e}")
-        return jsonify({'message': 'Internal Server Error in Investor Personality'}), 500
-
+        print(f"An error occurred while requesting Data: {e}")
+        return jsonify({'message': f"An error occurred while requesting Data :" + str(e)}, 500)
+   
 
 
 # Route to handle generating investment suggestions
@@ -3635,6 +3966,7 @@ def save_file_to_folder(file_storage, destination_folder):
 
 
 # #Working for both the methods :
+# generate_suggestions by taking files as i/p :
 @app.route('/generate-investment-suggestions', methods=['POST'])
 def generate_investment_suggestions():
     try:
