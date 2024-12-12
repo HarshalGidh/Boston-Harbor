@@ -1,0 +1,175 @@
+{
+    "clientDetail": {
+        "clientName": "james",
+        "clientMoNo": "",
+        "clientAge": "",
+        "coClientName": "",
+        "coMobileNo": "",
+        "coClientAge": ""
+    },
+    "retirementGoal": {
+        "retirementPlan": {
+            "retirementAgeClient": "",
+            "retirementAgeCoClient": ""
+        },
+        "socialBenefit": {
+            "socialBenefitClient": "",
+            "socialBenefitCoClient": ""
+        },
+        "pensionBenefit": {
+            "pensionBenefitClient": "",
+            "pensionBenefitCoClient": ""
+        },
+        "otherIncome": {
+            "otherIncomeClient": "",
+            "otherIncomeCoClient": ""
+        },
+        "annualRetirement": {
+            "annualRetireClient": "",
+            "annualRetireCoClient": ""
+        }
+    },
+    "assetsLiabilities": {
+        "assetLibKB": {
+            "currentLibKb": "",
+            "annualLibKb": "",
+            "assetsName": "401(k), 403(b), 457"
+        },
+        "assetLibSimpIRAS": {
+            "currentLibIRAs": "",
+            "annualLibIRAs": "",
+            "assetsName": "Traditional, SEP and SIMPLE IRAs"
+        },
+        "assetLibIRA": {
+            "currentIRA": "",
+            "annualIRA": "",
+            "assetsName": "Roth IRA, Roth 401(k)"
+        },
+        "assetLibAcc": {
+            "currentLibAcc": "",
+            "annualLibAcc": "",
+            "assetsName": "Brokerage/non-qualified accounts"
+        },
+        "assetLibCashAcc": {
+            "currentCashAcc": "",
+            "annualCashAcc": "",
+            "assetsName": "Cash/bank accounts"
+        },
+        "assetLibAnnuities": {
+            "currentAnnuities": "",
+            "annualAnnuities": "",
+            "assetsName": "Annuities"
+        },
+        "assetLib529Plan": {
+            "current529Plan": "",
+            "annual529Plan": "",
+            "assetsName": "529 Plans"
+        },
+        "assetLibHome": {
+            "currentLibHome": "",
+            "annualLibHome": "",
+            "assetsName": "Home"
+        },
+        "assetLibEstate": {
+            "currentEstate": "",
+            "annualEstate": "",
+            "assetsName": "Other Real Estate"
+        },
+        "assetLibBusiness": {
+            "currentBusiness": "",
+            "annualBusiness": "",
+            "assetsName": "Business"
+        },
+        "assetLibOther": {
+            "currentOtherLib": "",
+            "annualOtherLib": "",
+            "assetsName": "Other"
+        }
+    },
+    "myLiabilities": {
+        "liabilityKb": {
+            "mortgageBalance": "",
+            "mortgageInterest": "",
+            "mortgageMonthly": "",
+            "liabilityName": "Mortgage(s)"
+        },
+        "liabilitySimpIRAs": {
+            "creditCardBalance": "",
+            "creditCardInterest": "",
+            "creditCardMonthly": "",
+            "liabilityName": "Credit Card(s)"
+        },
+        "liabilityIRA": {
+            "otherLoansBalance": "",
+            "otherLoansInterest": "",
+            "otherLoansMonthly": "",
+            "liabilityName": "Other loans"
+        }
+    },
+    "protectionPlan": {
+        "checkWill": false,
+        "checkHealthCare": false,
+        "checkAttorney": false,
+        "checkTrust": false
+    },
+    "insuranceCoverage": {
+        "lifeInsuranceClient": {
+            "benefitLIClient": "",
+            "monthlyPayLIClient": ""
+        },
+        "lifeInsuranceCoClient": {
+            "benefitLICoClient": "",
+            "monthlyPayLICoClient": ""
+        },
+        "disableIncomeClient": {
+            "benefitDisableClient": "",
+            "monthlyPayDisableClient": ""
+        },
+        "disableIncomeCoClient": {
+            "benefitDisableCoClient": "",
+            "monthlyPayDisableCoClient": ""
+        },
+        "longTermCoClient": {
+            "benefitLongTermClient": "",
+            "monthlyPayLongTermClient": ""
+        }
+    },
+    "goalFields": [
+        {
+            "goal": "",
+            "cost": "",
+            "when": ""
+        }
+    ],
+    "incomeFields": [
+        {
+            "incomeClient": "",
+            "sourceIncome": "",
+            "amountIncome": ""
+        }
+    ],
+    "assetsDatasets": {
+        "labels": [],
+        "datasets": [
+            {
+                "label": "Assets",
+                "data": [],
+                "borderWidth": 1
+            }
+        ]
+    },
+    "liabilityDatasets": {
+        "labels": [],
+        "datasets": [
+            {
+                "label": "Assets",
+                "data": [],
+                "borderWidth": 1
+            }
+        ]
+    },
+    "investmentAmount": "500",
+    "investment_personality": "",
+    "uniqueId": "j9958",
+    "date": "11/12/2024, 20:19:54"
+}

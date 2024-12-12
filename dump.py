@@ -4477,203 +4477,12 @@ def analyze_portfolio():
         return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
 
 
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         assetName = request.json.get('assetName','all')
-#         if assetName == 'all':
-#             try:
-#                 # Extract client information from the request
-#                 client_name = request.json.get('client_name')
-#                 funds = request.json.get('funds')
-#                 client_id = request.json.get('client_id')
-#                 investor_personality = request.json.get('investor_personality','Aggressive Investor Personality')
-                
-                    
-#                 # Load the portfolio data from the client's JSON file
-#                 with open(f'portfolio_{client_id}.json', 'r') as f:
-#                     portfolio_data = json.load(f)
-
-#                 # Fetch news for each asset in the portfolio
-#                 portfolio_news = collect_portfolio_news(portfolio_data)
-
-#                 # Print the collected news for debugging
-#                 for asset, news in portfolio_news.items():
-#                     print(f"News for {asset}:\n{news}\n{'-'*50}")
-                    
-                
-#                 topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions","US Elections","Global Wars"]
-#                 economic_news = {}
-
-#                 for topic in topics:
-#                     news = fetch_news(topic)
-#                     economic_news[topic] = news
-                
-#                 print(economic_news)
-                    
-                # # Initialize portfolio-level metrics
-                # portfolio_current_value = request.json.get('portfolio_current_value') 
-                # portfolio_daily_change = request.json.get('porfolio_daily_change')
-                # portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
-                # portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
-                # portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
-
-                # print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
-
-#             except Exception as e:
-#                 print(f"Error extracting data from request or portfolio: {e}")
-#                 return jsonify({'message': 'Failed to extract data from request or portfolio'}), 400
-
-#             # Create a task prompt for the LLM to generate analysis and suggestions
-#             funds -= portfolio_current_value
-#             print(f" Current funds available : {funds}")
-#             print(f"{portfolio_daily_change}")
-            
-#                 # # Best one so far :
-            
-
-            # task = f"""
-            #     You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}. The portfolio contains several stocks and investments.
-            #     Based on the portfolio data provided:
-
-            #     - The available funds for the client are {funds}.
-            #     - The current value of the portfolio is {portfolio_current_value}.
-            #     - The portfolio's daily change is {portfolio_daily_change}.
-            #     - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-            #     - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-            #     - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-            #     - The risk tolerance of the client based on their investment personality is {investor_personality}.
-
-            #     Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-            #     and detailed stock recommendations to the Wealth Manager for the client based on the user's risk tolerance for the given portfolio : {portfolio_data}
-            #     and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
-
-            #     - If the client has a conservative investment personality, give stock recommendations that could provide returns with minimal risk.
-            #     - If the client has a moderate investment personality, give stock recommendations that could provide returns with a moderate level of risk.
-            #     - If the client has an aggressive investment personality, give stock recommendations that could provide higher returns with higher risk. Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
-
-            #     Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
-
-            #     Additionally, provide:
-
-            #     1. A risk assessment of the current portfolio composition.
-            #     2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-            #     3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-            #     4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-            #     5. Strategies for tax efficiency in the portfolio management.
-            #     6. Insights on market trends and current economic news that could impact the portfolio.
-            #     7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
-
-            #     Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-            #     Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
-            #     """
-
-
-#             # Generate response using LLM (Generative AI Model)
-#             try:
-#                 model = genai.GenerativeModel('gemini-1.5-flash')
-#                 response = model.generate_content(task)
-
-#                 # Convert the response to markdown and then extract text
-#                 html_suggestions = markdown.markdown(response.text)
-#                 format_suggestions = markdown_to_text(html_suggestions)
-                # return jsonify({
-                #     "portfolio_current_value": portfolio_current_value,
-                #     "portfolio_daily_change": portfolio_daily_change,
-                #     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-                #     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-                #     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-                #     "suggestion": format_suggestions
-                # }), 200
-
-#             except Exception as e:
-#                 print(f"Error generating suggestions from LLM: {e}")
-#                 return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
-        
-#         elif assetName == "stocks":
-#             portfolioList = request.json.get('portfolioList')
-#             pass
-        
-#         elif assetName == "bonds":
-#             pass
-            
-#     except Exception as e:
-#         print(f"Error in getting the correct assetName, passed : {assetName}")
-#         return jsonify({"message": f"Error in getting the correct assetName {assetName}"}),500
-
-
-    
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         # company = request.json.get('company',None)
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         client_id = request.json.get('client_id')
-#         with open(f'portfolio_{client_id}.json', 'r') as f:
-#             portfolio_table = json.load(f)
-       
-        
-#     except Exception as e :
-#         print(f"Error extracting data from request: {e}")
-#         return jsonify({'message': 'Failed to extract data from request'}), 400
-    
-#     # If a valid ticker is found, fetch stock data
-#     if tickers and not stock_data :
-#         try:
-#             stock_data, formatted_data, _,file_path = [get_stock_data(ticker) for ticker in tickers]
-#             user_query = tickers  # Save the tickers as the user query
-#         except Exception as e:
-#             print("Error getting the stock data")
-#             return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-#     else:
-#         # No valid ticker found, generate generic Portfolio suggestions
-#         print("No valid tickers found in the query, generating general Portfolio suggestions.")
-#         stock_data = {}  # No specific stock data need to check for news
-#         formatted_data = ""  # No financial data
-        
-#     if query:
-#         task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.
-#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. Given a list of stocks of a Portfolio Answer to the questions of the users and help them 
-#                 with any queries they might have.
-#                 If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
-#                 Do not answer any questions unrelated to the stocks."""
-#     else :
-#         task = """You are a Stock Market Expert working for a Wealth Manager. You know everything about stock market trends and patterns.
-#                 You are the best Stock recommendations AI and you give the best recommendations for stocks. 
-#                 Given a list of stocks of a Portfolio, give Analysis of all the stocks 
-#                 The Wealth Manager asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-#                 If the user has asked a follow up question then provide them a good response by also considering their previous queries
-#                 Do not answer any questions unrelated to the stocks."""
-    
-#     model = genai.GenerativeModel('gemini-1.5-flash')
-#     response = model.generate_content(query)
-#     print(response.text)
-        
-#     try:
-#         html_suggestions = markdown.markdown(response.text)
-        
-#         print(f"Html Suggestions : {html_suggestions}")
-        
-#         logging.info(f"Suggestions for stock: \n{response.text}")
-        
-#         # format_suggestions = markdown_to_text(response)
-#         print(f"Html Suggestions : {html_suggestions}")
-#         format_suggestions = markdown_to_text(html_suggestions)
-#         return jsonify({'suggestion' : format_suggestions}),200
-        
-#     except Exception as e:
-#         logging.error(f"Error extracting text from response: {e}")
-#         print(f"Error extracting text from response : {e}")
-#         return jsonify({"error": "Failed to analyze stock data"}), 500
-
 
 # Run the Flask application
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
 
-
+#################################################################################################################################
 
 # # import streamlit as st
 # import pandas as pd
@@ -5157,85 +4966,85 @@ if __name__ == '__main__':
 # #         return "Unknown"
 
 
-# # GET Method
-# async def determine_investment_personality(assessment_data): # proper code 
-#     try:
-#         # Prepare input text for the chatbot based on assessment data
-#         input_text = "User Profile:\n"
-#         for question, answer in assessment_data.items():
-#             input_text += f"{question}: {answer}\n"
+# GET Method
+async def determine_investment_personality(assessment_data): # proper code 
+    try:
+        # Prepare input text for the chatbot based on assessment data
+        input_text = "User Profile:\n"
+        for question, answer in assessment_data.items():
+            input_text += f"{question}: {answer}\n"
 
-#         # Introduce the chatbot's task and prompt for classification
-#         input_text += "\nYou are an investment personality identifier. Based on the user profile, classify the user as:\n" \
-#                       "- Conservative Investor\n" \
-#                       "- Moderate Investor\n" \
-#                       "- Aggressive Investor\n\n" \
-#                       "Please provide the classification below:\n"
+        # Introduce the chatbot's task and prompt for classification
+        input_text += "\nYou are an investment personality identifier. Based on the user profile, classify the user as:\n" \
+                      "- Conservative Investor\n" \
+                      "- Moderate Investor\n" \
+                      "- Aggressive Investor\n\n" \
+                      "Please provide the classification below:\n"
 
-#         # Use your generative AI model to generate a response
-#         model = genai.GenerativeModel('gemini-1.5-flash')
-#         response = model.generate_content(input_text)
+        # Use your generative AI model to generate a response
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(input_text)
 
-#         # Determine the investment personality from the chatbot's response
-#         response_text = response.text.lower()
+        # Determine the investment personality from the chatbot's response
+        response_text = response.text.lower()
 
-#         if "conservative investor" in response_text:
-#             personality = "Conservative Investor"
-#         elif "moderate investor" in response_text:
-#             personality = "Moderate Investor"
-#         elif "aggressive investor" in response_text:
-#             personality = "Aggressive Investor"
-#         else:
-#             personality = "Unknown"
+        if "conservative investor" in response_text:
+            personality = "Conservative Investor"
+        elif "moderate investor" in response_text:
+            personality = "Moderate Investor"
+        elif "aggressive investor" in response_text:
+            personality = "Aggressive Investor"
+        else:
+            personality = "Unknown"
 
-#         return personality
-#     except Exception as e:
-#         print(f"Error generating response: {e}")
-#         return "Unknown"
+        return personality
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return "Unknown"
 
 
 
 
 # #Load the Vector DataBase : # current version :
-# async def load_vector_db(file_path): # # GET Method 
-#     try:
-#         print("Loading vector database...")
-#         # file_path = os.path.basename(file_path)
+async def load_vector_db(file_path): # # GET Method 
+    try:
+        print("Loading vector database...")
+        # file_path = os.path.basename(file_path)
         
-#         # Verify the file path
-#         if not os.path.isfile(file_path):
-#             raise FileNotFoundError(f"File not found: {file_path}")
+        # Verify the file path
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
         
-#         print(f"File path: {file_path}")
+        print(f"File path: {file_path}")
         
-#         # Check file permissions
-#         if not os.access(file_path, os.R_OK):
-#             raise PermissionError(f"File is not readable: {file_path}")
+        # Check file permissions
+        if not os.access(file_path, os.R_OK):
+            raise PermissionError(f"File is not readable: {file_path}")
         
-#         # print(file_path)
+        # print(file_path)
         
-#         loader = Docx2txtLoader(file_path)
-#         documents = loader.load()
-#         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-#         text_chunks = text_splitter.split_documents(documents)
-#         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
-#         # vector_store = Chroma.from_documents(documents=text_chunks, embedding=embeddings)
+        loader = Docx2txtLoader(file_path)
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        text_chunks = text_splitter.split_documents(documents)
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GOOGLE_API_KEY)
+        # vector_store = Chroma.from_documents(documents=text_chunks, embedding=embeddings)
         
-#         vector_store = FAISS.from_documents(documents=text_chunks, embedding=embeddings)
-#         # index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+        vector_store = FAISS.from_documents(documents=text_chunks, embedding=embeddings)
+        # index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
 
-#         # vector_store = FAISS(
-#         #     embedding_function=embeddings,
-#         #     index=index,
-#         #     docstore=InMemoryDocstore(),
-#         #     index_to_docstore_id={},
-#         # )
+        # vector_store = FAISS(
+        #     embedding_function=embeddings,
+        #     index=index,
+        #     docstore=InMemoryDocstore(),
+        #     index_to_docstore_id={},
+        # )
         
-#         print("Vector database loaded successfully.") 
-#         return vector_store.as_retriever(search_kwargs={"k": 1})
-#     except Exception as e:
-#         print(f"Error loading vector database: {e}")
-#         return None
+        print("Vector database loaded successfully.") 
+        return vector_store.as_retriever(search_kwargs={"k": 1})
+    except Exception as e:
+        print(f"Error loading vector database: {e}")
+        return None
 
 # # import os
 
@@ -7121,33 +6930,33 @@ if __name__ == '__main__':
 
 
 # # Determine Investment personality through the investor assesmnet tab : 
-# @app.route('/investor-personality-assessment', methods=['POST'])
-# def investor_personality_assessment():
-#     try:
-#         # Collecting client name and assessment data
-#         data = request.json  # Expecting JSON input
-#         # client_name = data.get('client_name')
-#         client_id = data.get('client_id')
-#         assessment_data = data.get('assessment_data')  
+@app.route('/investor-personality-assessment', methods=['POST'])
+def investor_personality_assessment():
+    try:
+        # Collecting client name and assessment data
+        data = request.json  # Expecting JSON input
+        # client_name = data.get('client_name')
+        client_id = data.get('client_id')
+        assessment_data = data.get('assessment_data')  
         
-#         # if not client_id or not assessment_data:
-#         #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
+        # if not client_id or not assessment_data:
+        #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
         
-#         logging.info(f"Received assessment data for client with client id : {client_id}")
+        logging.info(f"Received assessment data for client with client id : {client_id}")
 
-#         # Pass the assessment data to determine the investment personality
-#         personality = asyncio.run(determine_investment_personality(assessment_data))
-#         logging.info(f"Determined personality for {client_id}: {personality}")
+        # Pass the assessment data to determine the investment personality
+        personality = asyncio.run(determine_investment_personality(assessment_data))
+        logging.info(f"Determined personality for {client_id}: {personality}")
 
-#         # Return the personality and client id in response
-#         return jsonify({
-#             'client_id': client_id,
-#             'investment_personality': personality
-#         }), 200
+        # Return the personality and client id in response
+        return jsonify({
+            'client_id': client_id,
+            'investment_personality': personality
+        }), 200
     
-#     except Exception as e:
-#         logging.error(f"Error processing investor assessment: {e}")
-#         return jsonify({'message': 'Internal Server Error'}), 500
+    except Exception as e:
+        logging.error(f"Error processing investor assessment: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
     
 
 # import logging
@@ -7913,223 +7722,146 @@ if __name__ == '__main__':
 # # # Global dictionary to store transaction data by client_id
 # # client_transactions = {}
 
-# # @app.route('/order_placed', methods=['POST'])
-# # def order_placed():
-# #     try:
-# #         # Extract form data from frontend
-# #         order_data = request.json.get('order_data')
-# #         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
-# #         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
-# #         funds = request.json.get('funds')  # Example extra data if needed
+@app.route('/order_placed', methods=['POST'])
+def order_placed():
+    try:
+        # Extract form data from frontend
+        order_data = request.json.get('order_data')
+        client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
+        client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
+        funds = request.json.get('funds')  # Example extra data if needed
         
-# #         # Assign default values if necessary
-# #         if not order_data.get('date'):
-# #             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Assign default values if necessary
+        if not order_data.get('date'):
+            order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-# #         units = order_data.get('units')
-# #         # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
-# #         buy_or_sell = order_data.get('buy_or_sell')
+        units = order_data.get('units')
+        # unit_price = order_data.get('price')/units  # If 'price' was in the input, use it
+        buy_or_sell = order_data.get('buy_or_sell')
 
-# #         # Create a dataframe with the relevant data
-# #         data = {
-# #             "Market": [order_data.get('market')],
-# #             "AssetClass": [order_data.get('assetClass')],
-# #             "Date": [order_data.get('date')],
-# #             "Action": [order_data.get('buy_or_sell')],
-# #             "Name": [order_data.get('name')],
-# #             "Units": [order_data.get('units')],
-# #             "Unit_Price": [order_data.get('unit_price')],
-# #             "TransactionAmount": [order_data.get('transactionAmount')],
-# #         }
-# #         new_transaction = pd.DataFrame(data)
+        # Create a dataframe with the relevant data
+        data = {
+            "Market": [order_data.get('market')],
+            "AssetClass": [order_data.get('assetClass')],
+            "Date": [order_data.get('date')],
+            "Action": [order_data.get('buy_or_sell')],
+            "Name": [order_data.get('name')],
+            "Units": [order_data.get('units')],
+            "Unit_Price": [order_data.get('unit_price')],
+            "TransactionAmount": [order_data.get('transactionAmount')],
+        }
+        new_transaction = pd.DataFrame(data)
         
-# #         # If the client_id exists in our global dictionary, append the new transaction
-# #         if client_id in client_transactions:
-# #             client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
-# #         else:
-# #             # Create a new entry for the client_id if it doesn't exist
-# #             client_transactions[client_id] = new_transaction
+        # If the client_id exists in our global dictionary, append the new transaction
+        if client_id in client_transactions:
+            client_transactions[client_id] = pd.concat([client_transactions[client_id], new_transaction], ignore_index=True)
+        else:
+            # Create a new entry for the client_id if it doesn't exist
+            client_transactions[client_id] = new_transaction
         
-# #         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
+        print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
 
-# #         return jsonify({"message": "Order placed successfully", "status": 200})
+        return jsonify({"message": "Order placed successfully", "status": 200})
 
-# #     except Exception as e:
-# #         print(f"Error occurred while placing order: {e}")
-# #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+    except Exception as e:
+        print(f"Error occurred while placing order: {e}")
+        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
-# # @app.route('/show_order_list', methods=['POST'])
-# # def show_order_list():
-# #     try:
-# #         # Get client_id from the request
-# #         client_id = request.json.get('clientId')
+
+
+
+# Path to the JSON file to store transaction data
+order_list_file = 'order_list.json'
+
+# Load existing transaction data from the JSON file (if it exists)
+if os.path.exists(order_list_file):
+    with open(order_list_file, 'r') as f:
+        client_transactions = json.load(f)
+else:
+    client_transactions = {}
+
+
+@app.route('/show_order_list', methods=['POST'])
+def show_order_list():
+    try:
+        # Get client_id from the request
+        client_id = request.json.get('client_id')
         
-# #         # If client_id is not provided or not found in the stored transactions
-# #         if not client_id or client_id not in client_transactions:
-# #             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+        # If client_id is not provided or not found in the stored transactions
+        if not client_id or client_id not in client_transactions:
+            return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
 
-# #         # Retrieve the transactions for the given client_id
-# #         transactions_df = client_transactions[client_id]
-        
-# #         # Convert the DataFrame to a JSON object and return it
-# #         transactions_json = transactions_df.to_dict(orient='records')
-# #         return jsonify({"transaction_data": transactions_json, "status": 200})
+        # Retrieve the transactions for the given client_id
+        transactions_list = client_transactions[client_id]
+        print(transactions_list)
+        return jsonify({"transaction_data": transactions_list, "status": 200})
 
-# #     except Exception as e:
-# #         print(f"Error occurred while retrieving the order list: {e}")
-# #         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
+    except Exception as e:
+        print(f"Error occurred while retrieving the order list: {e}")
+        return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
 
 
-# # Path to the JSON file to store transaction data
-# order_list_file = 'order_list.json'
-
-# # Load existing transaction data from the JSON file (if it exists)
-# if os.path.exists(order_list_file):
-#     with open(order_list_file, 'r') as f:
-#         client_transactions = json.load(f)
-# else:
-#     client_transactions = {}
-
-# @app.route('/order_placed', methods=['POST'])
-# def order_placed():
-#     try:
-#         # Extract form data from frontend
-#         order_data = request.json.get('order_data')
-#         client_name = request.json.get('clientName', 'Rohit Sharma')  # Default client name
-#         client_id = request.json.get('clientId', 'RS4603')  # Default client ID if not provided
-#         funds = request.json.get('funds')  # Example extra data if needed
-        
-#         # Path to the JSON file to store transaction data
-#         order_list_file = 'order_list.json'
-
-#         # Load existing transaction data from the JSON file (if it exists)
-#         if os.path.exists(order_list_file):
-#             with open(order_list_file, 'r') as f:
-#                 client_transactions = json.load(f)
-#         else:
-#             client_transactions = {}
-            
-#         # Assign default values if necessary
-#         if not order_data.get('date'):
-#             order_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-#         units = order_data.get('units')
-#         buy_or_sell = order_data.get('buy_or_sell')
-
-#         # Create a dictionary with the relevant data
-#         new_transaction = {
-#             "Market": order_data.get('market'),
-#             "AssetClass": order_data.get('assetClass'),
-#             "Date": order_data.get('date'),
-#             "Action": order_data.get('buy_or_sell'),
-#             "Name": order_data.get('name'),
-#             "Symbol": order_data.get('symbol'),
-#             "Units": order_data.get('units'),
-#             "UnitPrice": order_data.get('unit_price'),
-#             "TransactionAmount": order_data.get('transactionAmount'),
-#         }
-
-#         # If the client_id exists in the JSON file, append the new transaction
-#         if client_id in client_transactions:
-#             client_transactions[client_id].append(new_transaction)
-#         else:
-#             # Create a new entry for the client_id if it doesn't exist
-#             client_transactions[client_id] = [new_transaction]
-        
-#         # Save the updated transactions back to the JSON file
-#         with open(order_list_file, 'w') as f:
-#             json.dump(client_transactions, f, indent=4)
-
-#         print(f"Order Data for {client_name} ({client_id}): \n{new_transaction}")
-
-#         return jsonify({"message": "Order placed successfully", "status": 200})
-
-#     except Exception as e:
-#         print(f"Error occurred while placing order: {e}")
-#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
-
-# @app.route('/show_order_list', methods=['POST'])
-# def show_order_list():
-#     try:
-#         # Get client_id from the request
-#         client_id = request.json.get('client_id')
-        
-#         # If client_id is not provided or not found in the stored transactions
-#         if not client_id or client_id not in client_transactions:
-#             return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
-
-#         # Retrieve the transactions for the given client_id
-#         transactions_list = client_transactions[client_id]
-#         print(transactions_list)
-#         return jsonify({"transaction_data": transactions_list, "status": 200})
-
-#     except Exception as e:
-#         print(f"Error occurred while retrieving the order list: {e}")
-#         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
-
-
-
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
+@app.route('/portfolio', methods=['POST'])
+def portfolio():
    
-#     try:
-#         # Extract form data from frontend
-#         portfolio_data = request.json.get('portfolio_data')
-#         client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
-#         client_id = request.json.get('clientId','RS4603')  # Get client ID
-#         funds = request.json.get('funds')  
+    try:
+        # Extract form data from frontend
+        portfolio_data = request.json.get('portfolio_data')
+        client_name = request.json.get('clientName','Rohit Sharma')  # Get client name
+        client_id = request.json.get('clientId','RS4603')  # Get client ID
+        funds = request.json.get('funds')  
         
-#         # Assign default values if necessary
-#         if not portfolio_data.get('date'):
-#             portfolio_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Assign default values if necessary
+        if not portfolio_data.get('date'):
+            portfolio_data['date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-#         # Get current stock price if not provided in the form
-#         stock_ticker = portfolio_data.get('name')
-#         if stock_ticker == 'apple' : stock_ticker = 'AAPL'
-#         if current_price is None:
-#             stock_data = yf.Ticker(stock_ticker)
-#             current_price = stock_data.history(period='1d')['Close'].iloc[-1]
+        # Get current stock price if not provided in the form
+        stock_ticker = portfolio_data.get('name')
+        if stock_ticker == 'apple' : stock_ticker = 'AAPL'
+        if current_price is None:
+            stock_data = yf.Ticker(stock_ticker)
+            current_price = stock_data.history(period='1d')['Close'].iloc[-1]
 
-#         # Calculate the difference between bought price and current price
-#         bought_price = portfolio_data.get('pricePerUnit', 0)
-#         diff_price = current_price - bought_price
+        # Calculate the difference between bought price and current price
+        bought_price = portfolio_data.get('pricePerUnit', 0)
+        diff_price = current_price - bought_price
         
-#         # Calculate percentage difference
-#         if bought_price > 0:
-#             percentage_diff = (diff_price / bought_price) * 100
-#         else:
-#             percentage_diff = -1 * (diff_price / bought_price) * 100
+        # Calculate percentage difference
+        if bought_price > 0:
+            percentage_diff = (diff_price / bought_price) * 100
+        else:
+            percentage_diff = -1 * (diff_price / bought_price) * 100
 
-#         # Create a dataframe with the relevant data
-#         data = {
-#             "Asset Class": [portfolio_data.get('assetClass')],
-#             "Name": [portfolio_data.get('name')],
-#             "Market": [portfolio_data.get('market')],
-#             "Units": [portfolio_data.get('units')],
-#             "Price Per Unit (Bought)": [bought_price],
-#             "Current Price": [current_price],
-#             "Transaction Type": [portfolio_data.get('transactionType')],
-#             "Transaction Amount": [portfolio_data.get('transactionAmount')],
-#             "Difference in Price": [diff_price],
-#             "Percentage Difference": [f"{percentage_diff:.2f}%"],
-#             "Time of Purchase": [portfolio_data.get('date')]
-#         }
-#         df = pd.DataFrame(data)
-#         print(f"Portfolio Data : {df}")
+        # Create a dataframe with the relevant data
+        data = {
+            "Asset Class": [portfolio_data.get('assetClass')],
+            "Name": [portfolio_data.get('name')],
+            "Market": [portfolio_data.get('market')],
+            "Units": [portfolio_data.get('units')],
+            "Price Per Unit (Bought)": [bought_price],
+            "Current Price": [current_price],
+            "Transaction Type": [portfolio_data.get('transactionType')],
+            "Transaction Amount": [portfolio_data.get('transactionAmount')],
+            "Difference in Price": [diff_price],
+            "Percentage Difference": [f"{percentage_diff:.2f}%"],
+            "Time of Purchase": [portfolio_data.get('date')]
+        }
+        df = pd.DataFrame(data)
+        print(f"Portfolio Data : {df}")
         
-#         # Save the table as an Excel file with client name and ID
-#         file_path = f"data/{client_name}_{client_id}_stock_data.xlsx"
-#         df.to_excel(file_path, index=False)
+        # Save the table as an Excel file with client name and ID
+        file_path = f"data/{client_name}_{client_id}_stock_data.xlsx"
+        df.to_excel(file_path, index=False)
 
-#         # Convert DataFrame to HTML table
-#         table_html = df.to_html(classes='table table-striped', index=False)
+        # Convert DataFrame to HTML table
+        table_html = df.to_html(classes='table table-striped', index=False)
 
-#         # Send the Excel file and return the HTML table
-#         return jsonify({"table_html": table_html, "file_path": file_path})
+        # Send the Excel file and return the HTML table
+        return jsonify({"table_html": table_html, "file_path": file_path})
 
-#     except Exception as e:
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
 # @app.route('/download_excel', methods=['GET'])
@@ -8214,6 +7946,7 @@ if __name__ == '__main__':
 # if __name__ == '__main__':
 #     app.run(host='0.0.0.0',debug=True)
 
+#########################################################################################################################
 
 
 # # import streamlit as st
@@ -10709,253 +10442,253 @@ if __name__ == '__main__':
 # #     doc.save(f"{file_name}.docx")
 
 
-# # @app.route('/submit-client-data', methods=['POST'])
-# # def submit_client_data():
-# #     try:
-# #         data = request.get_json()
-# #         print(data)
-# #         # Generate the unique ID
-# #         client_name = data['clientDetail']['clientName']
+@app.route('/submit-client-data', methods=['POST'])
+def submit_client_data():
+    try:
+        data = request.get_json()
+        print(data)
+        # Generate the unique ID
+        client_name = data['clientDetail']['clientName']
         
-# #         # unique_id = generate_unique_id(client_name)
-# #         # unique_id = data['clientDetail']['uniqueId']
+        # unique_id = generate_unique_id(client_name)
+        # unique_id = data['clientDetail']['uniqueId']
         
-# #         unique_id = data['uniqueId']
-# #         print(unique_id)
+        unique_id = data['uniqueId']
+        print(unique_id)
         
-# #         data['uniqueId'] = unique_id
+        data['uniqueId'] = unique_id
         
-# #         # Save the data to a Word file
+        # Save the data to a Word file
         
-# #         file_name = unique_id
-# #         # save_to_word_file(data, file_name)
-# #         save_to_word_file(data, file_name)
+        file_name = unique_id
+        # save_to_word_file(data, file_name)
+        save_to_word_file(data, file_name)
         
-# #         return jsonify({
-# #             'message': 'Client data received and saved successfully.'
-# #         }), 200
-# #     except Exception as e:
-# #         return jsonify({'message': f"An error occurred: {e}"}), 500
+        return jsonify({
+            'message': 'Client data received and saved successfully.'
+        }), 200
+    except Exception as e:
+        return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
-# # # Determine Investment personality through the investor assesmnet tab : 
-# # @app.route('/investor-personality-assessment', methods=['POST'])
-# # def investor_personality_assessment():
-# #     try:
-# #         # Collecting client name and assessment data
-# #         data = request.json  # Expecting JSON input
-# #         # client_name = data.get('client_name')
-# #         client_id = data.get('client_id')
-# #         assessment_data = data.get('assessment_data')  
+# Determine Investment personality through the investor assesmnet tab : 
+@app.route('/investor-personality-assessment', methods=['POST'])
+def investor_personality_assessment():
+    try:
+        # Collecting client name and assessment data
+        data = request.json  # Expecting JSON input
+        # client_name = data.get('client_name')
+        client_id = data.get('client_id')
+        assessment_data = data.get('assessment_data')  
         
-# #         # if not client_id or not assessment_data:
-# #         #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
+        # if not client_id or not assessment_data:
+        #     return jsonify({'message': 'Client name and assessment data are required.'}), 400
         
-# #         logging.info(f"Received assessment data for client with client id : {client_id}")
+        logging.info(f"Received assessment data for client with client id : {client_id}")
 
-# #         # Pass the assessment data to determine the investment personality
-# #         personality = asyncio.run(determine_investment_personality(assessment_data))
-# #         logging.info(f"Determined personality for {client_id}: {personality}")
+        # Pass the assessment data to determine the investment personality
+        personality = asyncio.run(determine_investment_personality(assessment_data))
+        logging.info(f"Determined personality for {client_id}: {personality}")
 
-# #         # Return the personality and client id in response
-# #         return jsonify({
-# #             'client_id': client_id,
-# #             'investment_personality': personality
-# #         }), 200
+        # Return the personality and client id in response
+        return jsonify({
+            'client_id': client_id,
+            'investment_personality': personality
+        }), 200
     
-# #     except Exception as e:
-# #         logging.error(f"Error processing investor assessment: {e}")
-# #         return jsonify({'message': 'Internal Server Error'}), 500
+    except Exception as e:
+        logging.error(f"Error processing investor assessment: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
     
 
-# # import logging
-# # # global investmentPersonality  # Global Variable
-# # # investmentPersonality = ""
+import logging
+# global investmentPersonality  # Global Variable
+# investmentPersonality = ""
 
-# # async def make_suggestions(investmentPersonality,clientName,financial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
-# #     try:
-# #         try:
-# #             # financial_file = financial_file
-# #             print(f"Processing the File for the client: {clientName} and the file : {financial_file}")
-# #             # financial_data = asyncio.run(process_document(financial_file))
+async def make_suggestions(investmentPersonality,clientName,financial_file="data\Financial_Investment_1.docx",monthly_investment=10000,investment_period=3):
+    try:
+        try:
+            # financial_file = financial_file
+            print(f"Processing the File for the client: {clientName} and the file : {financial_file}")
+            # financial_data = asyncio.run(process_document(financial_file))
             
-# #             financial_data = await process_document(f"data\{financial_file}")
+            financial_data = await process_document(f"data\{financial_file}")
             
-# #             print(f"Data passed : {financial_data}")
+            print(f"Data passed : {financial_data}")
             
-# #             financial_file = f"data\{financial_file}"
+            financial_file = f"data\{financial_file}"
             
-# #             print(f"Finished processing the File for the client : {financial_file}")
+            print(f"Finished processing the File for the client : {financial_file}")
             
-# #             # suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_file,monthly_investment,investment_period)
+            # suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName, financial_file,monthly_investment,investment_period)
             
-# #             suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName,financial_data,financial_file,monthly_investment,investment_period)
+            suggestions = await generate_investment_suggestions_for_investor(investmentPersonality,clientName,financial_data,financial_file,monthly_investment,investment_period)
             
             
-# #             # print(f"Finished processing the suggestions : {suggestions}")
+            # print(f"Finished processing the suggestions : {suggestions}")
            
-# #             htmlSuggestions = markdown.markdown(suggestions)
-# #             # ans = markdown_to_readable_text(htmlSuggestions)
-# #             # formatSuggestions = ans
-# #             # formatSuggestions = markdown_to_text(htmlSuggestions)
-# #             # print(f"HTML Suggestions: {htmlSuggestions}")
-# #             formatSuggestions = markdown.markdown(htmlSuggestions)
+            htmlSuggestions = markdown.markdown(suggestions)
+            # ans = markdown_to_readable_text(htmlSuggestions)
+            # formatSuggestions = ans
+            # formatSuggestions = markdown_to_text(htmlSuggestions)
+            # print(f"HTML Suggestions: {htmlSuggestions}")
+            formatSuggestions = markdown.markdown(htmlSuggestions)
             
-# #             # ---------------------------------=----------
-# #             # htmlSuggestions = markdown.markdown(suggestions)
-# #             # htmlSuggestions = markdown2.markdown(suggestions)
+            # ---------------------------------=----------
+            # htmlSuggestions = markdown.markdown(suggestions)
+            # htmlSuggestions = markdown2.markdown(suggestions)
             
-# #             # print(f"HTML Suggestions: {htmlSuggestions}")
+            # print(f"HTML Suggestions: {htmlSuggestions}")
             
-# #             # formatSuggestions = markdown_to_text(suggestions)
+            # formatSuggestions = markdown_to_text(suggestions)
             
-# #             # print(f"The suggestions generated for the client are :\n {formatSuggestions}")
+            # print(f"The suggestions generated for the client are :\n {formatSuggestions}")
             
-# #             # need to change the data extraction process : 
-# #             data_extracted = extract_numerical_data(suggestions)
+            # need to change the data extraction process : 
+            data_extracted = extract_numerical_data(suggestions)
             
-# #             min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# #                             [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
-# #             max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
-# #                             [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
+            min_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['min'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                            [int(data_extracted['Conservative Investments'][label]['min'].strip('%')) for label in data_extracted['Conservative Investments']]
+            max_allocations = [int(data_extracted['Growth-Oriented Investments'][label]['max'].strip('%')) for label in data_extracted['Growth-Oriented Investments']] + \
+                            [int(data_extracted['Conservative Investments'][label]['max'].strip('%')) for label in data_extracted['Conservative Investments']]
 
-# #             # Normalize allocations
-# #             min_allocations = normalize_allocations(min_allocations)
-# #             max_allocations = normalize_allocations(max_allocations)
+            # Normalize allocations
+            min_allocations = normalize_allocations(min_allocations)
+            max_allocations = normalize_allocations(max_allocations)
 
-# #             # Update Bar Chart Data
-# #             bar_chart_data = {
-# #                 'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
-# #                 'datasets': [{
-# #                     'label': 'Min Allocation',
-# #                     'data': min_allocations,
-# #                     'backgroundColor': 'skyblue'
-# #                 },
-# #                 {
-# #                     'label': 'Max Allocation',
-# #                     'data': max_allocations,
-# #                     'backgroundColor': 'lightgreen'
-# #                 }]
-# #             }
+            # Update Bar Chart Data
+            bar_chart_data = {
+                'labels': list(data_extracted['Growth-Oriented Investments'].keys()) + list(data_extracted['Conservative Investments'].keys()),
+                'datasets': [{
+                    'label': 'Min Allocation',
+                    'data': min_allocations,
+                    'backgroundColor': 'skyblue'
+                },
+                {
+                    'label': 'Max Allocation',
+                    'data': max_allocations,
+                    'backgroundColor': 'lightgreen'
+                }]
+            }
 
-# #             # Similar changes can be made for the Pie Chart Data:
-# #             all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
-# #             num_labels = len(all_labels)
-# #             max_allocations_for_pie = normalize_allocations(
-# #                 [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
-# #                 [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
-# #             )
+            # Similar changes can be made for the Pie Chart Data:
+            all_labels = list({**data_extracted['Growth-Oriented Investments'], **data_extracted['Conservative Investments']}.keys())
+            num_labels = len(all_labels)
+            max_allocations_for_pie = normalize_allocations(
+                [int(data_extracted['Growth-Oriented Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Growth-Oriented Investments']] + 
+                [int(data_extracted['Conservative Investments'].get(label, {}).get('max', '0').strip('%')) for label in data_extracted['Conservative Investments']]
+            )
             
-# #             # Generate colors based on the number of labels
-# #             dynamic_colors = generate_colors(num_labels)
+            # Generate colors based on the number of labels
+            dynamic_colors = generate_colors(num_labels)
 
-# #             # Update Pie Chart Data
-# #             pie_chart_data = {
-# #                 'labels': all_labels,
-# #                 'datasets': [{
-# #                     'label': 'Investment Allocation',
-# #                     'data': max_allocations_for_pie,
-# #                     'backgroundColor': dynamic_colors,
-# #                     'hoverOffset': 4
-# #                 }]
-# #             }
+            # Update Pie Chart Data
+            pie_chart_data = {
+                'labels': all_labels,
+                'datasets': [{
+                    'label': 'Investment Allocation',
+                    'data': max_allocations_for_pie,
+                    'backgroundColor': dynamic_colors,
+                    'hoverOffset': 4
+                }]
+            }
             
             
-# #             # Prepare the data for the line chart with inflation adjustment
-# #             initial_investment = 10000
-# #             # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
-# #             combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
-# #             print(f"\nThe combined chart data is : {combined_chart_data}")
+            # Prepare the data for the line chart with inflation adjustment
+            initial_investment = 10000
+            # compounded_chart_data, inflation_adjusted_chart_data = prepare_line_chart_data_with_inflation(data_extracted, initial_investment)
+            combined_chart_data = prepare_combined_line_chart_data(data_extracted, initial_investment)
+            print(f"\nThe combined chart data is : {combined_chart_data}")
             
-# #             # return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+            # return htmlSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
             
-# #             print(f"Format suggestions : {formatSuggestions}")
+            print(f"Format suggestions : {formatSuggestions}")
             
-# #             return formatSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
+            return formatSuggestions, pie_chart_data, bar_chart_data, combined_chart_data
             
             
-# #         except Exception as e:
-# #             logging.info(f"Error occurred while generating investment suggestions: {e}")
-# #             return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
+        except Exception as e:
+            logging.info(f"Error occurred while generating investment suggestions: {e}")
+            return jsonify({'message': f'Error occurred while considering preuploaded file : {e}'}), 500
     
 
         
-# #         # return jsonify({
-# #         #     "status": 200,
-# #         #     "message": "Success",
-# #         #     "investmentSuggestions": htmlSuggestions,
-# #         #     "pieChartData": pie_chart_data,
-# #         #     "barChartData": bar_chart_data,
-# #         #     "compoundedChartData":combined_chart_data
-# #         # }), 200
+        # return jsonify({
+        #     "status": 200,
+        #     "message": "Success",
+        #     "investmentSuggestions": htmlSuggestions,
+        #     "pieChartData": pie_chart_data,
+        #     "barChartData": bar_chart_data,
+        #     "compoundedChartData":combined_chart_data
+        # }), 200
         
-# #     except Exception as e:
-# #         logging.error(f"Error processing personality assessment: {e}")
-# #         return jsonify({'message': 'Error in generating suggestions with personality'}), 500
+    except Exception as e:
+        logging.error(f"Error processing personality assessment: {e}")
+        return jsonify({'message': 'Error in generating suggestions with personality'}), 500
         
 
-# # @app.route('/personality-assessment', methods=['POST'])
-# # def personality_selected():
-# #     try:
-# #         data = request.json
-# #         clientName = data.get('clientName')
-# #         try :
-# #             # clientId = data.get('client_id')
-# #             clientId = data.get('clientId')
-# #             investmentPersonality = data.get('investmentPersonality') # investment_personality
-# #             financial_file = f"{clientId}.docx"
-# #             # financial_file = f"data\{clientId}.docx" # data\EW2400.docx
-# #             print(f"The clients ClientName is : {clientName} and their ClientId is : {clientId}")
-# #             print(f"InvestmentPersonality received is : {investmentPersonality}")
-# #             logging.info('Recieved Values')
+@app.route('/personality-assessment', methods=['POST'])
+def personality_selected():
+    try:
+        data = request.json
+        clientName = data.get('clientName')
+        try :
+            # clientId = data.get('client_id')
+            clientId = data.get('clientId')
+            investmentPersonality = data.get('investmentPersonality') # investment_personality
+            financial_file = f"{clientId}.docx"
+            # financial_file = f"data\{clientId}.docx" # data\EW2400.docx
+            print(f"The clients ClientName is : {clientName} and their ClientId is : {clientId}")
+            print(f"InvestmentPersonality received is : {investmentPersonality}")
+            logging.info('Recieved Values')
             
-# #         except Exception as e:
-# #             logging.info(f"Error occurred while retrieving client id: {e}")
-# #             return jsonify({'message': f'Error occurred while retrieving client id: {e}'}), 400
+        except Exception as e:
+            logging.info(f"Error occurred while retrieving client id: {e}")
+            return jsonify({'message': f'Error occurred while retrieving client id: {e}'}), 400
 
-# #         try:
-# #             # monthly_investment= data.get('monthly_investment') #10000
-# #             # investment_period= data.get('investment_period')  #3
-# #             monthly_investment= 10000
-# #             investment_period= 3
-# #             formatSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
-# #             answer = markdown_table_to_html(formatSuggestions)
-# #             print(answer)
-# #             # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
+        try:
+            # monthly_investment= data.get('monthly_investment') #10000
+            # investment_period= data.get('investment_period')  #3
+            monthly_investment= 10000
+            investment_period= 3
+            formatSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
+            answer = markdown_table_to_html(formatSuggestions)
+            print(answer)
+            # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName,financial_file,monthly_investment,investment_period))
             
-# #         except Exception as e:
-# #             logging.info(f"Error occurred while processing investment data: {e}")
-# #             return jsonify({'message': f'Error occurred while processing investment data: {e}'}), 400
+        except Exception as e:
+            logging.info(f"Error occurred while processing investment data: {e}")
+            return jsonify({'message': f'Error occurred while processing investment data: {e}'}), 400
         
-# #         # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName))
+        # htmlSuggestions,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions(investmentPersonality,clientName))
         
-# #         # return jsonify({
-# #         #     "status": 200,
-# #         #     "message": "Success",
-# #         #     "investmentSuggestions": htmlSuggestions,
-# #         #     "pieChartData": pie_chart_data,
-# #         #     "barChartData": bar_chart_data,
-# #         #     "compoundedChartData":combined_chart_data
-# #         # }), 200
-# #         return jsonify({
-# #             "status": 200,
-# #             "message": "Success",
-# #             "investmentSuggestions": answer, #formatSuggestions,
-# #             "pieChartData": pie_chart_data,
-# #             "barChartData": None,#bar_chart_data,
-# #             "compoundedChartData":combined_chart_data
-# #         }), 200
+        # return jsonify({
+        #     "status": 200,
+        #     "message": "Success",
+        #     "investmentSuggestions": htmlSuggestions,
+        #     "pieChartData": pie_chart_data,
+        #     "barChartData": bar_chart_data,
+        #     "compoundedChartData":combined_chart_data
+        # }), 200
+        return jsonify({
+            "status": 200,
+            "message": "Success",
+            "investmentSuggestions": answer, #formatSuggestions,
+            "pieChartData": pie_chart_data,
+            "barChartData": None,#bar_chart_data,
+            "compoundedChartData":combined_chart_data
+        }), 200
                     
                     
-# #         # return jsonify({'message':'Sab thik'}),200
+        # return jsonify({'message':'Sab thik'}),200
         
-# #         # if investmentPersonality == 'aggressiveInvestor':
-# #         #     pass
+        # if investmentPersonality == 'aggressiveInvestor':
+        #     pass
     
-# #     except Exception as e:
-# #         logging.info(f"Error in personality assessment: {e}")
-# #         print(f"Error occured in Investor Personality while collecting data :\n{e}")
-# #         return jsonify({'message': 'Internal Server Error in Investor Personality'}), 500
+    except Exception as e:
+        logging.info(f"Error in personality assessment: {e}")
+        print(f"Error occured in Investor Personality while collecting data :\n{e}")
+        return jsonify({'message': 'Internal Server Error in Investor Personality'}), 500
 
 
 

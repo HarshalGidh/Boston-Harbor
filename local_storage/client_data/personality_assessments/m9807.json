@@ -1,0 +1,42 @@
+{
+    "client_id": "m9807",
+    "assessment_data": {
+        "question1": {
+            "question": "You and your friend are betting on a series of coin tosses. He always bets \u20b92,000 on Heads. You always bet \u20b92,000 on Tails. Winner of last 8 turns: You lost \u20b98,000 in the last 4 turns! If you were to bet one last time, what would you bet on?",
+            "answer": "Tails"
+        },
+        "question2": {
+            "question": "Imagine you are a contestant in a game show, and you are presented the following choices. What would you prefer?",
+            "answer": "100 percent chance of winning 8 gold coins"
+        },
+        "question3": {
+            "question": "In general, how would your best friend describe your risk-taking tendencies?",
+            "answer": "Willing to take risks after research"
+        },
+        "question4": {
+            "question": "Suppose you could replace your current investment portfolio with this new one: 50 percent chance of Gaining 35 percent or 50 percent chance of Loss. In order to have a 50 percent chance of gaining +35 percent, how much loss are you willing to take?",
+            "answer": "20 to 25"
+        },
+        "question5": {
+            "question": "Over any 1-year period, what would be the maximum drop in the value of your investment portfolio that you would be comfortable with?",
+            "answer": "15 - 20%"
+        },
+        "question6": {
+            "question": "When investing, what do you consider the most?",
+            "answer": "Risk"
+        },
+        "question7": {
+            "question": "What best describes your attitude?",
+            "answer": "Higher returns, higher risk"
+        },
+        "question8": {
+            "question": "How much monthly investment do you want to do?",
+            "answer": "10,000"
+        },
+        "question9": {
+            "question": "What is the time horizon for your investment?",
+            "answer": "4"
+        }
+    },
+    "investment_personality": "Balanced"
+}

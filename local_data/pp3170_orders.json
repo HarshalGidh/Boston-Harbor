@@ -1,0 +1,13 @@
+[
+    {
+        "Market": "S&P 500",
+        "AssetClass": "Stocks",
+        "Date": "12/11/2024, 08:41:14",
+        "Action": "buy",
+        "Name": "NVIDIA Corporation",
+        "Symbol": "NVDA",
+        "Units": 1,
+        "UnitPrice": 135.07000732421875,
+        "TransactionAmount": 135.07000732421875
+    }
+]

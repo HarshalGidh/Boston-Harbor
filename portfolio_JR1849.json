@@ -1,0 +1,53 @@
+[
+    {
+        "assetClass": "Stocks",
+        "name": "Tesla",
+        "symbol": "TSLA",
+        "Quantity": 3,
+        "Delayed_Price": 369.489990234375,
+        "current_value": 1108.469970703125,
+        "Daily_Price_Change": 23.489990234375,
+        "Daily_Value_Change": 70.469970703125,
+        "Amount_Invested_per_Unit": 346,
+        "Amount_Invested": 1038,
+        "Investment_Gain_or_Loss_percentage": 6.79,
+        "Investment_Gain_or_Loss": 70.469970703125,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "11/20/2024, 07:38:28"
+    },
+    {
+        "assetClass": "Stocks",
+        "name": "Apple",
+        "symbol": "AAPL",
+        "Quantity": 6,
+        "Delayed_Price": 243.0399932861328,
+        "current_value": 1458.2399597167969,
+        "Daily_Price_Change": 14.759994506835938,
+        "Daily_Value_Change": 88.55996704101562,
+        "Amount_Invested_per_Unit": 228.27999877929688,
+        "Amount_Invested": 1369.6799926757812,
+        "Investment_Gain_or_Loss_percentage": 6.47,
+        "Investment_Gain_or_Loss": 88.55996704101562,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "11/20/2024, 09:23:10"
+    },
+    {
+        "assetClass": "Stocks",
+        "name": "Tesla",
+        "symbol": "TSLA",
+        "Quantity": 7,
+        "Delayed_Price": 369.489990234375,
+        "current_value": 2586.429931640625,
+        "Daily_Price_Change": 27.459991455078125,
+        "Daily_Value_Change": 192.21994018554688,
+        "Amount_Invested_per_Unit": 342.0299987792969,
+        "Amount_Invested": 2394.209991455078,
+        "Investment_Gain_or_Loss_percentage": 8.03,
+        "Investment_Gain_or_Loss": 192.21994018554688,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "11/21/2024, 01:08:10"
+    }
+]

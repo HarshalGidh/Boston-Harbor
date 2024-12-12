@@ -1,0 +1,112 @@
+[
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "Stocks",
+        "Date": "12/11/2024, 23:44:00",
+        "Action": "buy",
+        "Name": "NVIDIA Corporation",
+        "Symbol": "NVDA",
+        "Units": 5,
+        "UnitPrice": 139.30999755859375,
+        "TransactionAmount": 696.5499877929688
+    },
+    {
+        "Market": "Dow Jones",
+        "AssetClass": "Stocks",
+        "Date": "12/11/2024, 23:44:25",
+        "Action": "buy",
+        "Name": "Apple",
+        "Symbol": "AAPL",
+        "Units": 5,
+        "UnitPrice": 246.49000549316406,
+        "TransactionAmount": 1232.4500274658203
+    },
+    {
+        "Market": "S&P 500",
+        "AssetClass": "Stocks",
+        "Date": "12/11/2024, 23:44:41",
+        "Action": "buy",
+        "Name": "Tesla",
+        "Symbol": "TSLA",
+        "Units": 5,
+        "UnitPrice": 424.7699890136719,
+        "TransactionAmount": 2123.8499450683594
+    },
+    {
+        "Market": "Dow Jones",
+        "AssetClass": "Bonds",
+        "Date": "12/11/2024, 23:46:04",
+        "Action": "buy",
+        "Name": "Corporate Bond Fund",
+        "Symbol": "CBND",
+        "Units": 10,
+        "UnitPrice": 29.329999923706055,
+        "TransactionAmount": 293.29999923706055
+    },
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "Bonds",
+        "Date": "12/11/2024, 23:46:18",
+        "Action": "buy",
+        "Name": "iShares Core U.S. Aggregate Bond ETF",
+        "Symbol": "AGG",
+        "Units": 5,
+        "UnitPrice": 98.69000244140625,
+        "TransactionAmount": 493.45001220703125
+    },
+    {
+        "Market": "S&P 500",
+        "AssetClass": "Bonds",
+        "Date": "12/11/2024, 23:48:40",
+        "Action": "buy",
+        "Name": "Vanguard Total Bond Market ETF",
+        "Symbol": "BND",
+        "Units": 10,
+        "UnitPrice": 73.25,
+        "TransactionAmount": 732.5
+    },
+    {
+        "Market": "Dow Jones",
+        "AssetClass": "Commodities",
+        "Date": "12/11/2024, 23:49:01",
+        "Action": "buy",
+        "Name": "Commodities Index",
+        "Symbol": "COM",
+        "Units": 10,
+        "UnitPrice": 29.024999618530273,
+        "TransactionAmount": 290.24999618530273
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "12/11/2024, 23:49:26",
+        "Action": "buy",
+        "Name": "Bitcoin",
+        "Symbol": "BTC-USD",
+        "Units": 0.05,
+        "UnitPrice": 100714.5859375,
+        "TransactionAmount": 5035.729296875001
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "12/11/2024, 23:49:42",
+        "Action": "buy",
+        "Name": "Litecoin",
+        "Symbol": "LTC-USD",
+        "Units": 9,
+        "UnitPrice": 121.96656799316406,
+        "TransactionAmount": 1097.6991119384766
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "12/11/2024, 23:49:58",
+        "Action": "buy",
+        "Name": "Ethereum",
+        "Symbol": "ETH-USD",
+        "Units": 1,
+        "UnitPrice": 3905.6298828125,
+        "TransactionAmount": 3905.6298828125
+    }
+]

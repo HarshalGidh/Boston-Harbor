@@ -1,0 +1,19 @@
+[
+    {
+        "assetClass": "Stocks",
+        "name": "Apple",
+        "symbol": "AAPL",
+        "Quantity": 5,
+        "Delayed_Price": 243.0399932861328,
+        "current_value": 1215.199966430664,
+        "Daily_Price_Change": 8.110000610351562,
+        "Daily_Value_Change": 40.55000305175781,
+        "Amount_Invested_per_Unit": 234.92999267578125,
+        "Amount_Invested": 1174.6499633789062,
+        "Investment_Gain_or_Loss_percentage": 3.45,
+        "Investment_Gain_or_Loss": 40.55000305175781,
+        "Estimated_Annual_Income": 0,
+        "Estimated_Yield": 0,
+        "Time_Held": "11/29/2024, 02:18:51"
+    }
+]

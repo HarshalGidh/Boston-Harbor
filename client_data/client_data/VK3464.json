@@ -1,0 +1,246 @@
+{
+    "clientDetail": {
+        "clientName": "Virat Kohli",
+        "clientMoNo": "32331415",
+        "clientAge": "34",
+        "coClientName": "",
+        "coMobileNo": "",
+        "coClientAge": ""
+    },
+    "retirementGoal": {
+        "retirementPlan": {
+            "retirementAgeClient": "40",
+            "retirementAgeCoClient": ""
+        },
+        "socialBenefit": {
+            "socialBenefitClient": "40",
+            "socialBenefitCoClient": ""
+        },
+        "pensionBenefit": {
+            "pensionBenefitClient": "40",
+            "pensionBenefitCoClient": ""
+        },
+        "otherIncome": {
+            "otherIncomeClient": "4000",
+            "otherIncomeCoClient": ""
+        },
+        "annualRetirement": {
+            "annualRetireClient": "5000",
+            "annualRetireCoClient": ""
+        }
+    },
+    "assetsLiabilities": {
+        "assetLibKB": {
+            "currentLibKb": "300",
+            "annualLibKb": "",
+            "assetsName": "401(k), 403(b), 457"
+        },
+        "assetLibSimpIRAS": {
+            "currentLibIRAs": "200",
+            "annualLibIRAs": "",
+            "assetsName": "Traditional, SEP and SIMPLE IRAs"
+        },
+        "assetLibIRA": {
+            "currentIRA": "150",
+            "annualIRA": "",
+            "assetsName": "Roth IRA, Roth 401(k)"
+        },
+        "assetLibAcc": {
+            "currentLibAcc": "300",
+            "annualLibAcc": "",
+            "assetsName": "Brokerage/non-qualified accounts"
+        },
+        "assetLibCashAcc": {
+            "currentCashAcc": "200",
+            "annualCashAcc": "",
+            "assetsName": "Cash/bank accounts"
+        },
+        "assetLibAnnuities": {
+            "currentAnnuities": "500",
+            "annualAnnuities": "",
+            "assetsName": "Annuities"
+        },
+        "assetLib529Plan": {
+            "current529Plan": "100",
+            "annual529Plan": "",
+            "assetsName": "529 Plans"
+        },
+        "assetLibHome": {
+            "currentLibHome": "200000",
+            "annualLibHome": "",
+            "assetsName": "Home"
+        },
+        "assetLibEstate": {
+            "currentEstate": "100000",
+            "annualEstate": "",
+            "assetsName": "Other Real Estate"
+        },
+        "assetLibBusiness": {
+            "currentBusiness": "50000",
+            "annualBusiness": "",
+            "assetsName": "Business"
+        },
+        "assetLibOther": {
+            "currentOtherLib": "35000",
+            "annualOtherLib": "",
+            "assetsName": "Other"
+        }
+    },
+    "myLiabilities": {
+        "liabilityKb": {
+            "mortgageBalance": "200000",
+            "mortgageInterest": "16",
+            "mortgageMonthly": "600",
+            "liabilityName": "Mortgage(s)"
+        },
+        "liabilitySimpIRAs": {
+            "creditCardBalance": "400",
+            "creditCardInterest": "12",
+            "creditCardMonthly": "400",
+            "liabilityName": "Credit Card(s)"
+        },
+        "liabilityIRA": {
+            "otherLoansBalance": "30000",
+            "otherLoansInterest": "10",
+            "otherLoansMonthly": "250",
+            "liabilityName": "Other loans"
+        }
+    },
+    "protectionPlan": {
+        "checkWill": true,
+        "checkHealthCare": true,
+        "checkAttorney": true,
+        "checkTrust": true
+    },
+    "insuranceCoverage": {
+        "lifeInsuranceClient": {
+            "benefitLIClient": "30000",
+            "monthlyPayLIClient": "300"
+        },
+        "lifeInsuranceCoClient": {
+            "benefitLICoClient": "",
+            "monthlyPayLICoClient": ""
+        },
+        "disableIncomeClient": {
+            "benefitDisableClient": "20000",
+            "monthlyPayDisableClient": "200"
+        },
+        "disableIncomeCoClient": {
+            "benefitDisableCoClient": "",
+            "monthlyPayDisableCoClient": ""
+        },
+        "longTermCoClient": {
+            "benefitLongTermClient": "70000",
+            "monthlyPayLongTermClient": "700"
+        }
+    },
+    "goalFields": [
+        {
+            "goal": "Travel",
+            "cost": "500000",
+            "when": "2030"
+        }
+    ],
+    "incomeFields": [
+        {
+            "incomeClient": "Virat Kohli",
+            "sourceIncome": "Employment",
+            "amountIncome": "300000"
+        }
+    ],
+    "assetsDatasets": {
+        "labels": [
+            "401(k), 403(b), 457",
+            "Traditional, SEP and SIMPLE IRAs",
+            "Roth IRA, Roth 401(k)",
+            "Brokerage/non-qualified accounts",
+            "Cash/bank accounts",
+            "Annuities",
+            "529 Plans",
+            "Home",
+            "Other Real Estate",
+            "Business",
+            "Other"
+        ],
+        "datasets": [
+            {
+                "label": "Assets",
+                "data": [
+                    "300",
+                    "200",
+                    "150",
+                    "300",
+                    "200",
+                    "500",
+                    "100",
+                    "200000",
+                    "100000",
+                    "50000",
+                    "35000"
+                ],
+                "borderWidth": 1
+            }
+        ]
+    },
+    "liabilityDatasets": {
+        "labels": [
+            "Mortgage(s)",
+            "Credit Card(s)",
+            "Other loans"
+        ],
+        "datasets": [
+            {
+                "label": "Assets",
+                "data": [
+                    "200000",
+                    "400",
+                    "30000"
+                ],
+                "borderWidth": 1
+            }
+        ]
+    },
+    "investmentAmount": "100000",
+    "investment_personality": "Aggressive Investor",
+    "uniqueId": "VK3464",
+    "date": "11/12/2024, 17:58:03",
+    "client_id": "VK3464",
+    "assessment_data": {
+        "question1": {
+            "question": "You and your friend are betting on a series of coin tosses. He always bets \u20b92,000 on Heads. You always bet \u20b92,000 on Tails. Winner of last 8 turns: You lost \u20b98,000 in the last 4 turns! If you were to bet one last time, what would you bet on?",
+            "answer": "Heads"
+        },
+        "question2": {
+            "question": "Imagine you are a contestant in a game show, and you are presented the following choices. What would you prefer?",
+            "answer": "100 percent chance of winning 8 gold coins"
+        },
+        "question3": {
+            "question": "In general, how would your best friend describe your risk-taking tendencies?",
+            "answer": "Willing to take risks after research"
+        },
+        "question4": {
+            "question": "Suppose you could replace your current investment portfolio with this new one: 50 percent chance of Gaining 35 percent or 50 percent chance of Loss. In order to have a 50 percent chance of gaining +35 percent, how much loss are you willing to take?",
+            "answer": "15 to 20"
+        },
+        "question5": {
+            "question": "Over any 1-year period, what would be the maximum drop in the value of your investment portfolio that you would be comfortable with?",
+            "answer": ">20%"
+        },
+        "question6": {
+            "question": "When investing, what do you consider the most?",
+            "answer": "Return"
+        },
+        "question7": {
+            "question": "What best describes your attitude?",
+            "answer": "Higher returns, higher risk"
+        },
+        "question8": {
+            "question": "How much monthly investment do you want to do?",
+            "answer": "20,000"
+        },
+        "question9": {
+            "question": "What is the time horizon for your investment?",
+            "answer": "3"
+        }
+    }
+}
