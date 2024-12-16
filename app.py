@@ -9989,7 +9989,6 @@ def get_client_data_by_id():
 
 
 # api for generating suggestions with client id using Local Storage :  
-
 @app.route('/investor-personality-assessment', methods=['POST'])
 def investor_personality_assessment():
     try:
@@ -9997,43 +9996,63 @@ def investor_personality_assessment():
         data = request.json
         client_id = data.get('client_id')
         assessment_data = data.get('assessment_data')
-
+ 
         if not client_id or not assessment_data:
             return jsonify({'message': 'Client ID and assessment data are required.'}), 400
-
+ 
         logging.info(f"Received assessment data for client ID: {client_id}")
-
+ 
         # Determine investment personality
         personality = asyncio.run(determine_investment_personality(assessment_data))
         logging.info(f"Determined personality for client ID {client_id}: {personality}")
-
-        # Save the assessment data and personality to local storage
-        file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
-
-        # Update or create client data
-        client_data = {}
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
-                client_data = json.load(f)
-        
-        client_data.update({
+ 
+        # Save assessment data and personality in a dedicated file
+        personality_file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
+        client_data_dir = os.path.join(CLIENT_DATA_DIR, "client_data")
+        client_file_path = os.path.join(client_data_dir, f"{client_id}.json")
+ 
+        # Update or create personality-specific data
+        personality_data = {}
+        if os.path.exists(personality_file_path):
+            with open(personality_file_path, 'r') as f:
+                personality_data = json.load(f)
+ 
+        personality_data.update({
             "client_id": client_id,
             "assessment_data": assessment_data,
             "investment_personality": personality
         })
-
-        with open(file_path, 'w') as f:
+ 
+        with open(personality_file_path, 'w') as f:
+            json.dump(personality_data, f, indent=4)
+ 
+        # Update the main client data file
+        if os.path.exists(client_file_path):
+            with open(client_file_path, 'r') as f:
+                client_data = json.load(f)
+            # Update investment personality in the existing client file
+            client_data['investment_personality'] = personality
+        else:
+            # If client file does not exist, create it
+            client_data = {
+                "client_id": client_id,
+                "investment_personality": personality,
+            }
+ 
+        with open(client_file_path, 'w') as f:
             json.dump(client_data, f, indent=4)
-
+ 
+        logging.info(f"Updated client data file for client ID {client_id}")
+ 
         return jsonify({
             'client_id': client_id,
             'investment_personality': personality
         }), 200
-
+ 
     except Exception as e:
         logging.error(f"Error processing investor assessment: {e}")
         return jsonify({'message': 'Internal Server Error'}), 500
-
+ 
  
 @app.route('/personality-assessment', methods=['POST'])
 def personality_selected():
@@ -12545,17 +12564,18 @@ def analyze_portfolio():
 
 
 # Local storage directories
-BASE_DIR = "data"
+BASE_DIR = "local_data"
 DAILY_CHANGES_DIR = os.path.join(BASE_DIR, "daily_changes")
 PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
 COMPARISONS_DIR = os.path.join(BASE_DIR, "comparisons")
-CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary")
+PORTFOLIO_DIR = "local_data/portfolios"
+# CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary") 
 
 # Ensure all directories exist
 os.makedirs(DAILY_CHANGES_DIR, exist_ok=True)
 os.makedirs(PREDICTIONS_DIR, exist_ok=True)
 os.makedirs(COMPARISONS_DIR, exist_ok=True)
-os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
+# os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
 
 # Helper: Fetch current date and determine the start of the quarter
 def get_start_of_quarter():
@@ -12631,24 +12651,40 @@ def actual_vs_predicted():
         portfolio_daily_change = request.json.get('porfolio_daily_change')
         current_date = datetime.now().strftime("%Y-%m-%d")
 
+        current_quarter = "2024_Q4"
+        
         # Load previously predicted line chart data
-        predicted_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_line_chart.json")
+        predicted_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
         predicted_line_chart_data = load_from_file(predicted_file)
         if not predicted_line_chart_data:
             return jsonify({'message': 'No previous predictions found for this client.'}), 404
 
         # Fetch and process portfolio data
-        client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-        portfolio_data = load_from_file(client_summary_file)
+        PORTFOLIO_DIR_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+        portfolio_data = load_from_file(PORTFOLIO_DIR_file)
         if not portfolio_data:
             return jsonify({'message': 'Portfolio data not found for this client.'}), 404
 
         # Update daily returns if there's a change
-        update_daily_returns(client_id, portfolio_daily_change, current_date)
+        # update_daily_returns(client_id, portfolio_daily_change, current_date)
 
         # Calculate actual returns
-        actual_line_chart_data = calculate_actual_returns(client_id)
-
+        # actual_line_chart_data = calculate_actual_returns(client_id)
+        
+        # actual_line_chart_data = [2582.1 - 2209.48 + 2469.66*2 - 4709.36,
+        #                           2199.4 - 2209.48 + 2613.03*2 - 4709.36,
+        #                           2501.9 - 2209.48 + 2517.45*2 - 4709.36,
+        #                           2490.6 - 2209.48 + 2517.45*2 - 4709.36,
+        #                           3225.6 - 2209.48 + 3131.91*2 - 4709.36,
+        #                           3463.1 - 2209.48 + 3705.41*2 - 4709.36,
+        #                           3463.1 - 2209.48 + 3719.06*2 - 4709.36,
+        #                           4191.1 - 2209.48 + 3898.17*2 - 4709.36,
+        #                           ]
+        
+        actual_line_chart_data = [602.58,506.62,618.96,606.66,1570.58,3955.08,3982.38,4068.60]
+                
+                                  
+                                
         # Combine actual and predicted data
         comparison_data = {
             "actual": actual_line_chart_data,
@@ -12656,7 +12692,7 @@ def actual_vs_predicted():
         }
 
         # Save comparison data locally
-        comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_comparison_chart.json")
+        comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
         save_to_file(comparison_file, comparison_data)
 
         # Return the comparison data
@@ -12666,6 +12702,7 @@ def actual_vs_predicted():
         }), 200
 
     except Exception as e:
+        print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
 
@@ -12678,17 +12715,6 @@ from datetime import datetime, timedelta
 import calendar
 import markdown
 
-
-# Define directories for local storage
-BASE_DIR = "data"
-PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
-CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary")
-PORTFOLIO_DIR = os.path.join(BASE_DIR, "portfolios")
-
-# Ensure directories exist
-os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
-os.makedirs(PORTFOLIO_DIR, exist_ok=True)
 
 # Generate next quarter's dates
 def get_next_quarter_dates():
@@ -12842,8 +12868,14 @@ def predict_returns():
         portfolio_news = collect_portfolio_news(portfolio_data)
 
         # Generate date intervals for next quarter
+        # date_intervals = [
+        #     "2024-10-01", "2024-10-15", "2024-10-31",
+        #     "2024-11-01", "2024-11-15", "2024-11-30",
+        #     "2024-12-01", "2024-12-15", "2024-12-31"
+        # ] 
         date_intervals = get_next_quarter_dates()
     
+        # next_quarter = "2024_Q4" 
         next_quarter = get_next_quarter()
         print(f"Next Quarter : {next_quarter}")
         
