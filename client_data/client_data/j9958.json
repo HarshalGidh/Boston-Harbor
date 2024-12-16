@@ -136,16 +136,16 @@
     },
     "goalFields": [
         {
-            "goal": "",
             "cost": "",
+            "goal": "",
             "when": ""
         }
     ],
     "incomeFields": [
         {
+            "amountIncome": "",
             "incomeClient": "",
-            "sourceIncome": "",
-            "amountIncome": ""
+            "sourceIncome": ""
         }
     ],
     "assetsDatasets": {
@@ -168,8 +168,8 @@
             }
         ]
     },
-    "investmentAmount": "500",
-    "investment_personality": "",
+    "investmentAmount": "50000",
+    "investment_personality": "Conservative Investor",
     "uniqueId": "j9958",
     "date": "11/12/2024, 20:19:54"
 }

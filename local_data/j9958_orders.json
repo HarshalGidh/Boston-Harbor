@@ -1,0 +1,24 @@
+[
+    {
+        "Market": "Dow Jones",
+        "AssetClass": "Stocks",
+        "Date": "9/8/2024, 07:20:31",
+        "Action": "buy",
+        "Name": "Tesla",
+        "Symbol": "TSLA",
+        "Units": 10,
+        "UnitPrice": 220.948,
+        "TransactionAmount": 2209.48
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "9/8/2024, 07:20:42",
+        "Action": "buy",
+        "Name": "Ethereum",
+        "Symbol": "ETH-USD",
+        "Units": 2,
+        "UnitPrice": 2354.68,
+        "TransactionAmount": 4709.36
+    }
+]
