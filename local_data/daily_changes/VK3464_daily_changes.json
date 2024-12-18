@@ -6116,5 +6116,138 @@
         "portfolio_daily_change_perc": -0.51,
         "portfolio_investment_gain_loss": 20.121971130371094,
         "portfolio_investment_gain_loss_perc": 0.1264
+    },
+    "12/12/2024, 08:38:37": {
+        "portfolio_current_value": 15946.86463470459,
+        "porfolio_daily_change": 397.2848663330078,
+        "portfolio_daily_change_perc": 2.49,
+        "portfolio_investment_gain_loss": 45.45637512207031,
+        "portfolio_investment_gain_loss_perc": 0.285
+    },
+    "12/12/2024, 08:46:19": {
+        "portfolio_current_value": 15956.442576599122,
+        "porfolio_daily_change": 362.33692932128906,
+        "portfolio_daily_change_perc": 2.27,
+        "portfolio_investment_gain_loss": 55.03431701660156,
+        "portfolio_investment_gain_loss_perc": 0.3449
+    },
+    "12/12/2024, 08:47:06": {
+        "portfolio_current_value": 15954.271273803712,
+        "porfolio_daily_change": 360.42227935791016,
+        "portfolio_daily_change_perc": 2.26,
+        "portfolio_investment_gain_loss": 52.863014221191406,
+        "portfolio_investment_gain_loss_perc": 0.3313
+    },
+    "12/13/2024, 03:34:16": {
+        "portfolio_current_value": 15826.168984222411,
+        "porfolio_daily_change": -383.7171001434326,
+        "portfolio_daily_change_perc": -2.42,
+        "portfolio_investment_gain_loss": -75.23927536010743,
+        "portfolio_investment_gain_loss_perc": -0.4754
+    },
+    "12/13/2024, 10:01:42": {
+        "portfolio_current_value": 15656.068138885497,
+        "porfolio_daily_change": 288.04828453063965,
+        "portfolio_daily_change_perc": 1.84,
+        "portfolio_investment_gain_loss": -245.34012069702146,
+        "portfolio_investment_gain_loss_perc": -1.5671
+    },
+    "12/13/2024, 10:01:54": {
+        "portfolio_current_value": 15664.90275039673,
+        "porfolio_daily_change": 347.17199516296387,
+        "portfolio_daily_change_perc": 2.22,
+        "portfolio_investment_gain_loss": -236.50550918579103,
+        "portfolio_investment_gain_loss_perc": -1.5098
+    },
+    "12/13/2024, 10:10:37": {
+        "portfolio_current_value": 15642.454421234132,
+        "porfolio_daily_change": 91.1175594329834,
+        "portfolio_daily_change_perc": 0.58,
+        "portfolio_investment_gain_loss": -258.9538383483887,
+        "portfolio_investment_gain_loss_perc": -1.6555
+    },
+    "12/13/2024, 10:11:29": {
+        "portfolio_current_value": 15651.40242996216,
+        "porfolio_daily_change": 106.70934867858887,
+        "portfolio_daily_change_perc": 0.68,
+        "portfolio_investment_gain_loss": -250.00582962036134,
+        "portfolio_investment_gain_loss_perc": -1.5973
+    },
+    "12/16/2024, 01:54:49": {
+        "portfolio_current_value": 16174.842681121827,
+        "porfolio_daily_change": 4311.048173904419,
+        "portfolio_daily_change_perc": 26.65,
+        "portfolio_investment_gain_loss": 273.43442153930664,
+        "portfolio_investment_gain_loss_perc": 1.6905
+    },
+    "12/16/2024, 01:55:51": {
+        "portfolio_current_value": 16174.842681121827,
+        "porfolio_daily_change": 4311.048173904419,
+        "portfolio_daily_change_perc": 26.65,
+        "portfolio_investment_gain_loss": 273.43442153930664,
+        "portfolio_investment_gain_loss_perc": 1.6905
+    },
+    "12/16/2024, 02:12:39": {
+        "portfolio_current_value": 16187.72536392212,
+        "porfolio_daily_change": 4399.806406021118,
+        "portfolio_daily_change_perc": 27.18,
+        "portfolio_investment_gain_loss": 286.3171043395996,
+        "portfolio_investment_gain_loss_perc": 1.7687
+    },
+    "12/16/2024, 06:40:04": {
+        "portfolio_current_value": 16076.547940826416,
+        "porfolio_daily_change": 3541.36008644104,
+        "portfolio_daily_change_perc": 22.03,
+        "portfolio_investment_gain_loss": 175.1396812438965,
+        "portfolio_investment_gain_loss_perc": 1.0894
+    },
+    "12/16/2024, 08:30:52": {
+        "portfolio_current_value": 16048.460260772707,
+        "porfolio_daily_change": 3284.5045108795166,
+        "portfolio_daily_change_perc": 20.47,
+        "portfolio_investment_gain_loss": 147.05200119018556,
+        "portfolio_investment_gain_loss_perc": 0.9163
+    },
+    "12/16/2024, 08:32:43": {
+        "portfolio_current_value": 16048.264101409914,
+        "porfolio_daily_change": 3284.8429584503174,
+        "portfolio_daily_change_perc": 20.47,
+        "portfolio_investment_gain_loss": 146.8558418273926,
+        "portfolio_investment_gain_loss_perc": 0.9151
+    },
+    "12/16/2024, 08:32:56": {
+        "portfolio_current_value": 16046.974040985107,
+        "porfolio_daily_change": 3296.96693611145,
+        "portfolio_daily_change_perc": 20.55,
+        "portfolio_investment_gain_loss": 145.5657814025879,
+        "portfolio_investment_gain_loss_perc": 0.9071
+    },
+    "12/16/2024, 08:33:06": {
+        "portfolio_current_value": 16046.974040985107,
+        "porfolio_daily_change": 3296.96693611145,
+        "portfolio_daily_change_perc": 20.55,
+        "portfolio_investment_gain_loss": 145.5657814025879,
+        "portfolio_investment_gain_loss_perc": 0.9071
+    },
+    "12/16/2024, 08:33:34": {
+        "portfolio_current_value": 16046.974040985107,
+        "porfolio_daily_change": 3296.96693611145,
+        "portfolio_daily_change_perc": 20.55,
+        "portfolio_investment_gain_loss": 145.5657814025879,
+        "portfolio_investment_gain_loss_perc": 0.9071
+    },
+    "12/16/2024, 08:33:43": {
+        "portfolio_current_value": 16046.974040985107,
+        "porfolio_daily_change": 3296.96693611145,
+        "portfolio_daily_change_perc": 20.55,
+        "portfolio_investment_gain_loss": 145.5657814025879,
+        "portfolio_investment_gain_loss_perc": 0.9071
+    },
+    "12/16/2024, 23:06:58": {
+        "portfolio_current_value": 16453.122549438478,
+        "porfolio_daily_change": 6259.732460021973,
+        "portfolio_daily_change_perc": 38.05,
+        "portfolio_investment_gain_loss": 551.7142898559571,
+        "portfolio_investment_gain_loss_perc": 3.3532
     }
 }

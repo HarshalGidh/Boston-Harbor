@@ -1,0 +1,57 @@
+[
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "Stocks",
+        "Date": "11/20/2024, 23:44:00",
+        "Action": "buy",
+        "Name": "NVIDIA Corporation",
+        "Symbol": "NVDA",
+        "Units": 5,
+        "UnitPrice": 145.96,
+        "TransactionAmount": 729.8
+    },
+    {
+        "Market": "Dow Jones",
+        "AssetClass": "Stocks",
+        "Date": "11/20/2024, 23:44:25",
+        "Action": "buy",
+        "Name": "Apple",
+        "Symbol": "AAPL",
+        "Units": 5,
+        "UnitPrice": 228.92,
+        "TransactionAmount": 1144.6
+    },
+    {
+        "Market": "S&P 500",
+        "AssetClass": "Stocks",
+        "Date": "11/20/2024, 23:44:41",
+        "Action": "buy",
+        "Name": "Tesla",
+        "Symbol": "TSLA",
+        "Units": 5,
+        "UnitPrice": 345.13,
+        "TransactionAmount": 1725.65
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "11/25/2024, 23:49:26",
+        "Action": "buy",
+        "Name": "Bitcoin",
+        "Symbol": "BTC-USD",
+        "Units": 0.05,
+        "UnitPrice": 98855.64,
+        "TransactionAmount": 4942.75
+    },
+    {
+        "Market": null,
+        "AssetClass": "Cryptocurrency",
+        "Date": "11/26/2024, 23:49:58",
+        "Action": "buy",
+        "Name": "Ethereum",
+        "Symbol": "ETH-USD",
+        "Units": 1,
+        "UnitPrice": 3328.58,
+        "TransactionAmount": 3328.58
+    }
+]

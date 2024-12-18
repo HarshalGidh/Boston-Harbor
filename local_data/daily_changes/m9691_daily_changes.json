@@ -1,0 +1,23 @@
+{
+    "12/12/2024, 03:55:26": {
+        "portfolio_current_value": 29.329999923706055,
+        "porfolio_daily_change": 0.0,
+        "portfolio_daily_change_perc": 0.0,
+        "portfolio_investment_gain_loss": 0.0,
+        "portfolio_investment_gain_loss_perc": 0.0
+    },
+    "12/12/2024, 07:04:33": {
+        "portfolio_current_value": 12996.583798217773,
+        "porfolio_daily_change": 2294.555079956055,
+        "portfolio_daily_change_perc": 17.66,
+        "portfolio_investment_gain_loss": 1125.1717982177736,
+        "portfolio_investment_gain_loss_perc": 8.6574
+    },
+    "12/12/2024, 07:07:10": {
+        "portfolio_current_value": 12996.377011108398,
+        "porfolio_daily_change": 2316.13149597168,
+        "portfolio_daily_change_perc": 17.82,
+        "portfolio_investment_gain_loss": 1124.9650111083986,
+        "portfolio_investment_gain_loss_perc": 8.656
+    }
+}

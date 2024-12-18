@@ -136,16 +136,16 @@
     },
     "goalFields": [
         {
-            "goal": "",
             "cost": "",
+            "goal": "",
             "when": ""
         }
     ],
     "incomeFields": [
         {
+            "amountIncome": "",
             "incomeClient": "",
-            "sourceIncome": "",
-            "amountIncome": ""
+            "sourceIncome": ""
         }
     ],
     "assetsDatasets": {
@@ -168,7 +168,7 @@
             }
         ]
     },
-    "investmentAmount": "423",
+    "investmentAmount": "12300",
     "investment_personality": "",
     "uniqueId": "m9691",
     "date": "11/12/2024, 18:42:51"

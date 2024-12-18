@@ -36,4 +36,5 @@ flask-jwt-extended
 flask-sqlalchemy 
 flask-mail
 pyjwt
-
+statsmodels
+pmdarima
