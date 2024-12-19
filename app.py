@@ -4558,6 +4558,100 @@ def extract_excel_data(file_path):
 
 #########------------------- Portfolio Analysis --------------------------------################
 
+# Fetch the Asset Data from the Selected Market :
+
+# Local and AWS Directory :
+
+MARKET_ASSETS_FOLDER = "market_assets/"
+LOCAL_STORAGE_PATH = "local_data"
+
+
+def fetch_all_stocks_for_market(market_name):
+    """Fetch all listed stocks for the given US market."""
+    try:
+        if market_name.lower() == "nasdaq":
+            url = "https://api.nasdaq.com/api/screener/stocks?exchange=nasdaq"
+            data = pd.read_json(url)
+            stocks = data['data']['table']['rows']
+            assets = [{"symbol": stock['symbol'], "name": stock['name']} for stock in stocks]
+
+        elif market_name.lower() == "nyse":
+            url = "https://api.nasdaq.com/api/screener/stocks?exchange=nyse"
+            data = pd.read_json(url)
+            stocks = data['data']['table']['rows']
+            assets = [{"symbol": stock['symbol'], "name": stock['name']} for stock in stocks]
+
+        elif market_name.lower() == "s&p500":
+            # Fetch S&P 500 components using yfinance
+            sp500 = yf.Ticker("^GSPC").history(period="1d")
+            tickers = sp500.index.tolist()
+            assets = [{"symbol": ticker, "name": ticker} for ticker in tickers]
+
+        elif market_name.lower() == "dowjones":
+            # Fetch Dow Jones components using yfinance
+            dow = yf.Ticker("^DJI").history(period="1d")
+            tickers = dow.index.tolist()
+            assets = [{"symbol": ticker, "name": ticker} for ticker in tickers]
+
+        else:
+            return None
+
+        print(f"\Assets :\n{assets}")
+        return assets
+
+    except Exception as e:
+        print(f"Error fetching all stocks for {market_name}: {e}")
+        return None
+
+
+# API to fetch or update market assets
+@app.route('/market-assets', methods=['POST'])
+def market_assets():
+    try:
+        data = request.get_json()
+        market_name = data.get("market_name")
+        if not market_name:
+            return jsonify({"message": "Market name is required"}), 400
+
+        # Define filename for storage
+        filename = f"{MARKET_ASSETS_FOLDER}{market_name.lower()}_assets.json"
+        if USE_AWS:
+            assets = load_from_aws(filename)
+        else:
+            assets = load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename))
+
+        # Fetch updated assets for the market
+        updated_assets = fetch_all_stocks_for_market(market_name)
+        if not updated_assets:
+            return jsonify({"message": f"No data found for the market: {market_name}"}), 404
+
+        # Check if there are new assets
+        if not assets or updated_assets != assets:
+            # Update the assets list
+            if USE_AWS:
+                save_to_aws(updated_assets, filename)
+            else:
+                save_to_local(updated_assets, os.path.join(LOCAL_STORAGE_PATH, filename))
+            message = "Assets list updated successfully"
+        else:
+            message = "Assets list is up-to-date"
+
+        print(f"\nUpdated Assets :\n{updated_assets}")
+        
+        return jsonify({
+            "message": message,
+            "market": market_name,
+            "assets": updated_assets
+        }), 200
+
+    except Exception as e:
+        print(f"Error in market-assets API: {e}")
+        return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+
+# Fetch Current Stock Price :
+
 @app.route('/current_stock_price', methods=['POST'])
 def current_stock_price():
     try:
@@ -5266,6 +5360,7 @@ def analyze_portfolio():
             filtered_portfolio_data = portfolio_data
 
         # Load client financial data (from AWS or local based on USE_AWS)
+        
         if USE_AWS:
             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
@@ -6054,57 +6149,40 @@ def load_from_file(filepath):
             return json.load(f)
     return None
 
-# Extract line chart data from LLM responseimport re
-from datetime import datetime
-from bs4 import BeautifulSoup
-import re
 
-# Extract line chart data from LLM response
-def extract_line_chart_data(llm_response_text):
-    try:
-        # Parse HTML content
-        soup = BeautifulSoup(llm_response_text, "html.parser")
-        lines = soup.get_text().split("\n")
-        
-        line_chart_data = {
-            "dates": [],
-            "overall_returns": {
-                "percentages": [],
-                "amounts": []
-            }
-        }
 
-        # Iterate through lines and match rows with the expected format
-        for line in lines:
-            match = re.match(r"\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*([-+]?\d*\.?\d+)%\s*\|\s*\$?(\d+)", line)
-            if match:
-                date = match.group(1).strip()
-                return_percentage = float(match.group(2).strip())
-                return_amount = float(match.group(3).strip())
-                
-                line_chart_data["dates"].append(date)
-                line_chart_data["overall_returns"]["percentages"].append(return_percentage)
-                line_chart_data["overall_returns"]["amounts"].append(return_amount)
-        
-        return line_chart_data
 
-    except Exception as e:
-        print(f"Error extracting line chart data: {e}")
-        return {}
+
+#########################################################################################
+# # Updated New Implementation Version :
+
+#  getting error
+
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+
+
+# Constants
+FORECAST_DAYS = 63  # 3 months (approx business days)
+MARKET_INDEX = '^GSPC'  # S&P 500
+# PREDICTIONS_DIR = "predictions/"
+
+# Local storage directories
+BASE_DIR = "local_data"
+PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
+os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+
+# PORTFOLIO_DIR = "portfolios/"
+CLIENT_SUMMARY_DIR =  "client_data/client_data" #"client_summary/"
+
+# --- Utility Functions ---
+
 
 ##########################################################################################
 # # Prediction Improvements :
 
 # #1. Fetch historical returns for the past 3 months
 import yfinance as yf
-
-
-# def fetch_historical_returns(ticker, period='3mo'):
-#     """Fetch historical returns using yfinance."""
-#     stock = yf.Ticker(ticker)
-#     data = stock.history(period=period)
-#     data['returns'] = data['Close'].pct_change()
-#     return data['returns'].dropna()
 
 def fetch_historical_returns(ticker, period='3mo'):
     """Fetch historical returns using yfinance."""
@@ -6123,8 +6201,6 @@ def fetch_historical_returns(ticker, period='3mo'):
     return data['returns']
 
 
-
-
 # 2. Add Quantitative Metrics :
 import numpy as np
 
@@ -6137,18 +6213,6 @@ def compute_sharpe_ratio(returns, risk_free_rate=0.0):
     mean_return = np.mean(returns)
     std_dev = np.std(returns)
     return (mean_return - risk_free_rate) / std_dev if std_dev != 0 else 0
-
-# def compute_beta(asset_returns, market_returns):
-#     """Calculate Beta (sensitivity to market)."""
-#     # Align lengths of asset_returns and market_returns
-#     min_length = min(len(asset_returns), len(market_returns))
-#     asset_returns = asset_returns.iloc[-min_length:]
-#     market_returns = market_returns.iloc[-min_length:]
-
-#     # Calculate covariance and beta
-#     covariance = np.cov(asset_returns, market_returns)[0][1]
-#     market_variance = np.var(market_returns)
-#     return covariance / market_variance if market_variance != 0 else 0
 
 
 def compute_beta(asset_returns, market_returns):
@@ -6164,16 +6228,9 @@ def compute_beta(asset_returns, market_returns):
     return covariance / market_variance if market_variance != 0 else 0
 
 
-# Fetch market index returns (S&P 500)
-market_returns = fetch_historical_returns('^GSPC')
+# # Fetch market index returns (S&P 500)
+# market_returns = fetch_historical_returns('^GSPC')
 
-# # Compute metrics for each asset
-# for asset in portfolio:
-#     returns = asset['historical_returns']
-#     asset['volatility'] = compute_volatility(returns)
-#     asset['sharpe_ratio'] = compute_sharpe_ratio(returns)
-#     asset['beta'] = compute_beta(returns, market_returns)
-#     print(f"{asset['ticker']} -> Volatility: {asset['volatility']:.4f}, Sharpe: {asset['sharpe_ratio']:.4f}, Beta: {asset['beta']:.4f}")
 
 # 3. Add ARIMA Forecasting for Returns
 from statsmodels.tsa.arima.model import ARIMA
@@ -6187,28 +6244,6 @@ def check_stationarity(series):
     result = adfuller(series)
     return result[1] < 0.05  # Stationary if p-value < 0.05
 
-# def arima_forecast(returns, forecast_days=30):
-#     """Use ARIMA to forecast future returns with error handling."""
-#     if not isinstance(returns, pd.Series):
-#         returns = pd.Series(returns)
-
-#     # Ensure enough data points
-#     if len(returns) < 10:  # Minimum required data points
-#         return pd.Series([np.mean(returns)] * forecast_days)
-
-#     # Check stationarity and apply differencing if needed
-#     if not check_stationarity(returns):
-#         returns = returns.diff().dropna()
-
-#     # ARIMA model with error handling
-#     try:
-#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False, enforce_invertibility=False)
-#         model_fit = model.fit()
-#         forecast = model_fit.forecast(steps=forecast_days)
-#         return forecast
-#     except Exception as e:
-#         print(f"ARIMA failed: {e}")
-#         return pd.Series([np.mean(returns)] * forecast_days)  # Fallback to mean prediction
 
 from statsmodels.tsa.arima.model import ARIMA
 
@@ -6247,6 +6282,11 @@ def arima_forecast(returns, forecast_days=30):
 # 4. Simulate Realistic Fluctuations
 import random
 
+def adf_test(returns):
+    """Perform stationarity test."""
+    result = adfuller(returns)
+    return "Stationary" if result[1] < 0.05 else "Non-Stationary"
+
 def simulate_fluctuations(base_value, volatility, days=30):
     """Simulate fluctuations based on volatility."""
     simulated = [base_value]
@@ -6255,12 +6295,6 @@ def simulate_fluctuations(base_value, volatility, days=30):
         simulated.append(simulated[-1] * (1 + noise))
     return simulated
 
-# Simulate for each asset
-# for asset in portfolio:
-#     volatility = asset['volatility']
-#     base_return = asset['forecasted_returns'].iloc[0]
-#     asset['simulated_returns'] = simulate_fluctuations(base_return, volatility)
-#     print(f"Simulated returns for {asset['ticker']}: {asset['simulated_returns'][:5]}")
 
 # 5. Validate Predictions
 def validate_predictions(predictions, historical_returns, threshold=0.1):
@@ -6275,16 +6309,11 @@ def validate_predictions(predictions, historical_returns, threshold=0.1):
         last_known = pred
     return validated
 
-# Validate for each asset
-# for asset in portfolio:
-#     asset['validated_returns'] = validate_predictions(
-#         asset['simulated_returns'], asset['historical_returns'])
-#     print(f"Validated returns for {asset['ticker']}")
-
 
 # 6. Visualize Predictions with Confidence Bands
 import matplotlib.pyplot as plt
 
+# #Not that Important to be plotted :
 def plot_with_confidence(asset_name, best_case, worst_case):
     """Plot predictions with confidence bands."""
     days = len(best_case)
@@ -6303,270 +6332,157 @@ def plot_with_confidence(asset_name, best_case, worst_case):
     plt.legend()
     plt.show()
 
-# # # # Plot for each asset
-# # for asset in portfolio:
-# #     best_case = [r * 1.05 for r in asset['validated_returns']]
-# #     worst_case = [r * 0.95 for r in asset['validated_returns']]
-# #     plot_with_confidence(asset['ticker'], best_case, worst_case)
+import matplotlib.pyplot as plt
+
+# # 7. Extract Line Chart and Plot Return Predictions :
+
+# Extract line chart data from LLM responseimport re
+from datetime import datetime
+from bs4 import BeautifulSoup
+import re
+
+# Line Chart V-3 :
+import re
+
+import re
+
+def extract_line_chart_data(response_text):
+    """Parses table text into structured line chart data."""
+    dates = []
+    best_case = []
+    worst_case = []
+    confidence_band = []
+    total_returns = []
+
+    lines = response_text.strip().split("\n")
+    
+    # Iterate through the table rows starting after the header
+    for line in lines[2:]:  # Skip the first two header lines
+        # Remove excess whitespace and split the line by "|"
+        columns = [col.strip() for col in line.split("|")[1:-1]]  # Ignore leading/trailing "|"
+        
+        # Check if the line has valid table data
+        if len(columns) == 5:
+            dates.append(columns[0])
+            best_case.append(float(columns[1]))
+            worst_case.append(float(columns[2]))
+            
+            # Extract confidence band (e.g., "0.2% - 1.2%")
+            confidence_match = re.match(r"([\d\.\-]+)% - ([\d\.\-]+)%", columns[3])
+            if confidence_match:
+                confidence_low = float(confidence_match.group(1))
+                confidence_high = float(confidence_match.group(2))
+                confidence_band.append((confidence_low, confidence_high))
+            
+            total_returns.append(float(columns[4]))
+
+    return {
+        "dates": dates,
+        "best_case": best_case,
+        "worst_case": worst_case,
+        "confidence_band": confidence_band,
+        "total_returns": {"percentages": total_returns}
+    }
+
+def plot_return_predictions(line_chart_data):
+    dates = line_chart_data["dates"]
+    best_case = line_chart_data["best_case"]
+    worst_case = line_chart_data["worst_case"]
+    confidence_band = line_chart_data["confidence_band"]
+    total_returns = line_chart_data["total_returns"]["percentages"]
+
+    # Extract confidence intervals
+    confidence_low = [low for low, _ in confidence_band]
+    confidence_high = [high for _, high in confidence_band]
+
+    plt.figure(figsize=(12, 6))
+
+    # Plot total returns
+    plt.plot(dates, total_returns, color="black", label="Overall Returns", linewidth=2)
+
+    # Plot best-case and worst-case lines
+    plt.plot(dates, best_case, "r-", label="Best Case")
+    plt.plot(dates, worst_case, "b--", label="Worst Case")
+
+    # Plot confidence band
+    plt.fill_between(dates, confidence_low, confidence_high, color="pink", alpha=0.5, label="Confidence Band")
+
+    plt.title("Portfolio Return Predictions")
+    plt.xlabel("Date")
+    plt.ylabel("Returns (%)")
+    plt.legend()
+    plt.grid()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+# 8. Add Noise
+
+def add_noise(data, noise_level=0.3):
+    """Add random noise to simulate market fluctuations."""
+    data_with_noise = {
+        "dates": data["dates"],
+        "best_case": [x + np.random.normal(0, noise_level) for x in data["best_case"]],
+        "worst_case": [x + np.random.normal(0, noise_level) for x in data["worst_case"]],
+        "confidence_band": [
+            (low + np.random.normal(0, noise_level), high + np.random.normal(0, noise_level))
+            for low, high in data["confidence_band"]
+        ],
+        "total_returns": {
+            "percentages": [x + np.random.normal(0, noise_level) for x in data["total_returns"]["percentages"]],
+            "amounts": data["total_returns"].get("amounts", [])
+        }
+    }
+    return data_with_noise
+
+# 9. Refine Line Chart Data
+
+def plot_refined_data(refined_data):
+    """Plots refined line chart data with best-case, worst-case, and total returns."""
+    dates = refined_data['dates']
+    best_case = refined_data['best_case']
+    worst_case = refined_data['worst_case']
+    confidence_band = refined_data['confidence_band']
+    total_returns = refined_data['total_returns']['percentages']
+    
+    # Unpack confidence band into lower and upper bounds
+    confidence_lower = [band[0] for band in confidence_band]
+    confidence_upper = [band[1] for band in confidence_band]
+    
+    plt.figure(figsize=(12, 6))
+    
+    # Plot Best-Case, Worst-Case, and Total Returns
+    plt.plot(dates, best_case, label='Best Case (%)', color='green', linestyle='--', marker='o')
+    plt.plot(dates, worst_case, label='Worst Case (%)', color='red', linestyle='--', marker='o')
+    plt.plot(dates, total_returns, label='Total Returns (%)', color='blue', marker='o')
+    
+    # Fill Confidence Band
+    plt.fill_between(dates, confidence_lower, confidence_upper, color='gray', alpha=0.3, label='Confidence Band')
+    
+    # Add labels and title
+    plt.xlabel('Date')
+    plt.ylabel('Returns (%)')
+    plt.title('Portfolio Return Predictions with Fluctuations')
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+#################################################################################################
 
 
 
 
-
+# # --- Flask Endpoint --- #######################################################################################
 
 ############################################################################################
 # Endpoint to predict returns
 
-# Define directories
-# PORTFOLIO_DIR = "local_data/portfolios"
-# CLIENT_SUMMARY_DIR = "client_data/client_data"
-# PREDICTIONS_DIR = "local_data/predictions"
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-
-#################################################################################################
-# # Updated New Implementation Version :
-
-#  getting error
-
-# from statsmodels.tsa.stattools import adfuller
-# from pmdarima import auto_arima
+# Final Predict Returns for Next Quarter :
 
 
-# # Constants
-# FORECAST_DAYS = 63  # 3 months (approx business days)
-# MARKET_INDEX = '^GSPC'  # S&P 500
-# # PREDICTIONS_DIR = "predictions/"
-
-# # Local storage directories
-# BASE_DIR = "local_data"
-# PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-
-# # PORTFOLIO_DIR = "portfolios/"
-# CLIENT_SUMMARY_DIR = "client_summary/"
-
-# # --- Utility Functions ---
-
-# # def load_from_file(file_path):
-# #     """Load JSON data from a file."""
-# #     try:
-# #         if os.path.exists(file_path):
-# #             return pd.read_json(file_path)
-# #         return None
-# #     except Exception as e:
-# #         print(f"Error loading file: {e}")
-# #         return None
-
-# def save_to_file(file_path, data):
-#     """Save data to a JSON file."""
-#     pd.DataFrame(data).to_json(file_path, orient='records')
-
-# def fetch_historical_returns(ticker, period='3mo'):
-#     """Fetch historical daily returns for a ticker."""
-#     stock = yf.Ticker(ticker)
-#     data = stock.history(period=period)
-#     data['returns'] = data['Close'].pct_change()
-#     return data['returns'].dropna()
-
-# def compute_volatility(returns):
-#     """Compute annualized volatility."""
-#     return np.std(returns) * np.sqrt(252)
-
-# def compute_beta(asset_returns, market_returns):
-#     """Calculate beta relative to market returns."""
-#     covariance = np.cov(asset_returns, market_returns)[0, 1]
-#     market_variance = np.var(market_returns)
-#     return covariance / market_variance
-
-# def compute_sharpe_ratio(returns, risk_free_rate=0.01):
-#     """Calculate Sharpe Ratio."""
-#     mean_return = returns.mean() * 252
-#     volatility = compute_volatility(returns)
-#     return (mean_return - risk_free_rate) / volatility
-
-# def adf_test(returns):
-#     """Perform stationarity test."""
-#     result = adfuller(returns)
-#     return "Stationary" if result[1] < 0.05 else "Non-Stationary"
-
-# def arima_forecast(returns, forecast_days=FORECAST_DAYS):
-#     """Forecast returns using ARIMA."""
-#     model = auto_arima(returns, seasonal=False, suppress_warnings=True)
-#     forecast = model.predict(n_periods=forecast_days)
-#     return pd.Series(forecast)
-
-# def simulate_fluctuations(base_return, volatility, days=FORECAST_DAYS, simulations=1000):
-#     """Simulate future returns using Monte Carlo."""
-#     simulated = np.random.normal(base_return, volatility, (days, simulations))
-#     return simulated.mean(axis=1).tolist()
-
-# def get_next_quarter():
-#     """Calculate the next quarter string, e.g., 2024_Q3."""
-#     today = datetime.today()
-#     quarter = ((today.month - 1) // 3 + 2) % 4 or 4
-#     year = today.year + (1 if quarter == 1 else 0)
-#     return f"{year}_Q{quarter}"
-
-# def markdown_to_text(md_text):
-#     """Simulate LLM response parsing (placeholder)."""
-#     return md_text.strip()
-
-# def extract_line_chart_data(response):
-#     """Extract data points for line chart (placeholder)."""
-#     return response  # Placeholder for extracted data
-
-# # --- Flask Endpoint ---
-
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     try:
-#         # Retrieve client and portfolio details
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Load portfolio data
-#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-#         portfolio_data = load_from_file(portfolio_file)
-#         if portfolio_data is None:
-#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
-
-#         # Load market data for beta calculation
-#         market_returns = fetch_historical_returns(MARKET_INDEX)
-
-#         # Prepare date intervals
-#         next_quarter = get_next_quarter()
-#         print(f"Next Quarter: {next_quarter}")
-
-#         confidence_data = []
-#         for _, asset in portfolio_data.iterrows():
-#             ticker = asset.get('symbol')
-#             if not ticker:
-#                 continue
-
-#             # Fetch historical returns
-#             historical_returns = fetch_historical_returns(ticker)
-#             if historical_returns.empty:
-#                 print(f"No valid returns for {ticker}. Assigning defaults.")
-#                 asset['volatility'] = 0.7
-#                 asset['sharpe_ratio'] = 0.8
-#                 asset['beta'] = 0.5
-#                 asset['forecasted_returns'] = [0] * FORECAST_DAYS
-#                 asset['simulated_returns'] = [0] * FORECAST_DAYS
-#                 continue
-
-#             # Metrics Calculation
-#             volatility = compute_volatility(historical_returns)
-#             sharpe_ratio = compute_sharpe_ratio(historical_returns)
-#             beta = compute_beta(historical_returns, market_returns)
-#             stationarity = adf_test(historical_returns)
-
-#             # Forecasting
-#             forecasted_returns = arima_forecast(historical_returns)
-#             simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
-
-#             # Save metrics back to the portfolio
-#             asset['volatility'] = volatility
-#             asset['sharpe_ratio'] = sharpe_ratio
-#             asset['beta'] = beta
-#             asset['stationarity'] = stationarity
-#             asset['forecasted_returns'] = forecasted_returns.tolist()
-#             asset['simulated_returns'] = simulated_returns
-            
-            
-#         # Load client financial data
-#         if USE_AWS:
-#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
-#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
-#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-#             except Exception as e:
-#                 logging.error(f"Error retrieving client financial data from AWS: {e}")
-#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
-#         else:
-#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-#             client_financial_data = load_from_file(client_summary_file)
-#             if not client_financial_data:
-#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
-
-#         # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-#         portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         # Generate date intervals for next quarter
-#         date_intervals = get_next_quarter_dates()
-#         next_quarter = get_next_quarter()
-
-
-#         task = f"""
-#             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
-#             You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
-#             The client, {client_name}, has the following portfolio:
-
-#             Portfolio Details: {portfolio_data}
-#             Portfolio Analyis: {portfolio_data.to_dict(orient='records')}
-#             Financial Situation: {client_financial_data}
-#             Available Funds: ${funds}
-#             Investor Personality: {investor_personality}
-#             Portfolio News: {portfolio_news}
-#             Economic News: {economic_news}
-
-#             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
-#             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
-#             {date_intervals}
-            
-#             Example of simulated_response = 
-#             | Date       | Total Return (%) | Total Return ($) |
-#             |------------|------------------|------------------|
-#             | 2024-04-01 | 4.5%             | $10,500          |
-#             | 2024-04-15 | 5.0%             | $10,800          |
-#             | 2024-04-30 | 5.2%             | $11,000          |
-#             |------------|------------------|------------------|
-            
-#             Your Response must be in the above table format no messages is required just table format data.
-#         """
-
-#         # Simulate LLM prediction
-#         model = genai.GenerativeModel('gemini-1.5-flash')
-#         response = model.generate_content(task)
-#         simulated_response = markdown_to_text(response.text)
-#         line_chart_data = extract_line_chart_data(simulated_response)
-
-#         # Save predictions
-#         prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-#         save_to_file(prediction_file, line_chart_data)
-
-#         # Return the response
-#         return jsonify({
-#             "client_id": client_id,
-#             "client_name": client_name,
-#             "portfolio_data": portfolio_data.to_dict(orient='records'),
-#             "predicted_returns": simulated_response,
-#             "line_chart_data": line_chart_data
-#         }), 200
-
-#     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
-
-#############################################################################################################
-
-# Using AWS :
-
-# File paths for local storage
-LOCAL_STORAGE_PATH = "local_data"
-PORTFOLIO_DIR = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
-CLIENT_SUMMARY_DIR = "client_data/client_data"
-PREDICTIONS_DIR = os.path.join(LOCAL_STORAGE_PATH, "predictions")
-
-# Ensure directories exist for local storage
-os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-
-# Predict returns based on client data
 @app.route('/predict_returns', methods=['POST'])
 def predict_returns():
     try:
@@ -6576,9 +6492,8 @@ def predict_returns():
         funds = request.json.get('funds')
         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
 
-        # Load portfolio data
+        # Load portfolio data (using local or AWS storage based on USE_AWS)
         if USE_AWS:
-            # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
@@ -6586,19 +6501,72 @@ def predict_returns():
             except s3.exceptions.NoSuchKey:
                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
         else:
-            portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-            portfolio_data = load_from_file(portfolio_file)
-            if not portfolio_data:
-                return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
+        
+        # portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+        # portfolio_data = load_from_file(portfolio_file)
+        # if portfolio_data is None:
+        #     return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
 
-        # Calculate portfolio-level metrics
-        total_current_value = sum(asset["current_value"] for asset in portfolio_data)
-        total_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
-        total_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+        # Load market data for beta calculation
+        market_returns = fetch_historical_returns(MARKET_INDEX)
 
-        total_daily_change_perc = (total_daily_change / total_current_value * 100) if total_current_value else 0
-        total_investment_gain_loss_perc = (total_investment_gain_loss / total_current_value * 100) if total_current_value else 0
+        # Prepare date intervals
+        next_quarter = get_next_quarter()
+        print(f"Next Quarter: {next_quarter}")
 
+        confidence_data = []
+        
+        # Iterate over each asset in the portfolio
+        
+        for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+            ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+            if not ticker:
+                continue
+            if ticker == 'N/A':
+                continue
+
+            # Fetch historical returns
+            historical_returns = fetch_historical_returns(ticker)
+            if historical_returns.empty:
+                print(f"No valid returns for {ticker}. Assigning defaults.")
+                asset['volatility'] = 0.8
+                asset['sharpe_ratio'] = 0.7
+                asset['beta'] = 0.5
+                asset['forecasted_returns'] = [0] * FORECAST_DAYS
+                asset['simulated_returns'] = [0] * FORECAST_DAYS
+                continue
+
+            # Metrics Calculation
+            volatility = compute_volatility(historical_returns)
+            print(volatility)
+            sharpe_ratio = compute_sharpe_ratio(historical_returns)
+            print(sharpe_ratio)
+            beta = compute_beta(historical_returns, market_returns)
+            print(beta)
+            stationarity = adf_test(historical_returns)
+            print(stationarity)
+
+            # Forecasting
+            forecasted_returns = arima_forecast(historical_returns)
+            print(forecasted_returns)
+            simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+            print(simulated_returns)
+
+            # Save metrics back to the portfolio
+            asset['volatility'] = volatility
+            asset['sharpe_ratio'] = sharpe_ratio
+            asset['beta'] = beta
+            asset['stationarity'] = stationarity
+            asset['forecasted_returns'] = forecasted_returns.tolist()
+            asset['simulated_returns'] = simulated_returns
+
+            
+            
         # Load client financial data
         if USE_AWS:
             # client_summary_key = f"{client_summary_folder}{client_id}.json"
@@ -6606,15 +6574,13 @@ def predict_returns():
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-            except : # Exception as e:
-                try:
-                    client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-                    client_financial_data = load_from_file(client_summary_file)
-                    if not client_financial_data:
-                        return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
-                except Exception as e:
-                    logging.error(f"Error retrieving client financial data from AWS: {e}")
-                    return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+            except Exception as e:
+                client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+                client_financial_data = load_from_file(client_summary_file)
+                if not client_financial_data:
+                    return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+                logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+                # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
         else:
             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
             client_financial_data = load_from_file(client_summary_file)
@@ -6630,584 +6596,357 @@ def predict_returns():
         date_intervals = get_next_quarter_dates()
         next_quarter = get_next_quarter()
 
-        # Prepare the task prompt for LLM
-        
         task = f"""
             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
-            You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
+            You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+            - Random market fluctuations (up and down movements).
+            - Economic volatility.
+            - Natural noise in predictions.
             The client, {client_name}, has the following portfolio:
 
             Portfolio Details: {portfolio_data}
+            Portfolio Analyis: {asset}
             Financial Situation: {client_financial_data}
             Available Funds: ${funds}
             Investor Personality: {investor_personality}
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
-
+                     
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
+
+            Predict the portfolio's **daily returns** over the next 3 months. Include:
+            1. **Best-Case Scenario** (High returns under favorable conditions).
+            2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+            3. **Confidence Band** (Range of returns at 95% confidence level).
             
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
             Example of simulated_response = 
-            | Date       | Total Return (%) | Total Return ($) |
-            |------------|------------------|------------------|
-            | 2024-04-01 | 4.5%             | $10,500          |
-            | 2024-04-15 | 5.0%             | $10,800          |
-            | 2024-04-30 | 5.2%             | $11,000          |
-            |------------|------------------|------------------|
+            ### Response Format:
+            | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            |------------|-----------------------|-----------------------|---------------------|------------------|
+            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
             
             Your Response must be in the above table format no messages is required just table format data.
         """
-
+        
         # Simulate LLM prediction
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(task)
-
-        # Process the response
-        html_suggestions = markdown.markdown(response.text)
-        simulated_response = markdown_to_text(html_suggestions)
-
-        # Extract line chart data from the simulated response
+        simulated_response = markdown_to_text(response.text)
+        print(simulated_response)
         line_chart_data = extract_line_chart_data(simulated_response)
+        print(f"\nLine Chart Data :{line_chart_data}")
+        
+        refined_line_chart_data = add_noise(line_chart_data)
+        print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
+        
+        # Plot return predictions :
+        # plot_return_predictions(line_chart_data)
+        # plot_refined_data(refined_line_chart_data)
+        # plot_return_predictions_with_fluctuations(refined_line_chart_data)
 
-        # Save line chart data locally or to AWS based on storage flag
-        if USE_AWS:
-            prediction_key = f"predictions/{client_id}_{next_quarter}_line_chart.json"
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=prediction_key,
-                    Body=json.dumps(line_chart_data),
-                    ContentType='application/json'
-                )
-            except Exception as e:
-                logging.error(f"Error saving prediction data to AWS: {e}")
-                return jsonify({"message": "Error saving prediction data to AWS."}), 500
-        else:
-            prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-            save_to_file(prediction_file, line_chart_data)
+        # Save predictions
+        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+        save_to_file(prediction_file, refined_line_chart_data)
 
         # Return the response
         return jsonify({
             "client_id": client_id,
             "client_name": client_name,
             "predicted_returns": simulated_response,
-            "line_chart_data": line_chart_data
+            "line_chart_data": refined_line_chart_data
         }), 200
 
     except Exception as e:
-        logging.error(f"Error in predicting returns: {e}")
+        print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
-
-
-# # original version :
-
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     try:
-#         # Retrieve client and portfolio details
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Load portfolio data
-#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-#         portfolio_data = load_from_file(portfolio_file)
-#         if not portfolio_data:
-#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
-
-#         # Calculate portfolio-level metrics
-#         total_current_value = sum(asset["current_value"] for asset in portfolio_data)
-#         total_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
-#         total_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
-
-#         # Ensure calculations are meaningful
-#         total_daily_change_perc = (total_daily_change / total_current_value * 100) if total_current_value else 0
-#         total_investment_gain_loss_perc = (total_investment_gain_loss / total_current_value * 100) if total_current_value else 0
-
-#         # Load client financial data
-#         client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-#         client_financial_data = load_from_file(client_summary_file)
-#         if not client_financial_data:
-#             return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
-        
-#          # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-#         portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         # Generate date intervals for next quarter
-#         # date_intervals = [
-#         #     "2024-10-01", "2024-10-15", "2024-10-31",
-#         #     "2024-11-01", "2024-11-15", "2024-11-30",
-#         #     "2024-12-01", "2024-12-15", "2024-12-31"
-#         # ] 
-#         date_intervals = get_next_quarter_dates()
     
-#         # next_quarter = "2024_Q4" 
-#         next_quarter = get_next_quarter()
-#         print(f"Next Quarter : {next_quarter}")
+    
+######################################################################################################################
+###################################             Dashboard Analysis ###################################################
+
+# # Helper Functions :
+
+# Get top and low performing Portfolio : 
+
+def get_top_low_portfolios(insights):
+    """
+    Generate tables for the top 10 high-performing and bottom 10 low-performing portfolios.
+
+    Args:
+        insights (list): List of client insights containing net worth.
+
+    Returns:
+        dict: Tables for top and low performers.
+    """
+    # Sort clients by net worth
+    sorted_insights = sorted(insights, key=lambda x: x["net_worth"], reverse=True)
+
+    # Top 10 performers
+    top_performers = sorted_insights[:10]
+    top_table = [
+        {
+            "Rank": i + 1,
+            "Client Name": client["client_name"],
+            "Net Worth": client["net_worth"]
+        }
+        for i, client in enumerate(top_performers)
+    ]
+
+    # Bottom 10 performers
+    low_performers = sorted_insights[-10:]
+    low_table = [
+        {
+            "Rank": len(sorted_insights) - i,
+            "Client Name": client["client_name"],
+            "Net Worth": client["net_worth"]
+        }
+        for i, client in enumerate(reversed(low_performers))
+    ]
+
+    return {
+        "top_performers": top_table,
+        "low_performers": low_table
+    }
+
+
+# Analyze Dashboard :
+
+# V-2 :
+
+@app.route('/analyze_dashboard', methods=['POST'])
+def analyze_dashboard():
+    try:
+        # Fetch all clients' financial data
+        clients = request.json.get("data")
+        if not clients:
+            return jsonify({"message": "No client data provided"}), 400
+
+        insights = []
+        for client in clients:
+            client_id = client.get("uniqueId")
+            if not client_id:
+                continue
+
+            # Load client financial data (from AWS or local based on USE_AWS)
+            if USE_AWS:
+                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+                try:
+                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                    client_data = json.loads(response['Body'].read().decode('utf-8'))
+                except Exception as e:
+                    logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+                    return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+            else:
+                client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+                if not os.path.exists(client_data_file_path):
+                    return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+                with open(client_data_file_path, 'r') as f:
+                    client_data = json.load(f)
+
+            # Extract relevant financial data
+            assets = sum(map(float, client_data["assetsDatasets"]["datasets"][0]["data"]))
+            liabilities = sum(map(float, client_data["liabilityDatasets"]["datasets"][0]["data"]))
+            net_worth = assets - liabilities
+            investment_personality = client_data.get("investment_personality", "Unknown")
+            retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+
+            # Generate insights using Gemini LLM
+            task = f"""
+                Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+                
+                - Total Assets: ${assets}
+                - Total Liabilities: ${liabilities}
+                - Net Worth: ${net_worth}
+                - Investment Personality: {investment_personality}
+                - Retirement Age Goal: {retirement_goal}
+
+                Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
+                """
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(task)
+            insights_text = markdown.markdown(response.text)
+
+            # Append insights
+            insights.append({
+                "client_id": client_id,
+                "client_name": client_data["clientDetail"]["clientName"],
+                "insights": insights_text,
+                "net_worth": net_worth
+            })
+
+        # Analyze the Dashboard:
+        assets = sum(map(lambda x: x["net_worth"], insights))
+        liabilities = sum(map(lambda x: x["net_worth"], insights))
+        net_worth = assets - liabilities
+        insights.sort(key=lambda x: x["net_worth"], reverse=True)
+        top_client_id = insights[0]["client_id"]
+        top_client_name = insights[0]["client_name"]
+
+        # Generate top and low performers
+        performance_tables = get_top_low_portfolios(insights)
         
-#         # Prepare the task prompt for LLM
-        # task = f"""
-        #     You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
-        #     You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
-        #     The client, {client_name}, has the following portfolio:
+        # Dashboard Insights using LLM
+        task = f"""
+                Analyze the Dashboard and give me the entire Dashboard Insights and Performance of each Client.
+                Refer to the insights here: {insights}
+                
+                Also Highlight:
+                - Top Client Name: {top_client_name}
+                - Total Assets: ${assets}
+                - Total Liabilities: ${liabilities}
+                - Net Worth: ${net_worth}
+                - Most Common Investment Personality among the clients : 
+                - Most Common Retirement Goal among the clients :
+                - Performance of the Dashboard: {performance_tables}
+                - Top Performers: {performance_tables["top_performers"]}
+                - Low Performers: {performance_tables["low_performers"]}
 
-        #     Portfolio Details: {portfolio_data}
-        #     Financial Situation: {client_financial_data}
-        #     Available Funds: ${funds}
-        #     Investor Personality: {investor_personality}
-        #     Portfolio News: {portfolio_news}
-        #     Economic News: {economic_news}
+                Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
+                """
+                
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(task)
+        dashboard_analysis = markdown_to_text(response.text)
 
-        #     Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
-        #     Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
-        #     {date_intervals}
+
+        # Return the response
+        return jsonify({
+            "message": "Dashboard Analysis generated successfully",
+            "dashboard_analysis": dashboard_analysis,
+            "performance": performance_tables
+        }), 200
+
+    except Exception as e:
+        print(f"Error in analyzing dashboard: {e}")
+        return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
+
+
+# V-1 :
+
+# @app.route('/analyze_dashboard', methods=['POST'])
+# def analyze_dashboard():
+#     try:
+#         # Fetch all clients' financial data
+#         clients = request.json.get("clients")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         insights = []
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id:
+#                 continue
+
             
-        #     Example of simulated_response = 
-        #     | Date       | Total Return (%) | Total Return ($) |
-        #     |------------|------------------|------------------|
-        #     | 2024-04-01 | 4.5%             | $10,500          |
-        #     | 2024-04-15 | 5.0%             | $10,800          |
-        #     | 2024-04-30 | 5.2%             | $11,000          |
-        #     |------------|------------------|------------------|
+#             # Load client financial data (from AWS or local based on USE_AWS)
             
-        #     Your Response must be in the above table format no messages is required just table format data.
-        # """
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
 
-#         # Simulate LLM prediction
-#         model = genai.GenerativeModel('gemini-1.5-flash')
+#             # Extract relevant financial data
+#             assets = sum(map(float, client_data["assetsDatasets"]["datasets"][0]["data"]))
+#             liabilities = sum(map(float, client_data["liabilityDatasets"]["datasets"][0]["data"]))
+#             net_worth = assets - liabilities
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+#             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+
+#             # Generate insights using Gemini LLM
+#             task = f"""
+#                 Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+                
+#                 - Total Assets: ${assets}
+#                 - Total Liabilities: ${liabilities}
+#                 - Net Worth: ${net_worth}
+#                 - Investment Personality: {investment_personality}
+#                 - Retirement Age Goal: {retirement_goal}
+
+#                 Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
+#                 """
+#             model = genai.GenerativeModel("gemini-1.5-flash")
+#             response = model.generate_content(task)
+#             insights_text = markdown.markdown(response.text)
+
+#             # Append insights
+#             insights.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "insights": insights_text,
+#                 "net_worth": net_worth
+#             })
+            
+            
+#         # Analyze the Dashboard :
+        
+#         assets = sum(map(lambda x: x["net_worth"], insights))
+#         liabilities = sum(map(lambda x: x["net_worth"], insights))
+#         net_worth = assets - liabilities
+#         investment_personality = "Unknown"
+#         retirement_goal = 0
+#         for client in clients:
+#             if client["uniqueId"] == top_client_id:
+#                 investment_personality = client.get("investment_personality", "Unknown")
+#                 retirement_goal = client["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+#                 break
+            
+#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
+#         top_client_id = insights[0]["client_id"]
+#         top_client_name = insights[0]["client_name"]
+            
+#         task = f"""
+#                 Analyze the Dashboard and give me the entire Dashboard Insights and Performance of each Client.
+#                 Refer to the inisghts here : {insights} 
+                
+#                 Also Highlight :
+#                 - Top Client Name: {top_client_name}
+#                 - Top Client Investor Personality: {investment_personality}
+#                 - Most common Client Investor Personality in the database :
+#                 - Total Assets: ${assets}
+#                 - Total Liabilities: ${liabilities}
+#                 - Net Worth: ${net_worth}
+
+#                 Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
+#                 """
+            
+#         model = genai.GenerativeModel("gemini-1.5-flash")
 #         response = model.generate_content(task)
-
-#         # Process the response
-#         html_suggestions = markdown.markdown(response.text)
+#         # dashboard_analysis = markdown.markdown(response.text) 
+#         dashboard_analysis = markdown_to_text(response.text)
         
-#         print(f"\nHTML Suggestions : {html_suggestions}")
-        
-#         simulated_response = markdown_to_text(html_suggestions)
-        
-#         print(f"\nSimulated Response : {simulated_response}")
-#         # Extract line chart data from the simulated response
-#         line_chart_data = extract_line_chart_data(simulated_response)
-        
-#         print(f"\nLine Chart Data : {line_chart_data}")
-        
-#         # Save line chart data locally
-#         prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-#         save_to_file(prediction_file, line_chart_data)
-
-#         # Return the response
-#         return jsonify({
-#             "client_id": client_id,
-#             "client_name": client_name,
-#             "predicted_returns": simulated_response,
-#             "line_chart_data": line_chart_data
-#         }), 200
+#         # Return insights
+#         return jsonify({"message": "Dashboard Analysis generated successfully", "data": dashboard_analysis}), 200
 
 #     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+#         print(f"Error in analyzing dashboard: {e}")
+#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
 
 
-########################################################################################################################
-# Portfolio Return on Investment Prediction for next quarter using aws :
-
-# Determine Next Quarter Date Intervals :
-# from datetime import datetime, timedelta
-# import calendar
-
-# def get_next_quarter_dates():
-#     current_date = datetime.now()
-#     current_month = current_date.month
-
-#     # Determine the starting month of the next quarter
-#     if current_month in [1, 2, 3]:  # Q1
-#         start_month = 4  # Q2
-#     elif current_month in [4, 5, 6]:  # Q2
-#         start_month = 7  # Q3
-#     elif current_month in [7, 8, 9]:  # Q3
-#         start_month = 10  # Q4
-#     else:  # Q4
-#         start_month = 1  # Q1 of the next year
-
-#     # Determine the year of the next quarter
-#     next_quarter_year = current_date.year if start_month != 1 else current_date.year + 1
-
-#     # Generate dates for the next quarter
-#     next_quarter_dates = []
-#     for month in range(start_month, start_month + 3):
-#         # Get the first, 15th, and last day of the month
-#         first_day = datetime(next_quarter_year, month, 1)
-#         fifteenth_day = datetime(next_quarter_year, month, 15)
-#         last_day = datetime(next_quarter_year, month, calendar.monthrange(next_quarter_year, month)[1])
-
-#         next_quarter_dates.extend([first_day.strftime("%Y-%m-%d"), 
-#                                    fifteenth_day.strftime("%Y-%m-%d"), 
-#                                    last_day.strftime("%Y-%m-%d")])
-
-#     return next_quarter_dates
-
-
-
-# # Line Chart for Predcting Next quarter Returns :
-# def extract_line_chart_data(llm_response_text):
-#     """
-#     Extracts line chart data from the LLM's response for plotting.
-#     """
-#     try:
-#         # Example parsing logic for the response (modify as needed)
-#         lines = llm_response_text.split("\n")
-#         line_chart_data = {
-#             "dates": [],
-#             "overall_returns": {"percentages": [], "amounts": []}
-#         }
-#         current_date = datetime.now()
-#         current_year = current_date.year
-#         for line in lines:
-#             if line.startswith(f"| {current_year}-"):  # Ex: "| 2024-01-01 |"
-#                 parts = line.split("|")
-#                 date = parts[1].strip()
-#                 return_percentage = float(parts[2].replace("%", "").strip())
-#                 return_amount = float(parts[3].replace("$", "").strip())
-#                 line_chart_data["dates"].append(date)
-#                 line_chart_data["overall_returns"]["percentages"].append(return_percentage)
-#                 line_chart_data["overall_returns"]["amounts"].append(return_amount)
-#         return line_chart_data
-#     except Exception as e:
-#         print(f"Error extracting line chart data: {e}")
-#         return {}
-
-
-# # V-3 : Actual Line Chart 
-# import hashlib
-# import json
-# from datetime import datetime
-
-# Global variable to store the hash of the last portfolio
-# last_portfolio_hash = None
-
-# V-3 : Check for Portdolio Changes implemented :
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     global last_portfolio_hash
-#     try:
-#         # Retrieve portfolio and client data from the request
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Load portfolio data
-#         with open(f'portfolio_{client_id}.json', 'r') as f:
-#             portfolio_data = json.load(f)
-
-#         # Calculate the hash of the current portfolio data
-#         current_portfolio_hash = hashlib.sha256(json.dumps(portfolio_data, sort_keys=True).encode()).hexdigest()
-
-#         # Check if the portfolio is the same as before
-#         if last_portfolio_hash == current_portfolio_hash:
-#             print("Portfolio data is unchanged. Using previously generated predictions.")
-#             # Load previously stored predictions and line chart data
-#             try:
-#                 with open(f'predictions_{client_id}.json', 'r') as f:
-#                     previous_predictions = json.load(f)
-#                 return jsonify(previous_predictions), 200
-#             except FileNotFoundError:
-#                 return jsonify({"message": "No previous predictions found. Please update the portfolio."}), 404
-
-#         # Update the global portfolio hash
-#         last_portfolio_hash = current_portfolio_hash
-
-#         # Load financial data from S3
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-#         except Exception as e:
-#             logging.error(f"Error retrieving client financial data: {e}")
-#             return jsonify({'message': f'Error retrieving client financial data: {e}'}), 500
-
-#         # Fetch news for the portfolio assets
-#         portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         # Prepare date intervals for predictions
-#         date_intervals = get_next_quarter_dates()
-
-#         # Prepare prompt for the LLM
-#         task = f"""
-#             You are a financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio.
-#             The client, {client_name}, has the following portfolio:
-            
-#             Portfolio Details: {portfolio_data}
-#             Financial Situation: {client_financial_data}
-#             Available Funds: ${funds}
-#             Investor Personality: {investor_personality}
-            
-#             Consider these factors:
-#             1. Economic trends such as inflation, interest rates, and geopolitical events.
-#             2. Past performance of assets in the portfolio.
-#             3. Risk tolerance based on investor personality.
-#             4. The current news and economic news for the assets in the portfolio: {portfolio_news}
-
-#             Predict the expected returns (in percentages and dollar amounts) for each asset and the overall portfolio at the following dates:
-#             {date_intervals}
-
-#             Provide the output in the following format:
-            
-#             #### Predicted Returns:
-#             - **Asset-wise Predictions (Per Date)**:
-#               | Date       | Asset Name | Predicted Return (%) | Predicted Return ($) |
-#               |------------|------------|----------------------|-----------------------|
-#               | 2024-01-01 | Asset 1    | 5.5%                | $500                 |
-#               | 2024-01-15 | Asset 1    | 5.8%                | $520                 |
-#               | ...        | ...        | ...                 | ...                  |
-
-#             - **Overall Portfolio Return**:
-#               | Date       | Total Return (%) | Total Return ($) |
-#               |------------|------------------|------------------|
-#               | 2024-01-01 | 4.5%            | $10,500          |
-#               | ...        | ...             | ...              |
-
-#             Ensure the output is comprehensive and formatted for easy parsing into a line chart.
-#         """
-
-#         # Call the LLM model to generate predictions
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the LLM response
-#             html_predictions = markdown.markdown(response.text)
-#             formatted_predictions = markdown_to_text(html_predictions)
-
-#             # Extract line chart data from the response
-#             predicted_line_chart_data = extract_line_chart_data(response.text)
-
-#             # Fetch actual returns for the portfolio
-#             actual_line_chart_data = get_actual_returns(client_id)
-
-#             # Combine actual and predicted data for line chart
-#             line_chart_data = {
-#                 "actual": actual_line_chart_data,
-#                 "predicted": predicted_line_chart_data
-#             }
-
-#             # Save predictions and line chart data for reuse
-#             result = {
-#                 "client_id": client_id,
-#                 "client_name": client_name,
-#                 "predicted_returns": formatted_predictions,
-#                 "line_chart_data": line_chart_data
-#             }
-#             with open(f'predictions_{client_id}.json', 'w') as f:
-#                 json.dump(result, f, indent=4)
-
-#             # Return response with line chart data
-#             return jsonify(result), 200
-
-#         except Exception as e:
-#             print(f"Error generating predictions from LLM: {e}")
-#             return jsonify({"message": f"Error generating predictions: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
-
-# # V-2 : with Line Chart Data
-# # # Predict Next Quarter Returns
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     try:
-#         # Retrieve portfolio and client data from the request
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Load portfolio data
-#         with open(f'portfolio_{client_id}.json', 'r') as f:
-#             portfolio_data = json.load(f)
-
-#         # Load financial data from S3
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-#         except Exception as e:
-#             logging.error(f"Error retrieving client financial data: {e}")
-#             return jsonify({'message': f'Error retrieving client financial data: {e}'}), 500
-
-#         # Fetch news for the portfolio assets
-#         portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         # Prepare date intervals for predictions
-        
-#         # date_intervals = [
-#         #     "2024-01-01", "2024-01-15", "2024-01-31",
-#         #     "2024-02-15", "2024-02-29",
-#         #     "2024-03-15", "2024-03-31"
-#         # ]
-        
-#         date_intervals = get_next_quarter_dates()
-
-#         # Prepare prompt for the LLM
-#         task = f"""
-#             You are a financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio.
-#             The client, {client_name}, has the following portfolio:
-            
-#             Portfolio Details: {portfolio_data}
-#             Financial Situation: {client_financial_data}
-#             Available Funds: ${funds}
-#             Investor Personality: {investor_personality}
-            
-#             Consider these factors:
-#             1. Economic trends such as inflation, interest rates, and geopolitical events.
-#             2. Past performance of assets in the portfolio.
-#             3. Risk tolerance based on investor personality.
-#             4. The current news and economic news for the assets in the portfolio: {portfolio_news}
-
-#             Predict the expected returns (in percentages and dollar amounts) for each asset and the overall portfolio at the following dates:
-#             {date_intervals}
-
-#             Provide the output in the following format:
-            
-#             #### Predicted Returns:
-#             - **Asset-wise Predictions (Per Date)**:
-#               | Date       | Asset Name | Predicted Return (%) | Predicted Return ($) |
-#               |------------|------------|----------------------|-----------------------|
-#               | 2024-01-01 | Asset 1    | 5.5%                | $500                 |
-#               | 2024-01-15 | Asset 1    | 5.8%                | $520                 |
-#               | ...        | ...        | ...                 | ...                  |
-
-#             - **Overall Portfolio Return**:
-#               | Date       | Total Return (%) | Total Return ($) |
-#               |------------|------------------|------------------|
-#               | 2024-01-01 | 4.5%            | $10,500          |
-#               | ...        | ...             | ...              |
-
-#             Ensure the output is comprehensive and formatted for easy parsing into a line chart.
-#         """
-
-#         # Call the LLM model to generate predictions
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the LLM response
-#             html_predictions = markdown.markdown(response.text)
-#             formatted_predictions = markdown_to_text(html_predictions)
-
-#             # Extract line chart data from the response
-#             line_chart_data = extract_line_chart_data(response.text)
-
-#             # Return response with line chart data
-#             return jsonify({
-#                 "client_id": client_id,
-#                 "client_name": client_name,
-#                 "predicted_returns": formatted_predictions,
-#                 "line_chart_data": line_chart_data
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error generating predictions from LLM: {e}")
-#             return jsonify({"message": f"Error generating predictions: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
-
-# # V-1 : without line chart
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     try:
-#         # Retrieve portfolio data from the request
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-        
-#         # Load portfolio data
-#         with open(f'portfolio_{client_id}.json', 'r') as f:
-#             portfolio_data = json.load(f)
-
-#         # Load financial data from S3
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-#         except Exception as e:
-#             logging.error(f"Error retrieving client financial data: {e}")
-#             return jsonify({'message': f'Error retrieving client financial data: {e}'}), 500
-        
-#         # Fetch news for each asset in the specified list
-#         portfolio_news = collect_portfolio_news(portfolio_data)
-        
-#         # Prepare prompt for LLM
-#         task = f"""
-#             You are a financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio.
-#             The client, {client_name}, has the following portfolio:
-            
-#             Portfolio Details: {portfolio_data}
-#             Financial Situation: {client_financial_data}
-#             Available Funds: ${funds}
-#             Investor Personality: {investor_personality}
-            
-#             Consider these factors:
-#             1. Economic trends such as inflation, interest rates, and geopolitical events.
-#             2. Past performance of assets in the portfolio.
-#             3. Risk tolerance based on investor personality.
-#             4. The current news and economic news for the assets in the portfolio : {portfolio_news}
-
-#             Predict the expected returns for each asset (in both percentages and dollar amounts) and the overall portfolio. 
-#             Include insights on how market conditions and client financial goals may affect these predictions.
-
-#             Provide the output in the following format:
-            
-#             #### Predicted Returns:
-#             - **Asset-wise Predictions**:
-#               | Asset Name | Predicted Return (%) | Predicted Return ($) |
-#               |------------|----------------------|-----------------------|
-#               | Asset 1    | 5.5%                | $500                 |
-#               | ...        | ...                 | ...                  |
-
-#             - **Overall Portfolio Return**:
-#               | Metric              | Value   |
-#               |---------------------|---------|
-#               | Total Return (%)    | 8.5%    |
-#               | Total Return ($)    | $10,500 |
-#         """
-
-#         # Call the LLM model to generate predictions
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the LLM response
-#             html_predictions = markdown.markdown(response.text)
-#             formatted_predictions = markdown_to_text(html_predictions)
-
-#             # Return response
-#             return jsonify({
-#                 "client_id": client_id,
-#                 "client_name": client_name,
-#                 "predicted_returns": formatted_predictions
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error generating predictions from LLM: {e}")
-#             return jsonify({"message": f"Error generating predictions: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
-
+#################################################################################################################################
 
 # Run the Flask application
 if __name__ == '__main__':

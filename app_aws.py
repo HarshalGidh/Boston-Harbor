@@ -34,6 +34,15 @@ from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import BaseTool, StructuredTool, tool
 # Define functions to generate investment suggestions :\
 
+import random
+from datetime import datetime
+import os
+import json
+from email.mime.text import MIMEText
+import smtplib
+import jwt
+
+USE_AWS = True  # Set to False to use local storage
 
 # # -------------------------------------Start Aws---------------------
 # import paramiko
@@ -72,7 +81,7 @@ from langchain.tools import BaseTool, StructuredTool, tool
 import boto3
 load_dotenv()
 
-# AWS keys
+# # AWS keys
 aws_access_key = os.getenv('aws_access_key')
 aws_secret_key = os.getenv('aws_secret_key')
 S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
@@ -82,7 +91,8 @@ order_list_folder = os.getenv('order_list_folder')
 portfolio_list_folder = os.getenv('portfolio_list_folder') 
 personality_assessment_folder = os.getenv('personality_assessment_folder') 
 login_folder = os.getenv('login_folder')
-
+daily_changes_folder = os.getenv('daily_changes_folder')
+signUp_user_folder = os.getenv('signUp_user_folder')
 
 # Connecting to Amazon S3
 s3 = boto3.client(
@@ -105,8 +115,8 @@ def list_s3_keys(bucket_name, prefix=""):
         print(f"Error listing objects in S3: {e}")
 
 # Call the function
+# list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
 list_s3_keys(S3_BUCKET_NAME, order_list_folder)
-
 
 
 
@@ -133,8 +143,9 @@ genai.configure(api_key=GOOGLE_API_KEY)
 
 import markdown
 
-########################### Sign in Sign Out using aws ###################################################
+########################### Sign in Sign using aws ###################################################
 
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
 
 from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
@@ -155,24 +166,8 @@ app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
 
 mail = Mail(app)
 
-
-# Helper functions
-def upload_to_s3(data, filename):
-    s3.put_object(Bucket=S3_BUCKET_NAME, Key=filename, Body=json.dumps(data))
-    return f"s3://{S3_BUCKET_NAME}/{filename}"
-
-def download_from_s3(filename):
-    try:
-        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
-        return json.loads(response['Body'].read().decode('utf-8'))
-    except Exception as e:
-        return None
-    
-def delete_from_s3(key):
-    try:
-        s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
-    except Exception as e:
-        print(f"Error deleting {key}: {e}")
+# In-memory storage for email and OTP (for simplicity)
+otp_store = {}
 
 # API Endpoints
 from flask import Flask, request, jsonify
@@ -181,116 +176,178 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-
-
 # Replace with your email credentials
 EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
 EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
 
-# In-memory storage for email and OTP (for simplicity)
-otp_store = {}
+ 
+# Local storage paths
+LOCAL_STORAGE_PATH = "local_storage"
+os.makedirs(LOCAL_STORAGE_PATH, exist_ok=True)
+# otp_store = {}
+ 
+# def load_from_local(filepath):
+#     try:
+#         if not os.path.exists(filepath):
+#             return None
+#         with open(filepath, 'r') as file:
+#             return json.load(file)
+#     except Exception as e:
+#         print(f"Error loading file: {e}")
+#         return None
+   
+# def save_to_local(data, filepath):
+#     try:
+#         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+#         with open(filepath, 'w') as file:
+#             json.dump(data, file)
+#         print(f"Data saved at {filepath}")  # Debug log
+#     except Exception as e:
+#         print(f"Error saving file: {e}")  # Debug log
+#         raise
+ 
+ 
+# def delete_from_local(filename):
+    # file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
+    # if os.path.exists(file_path):
+    #     os.remove(file_path)
+       
+# Using AWS and Local Storage :
 
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
+
+def load_from_local(filepath):
+    try:
+        if not os.path.exists(filepath):
+            return None
+        with open(filepath, 'r') as file:
+            return json.load(file)
+    except Exception as e:
+        print(f"Error loading file: {e}")
+        return None
+ 
+def save_to_local(data, filepath):
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, 'w') as file:
+            json.dump(data, file)
+        print(f"Data saved at {filepath}")  # Debug log
+    except Exception as e:
+        print(f"Error saving file: {e}")  # Debug log
+        raise
+ 
+def delete_from_local(filename):
+    file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"File {filename} deleted from local storage.")  # Debug log
+        else:
+            print(f"File {filename} not found in local storage.")  # Debug log
+    except Exception as e:
+        print(f"Error deleting file: {e}")  # Debug log
+        raise
+ 
+def save_to_aws(data, filename):
+    try:
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=filename,
+            Body=json.dumps(data),
+            ContentType='application/json'
+        )
+        print(f"Data saved to AWS at {filename}")
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        print(f"AWS credentials error: {e}")
+        raise
+    except Exception as e:
+        print(f"Error saving to AWS: {e}")
+        raise
+ 
+def load_from_aws(filename):
+    try:
+        obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+        return json.loads(obj['Body'].read().decode('utf-8'))
+    except s3.exceptions.NoSuchKey:
+        return None
+    except Exception as e:
+        print(f"Error loading from AWS: {e}")
+        return None
+ 
+def save_user_data(data, email):
+    if USE_AWS:
+        # Store in AWS under 'signUp_user_folder/<email>.json'
+        filename = f"{signUp_user_folder}{email}.json"
+        save_to_aws(data, filename)
+    else:
+        # Store locally under 'users/<email>.json'
+        filename = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
+        save_to_local(data, filename)
+ 
+def load_user_data(email):
+    if USE_AWS:
+        filename = f"{signUp_user_folder}{email}.json"
+        return load_from_aws(filename)
+    else:
+        filename = f"users/{email}.json"
+        return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename))
+ 
+def delete_user_data(email):
+    if USE_AWS:
+        try:
+            filename = f"{signUp_user_folder}{email}.json"
+            s3.delete_object(Bucket=S3_BUCKET_NAME, Key=filename)
+            print(f"File {filename} deleted from AWS.")  # Debug log
+        except Exception as e:
+            print(f"Error deleting file from AWS: {e}")  # Debug log
+            raise
+    else:
+        filename = f"users/{email}.json"
+        delete_from_local(filename)
+
+ 
 def send_email(to_email, otp):
     try:
+        # Validate email format
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+            print(f"Invalid email address: {to_email}")
+            return False
+ 
         # Setup email message
-        subject = "Your Verification Code"
-        message = f"Your verification code is: {otp}"
+        subject = "Your Reset Password Code"
+        message = f"Your Reset Password Code is: {otp}"
         msg = MIMEMultipart()
         msg['From'] = EMAIL_ADDRESS
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(MIMEText(message, 'plain'))
-
+ 
         # Send email using SMTP
         with smtplib.SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.sendmail(EMAIL_ADDRESS, to_email, msg.as_string())
+        print("Email sent successfully")
         return True
     except Exception as e:
         print(f"Error sending email: {e}")
         return False
-
-# 1. Email Verification and send otp :
-
-@app.route('/send-otp', methods=['POST'])
-def send_otp():
-    data = request.get_json()
-    email = data.get('email')
-
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
-
-    # Generate a random 6-digit OTP
-    otp = random.randint(100000, 999999)
-    otp_store[email] = otp
-
-    if send_email(email, otp):
-        return jsonify({"message": "OTP sent successfully!"}), 200
-    else:
-        return jsonify({"error": "Failed to send OTP"}), 500
-
-@app.route('/verify-otp', methods=['POST'])
-def verify_otp():
-    data = request.get_json()
-    email = data.get('email')
-    otp = data.get('otp')
-
-    if not email or not otp:
-        return jsonify({"error": "Email and OTP are required"}), 400
-
-    # Check if the provided OTP matches the stored OTP
-    if otp_store.get(email) == int(otp):
-        del otp_store[email]  # Remove OTP after successful verification
-        return jsonify({"message": "Email verified successfully!"}), 200
-    else:
-        return jsonify({"error": "Invalid OTP"}), 400
-
-
-# Previous Version
-# @app.route('/email-verification', methods=['POST'])
-# def email_verification():
-#     try:
-#         email = request.json.get('email')
-#         if not email:
-#             return jsonify({"message": "Email is required"}), 400
-        
-#         print(email)
-#         # Generate a 6-digit verification code
-#         verification_code = random.randint(100000, 999999)
-#         sign_up_link = "http://localhost:3000/signUp"
-        
-#         # Send the email with the verification code
-#         msg = Message("Sign Up Link",recipients=[email]) # Code", recipients=[email])
-#         msg.body = f"Your Email is Verified.\nUse this Link to Sign Up : {sign_up_link}" #f"Your verification code is: {verification_code}"
-#         print(msg.body)
-#         print(msg)
-#         mail.send(msg)
-#         # msg = Message("Your Verification Code", recipients=[email])
-#         # msg.body = f"Your verification code is: {verification_code}"
-#         # mail.send(msg)
-
-#         # Save the verification code in S3
-#         # data = {"email": email, "verification_code": verification_code, "timestamp": str(datetime.now())}
-#         # upload_to_s3(data, f"verification_codes/{email}.json")
-
-#         return jsonify({"message": "Verification code sent successfully"}), 200
-#     except Exception as e:
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
+ 
+# Email verification :
+ 
 @app.route('/email-verification', methods=['POST'])
 def email_verification():
     try:
         email = request.json.get('email')  # Extract email from the request
         if not email:
             return jsonify({"message": "Email is required"}), 400
-
+ 
         print(f"Processing email verification for: {email}")
-
+ 
         # Generate the sign-up link
         sign_up_link = f"http://localhost:3000/signUp/{email}"
-
+ 
         # Create the email message
         msg = Message(
             "Sign-Up Link - Verify Your Email",
@@ -305,168 +362,309 @@ def email_verification():
             f"Thank you."
         )
         print(f"Sending email to: {email}\nContent: {msg.body}")
-        
+       
         # Send the email
         mail.send(msg)
         print("Email sent successfully.")
-
+ 
         return jsonify({"message": "Sign-up link sent successfully"}), 200
-
+ 
     except Exception as e:
         print(f"Error sending email: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+ 
+ 
+ 
+@app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    data = request.get_json()
+    email = data.get('email')
+    otp = data.get('otp')
+ 
+    if not email or not otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+ 
+    if otp_store.get(email) == int(otp):
+        del otp_store[email]
+        return jsonify({"message": "Email verified successfully!"}), 200
+    else:
+        return jsonify({"error": "Invalid OTP"}), 400
+ 
 
 
 
+# 2. Sign Up
 
-
-# # 2. Sign Up
 @app.route('/sign-up', methods=['POST'])
 def sign_up():
     try:
-        email = request.json.get('email')
-        password = request.json.get('password')
-        confirm_password = request.json.get('confirm_password')
-        verification_code = request.json.get('verification_code')
-
-        if not all([email, password, confirm_password]): #, verification_code]):
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid JSON"}), 400
+ 
+        email = data.get('email')
+        password = data.get('password')
+        confirm_password = data.get('confirm_password')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+ 
+        if not all([email, password, confirm_password, first_name, last_name]):
             return jsonify({"message": "All fields are required"}), 400
-
+ 
         if password != confirm_password:
             return jsonify({"message": "Passwords do not match"}), 400
-
-        # Fetch and validate verification code from S3
-        verification_data = download_from_s3(f"verification_codes/{email}.json")
-        if not verification_data or str(verification_data["verification_code"]) != str(verification_code):
-            return jsonify({"message": "Invalid verification code"}), 400
-
-        # Hash the password
+ 
+        if load_user_data(email):
+            return jsonify({"message": "User already exists"}), 400
+ 
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-
-        # Save user data in S3
-        user_data = {"email": email, "password": hashed_password}
-        upload_to_s3(user_data, f"users/{email}.json")
-
+        user_data = {
+            "email": email,
+            "password": hashed_password,
+            "first_name": first_name,
+            "last_name": last_name,
+            "data": {}
+        }
+ 
+        save_user_data(user_data, email)
         return jsonify({"message": "Sign up successful"}), 200
     except Exception as e:
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-# 3. Sign In
-import jwt
-# from datetime import datetime, timedelta,timezone
-
-# Secret key for signing JWT
-JWT_SECRET_KEY =  os.getenv('JWT_SECRET_KEY') 
+        print(f"Error in sign-up: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+   
+   
+# 3. Sign in :
 
 @app.route('/sign-in', methods=['POST'])
 def sign_in():
     try:
-        email = request.json.get('email')
-        password = request.json.get('password')
-
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+ 
         if not all([email, password]):
             return jsonify({"message": "Email and password are required"}), 400
-
-        # Fetch user data from S3
-        user_data = download_from_s3(f"users/{email}.json")
+ 
+        user_data = load_user_data(email)
         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
             return jsonify({"message": "Invalid email or password"}), 401
-
-        # Generate a JWT token
-        token_payload = {
-            "email": email,
-            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2),
-            "iat": datetime.datetime.now(datetime.timezone.utc),
-            "sub": "user_authentication"  # Subject of the token
-        }
-        token = jwt.encode(token_payload, JWT_SECRET_KEY, algorithm="HS256")
-
-        return jsonify({
-            "message": "Sign in successful",
-            "token": token
-        }), 200
+ 
+        token = jwt.encode(
+            {"email": email, "exp": datetime.utcnow() + timedelta(hours=5)},
+            app.config['JWT_SECRET_KEY'],
+            algorithm="HS256"
+        )
+ 
+        return jsonify({"message": "Sign in successful", "token": token}), 200
     except Exception as e:
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+        print(f"Error during sign-in: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+      
 
+#  # 4. Forgot Password
 
+import traceback
 
-# 4. Forgot Password
 @app.route('/forgot-password', methods=['POST'])
 def forgot_password():
     try:
-        email = request.json.get('email')
+        data = request.get_json()
+        print("Data received:", data)
+        if not data:
+            return jsonify({"message": "Invalid JSON"}), 400
+ 
+        email = data.get('email')
+        print("Email extracted:", email)
         if not email:
             return jsonify({"message": "Email is required"}), 400
-
-        # Generate a 6-digit reset code
+ 
+        # Generate a reset code
         reset_code = random.randint(100000, 999999)
-
-        # Send the reset code via email
-        msg = Message(
-            "Reset Your Password",
-            sender="your_email@gmail.com",
-            recipients=[email]
-        )
-        msg.body = (
-            f"Hello,\n\n"
-            f"You are about to Reset Your Password.Use the following Reset Code to Reset Your Password:\n\n"
-            f"{reset_code}\n\n"
-            f"If you did not request this verification, please ignore this email.\n\n"
-            f"Thank you."
-        )
-        print(f"Sending email to: {email}\nContent: {msg.body}")
-        
-        mail.send(msg)
-
-        # Save the reset code and timestamp in S3
-        data = {"email": email, "reset_code": reset_code, "timestamp": str(datetime.datetime.now())}
-        upload_to_s3(data, f"password_resets/{email}.json")
-
-        return jsonify({"message": "Password reset code sent successfully"}), 200
+        print("Reset code generated:", reset_code)
+ 
+        # Load the user data
+        user_data = load_user_data(email)
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
+ 
+        # Add the reset code to the user data
+        user_data['reset_code'] = reset_code
+        user_data['reset_timestamp'] = str(datetime.now())
+ 
+        # Save the updated user data
+        save_user_data(user_data, email)
+        print("Reset data saved successfully.")
+ 
+        # Send reset code via email
+        if send_email(email, reset_code):
+            print("Email sent successfully.")
+            return jsonify({"message": "Password reset code sent successfully"}), 200
+        else:
+            print("Failed to send email.")
+            return jsonify({"error": "Failed to send reset code"}), 500
+ 
     except Exception as e:
-        return jsonify({"message": f"Error occurred while sending reset code: {str(e)}"}), 500
+        traceback.print_exc()  # Logs the full stack trace
+        return jsonify({"error": "Internal server error"}), 500
+ 
 
-#5. Reset password
+# 5. Reset password :
+
 @app.route('/reset-password', methods=['POST'])
 def reset_password():
     try:
-        email = request.json.get('email')
-        reset_code = request.json.get('reset_code')
-        new_password = request.json.get('new_password')
-        # confirm_password = request.json.get('confirm_password')
+        data = request.get_json()
+        print("Data received:", data)
+ 
+        email = data.get('email')
+        reset_code = data.get('reset_code')
+        new_password = data.get('new_password')
+ 
         if not all([email, reset_code, new_password]):
-            return jsonify({"message": "Email, reset code, and new password are required"}), 400
-
-        # if new_password != confirm_password:
-        #     return jsonify({"message": "Passwords do not match"}), 400
-        
-        # Fetch reset data from S3
-        reset_data = download_from_s3(f"password_resets/{email}.json")
-        if not reset_data:
-            return jsonify({"message": "Invalid email or reset code"}), 400
-
-        # Validate the reset code
-        if str(reset_data["reset_code"]) != str(reset_code):
+            return jsonify({"message": "All fields are required"}), 400
+ 
+        email = email.lower()
+        user_data = load_user_data(email)
+ 
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
+ 
+        user_reset_code = user_data.get('reset_code')
+        print(f"Reset code from request: {reset_code}")
+        print(f"Reset code from user data: {user_reset_code}")
+ 
+        if str(user_reset_code) != str(reset_code):
+            print(f"Reset code from request: {reset_code}")
+            print(f"Reset code from user data: {user_reset_code}")
             return jsonify({"message": "Invalid reset code"}), 400
+ 
+        # Update password
+        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        user_data['password'] = hashed_password
+        user_data.pop('reset_code', None)
+        user_data.pop('reset_timestamp', None)
+ 
+        save_user_data(user_data, email)
+        return jsonify({"message": "Password reset successful"}), 200
+ 
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"message": "Internal server error"}), 500
+ 
+ 
+ 
+# ------------------------- With Bearer ------------------------------
+import requests
+ 
+@app.route('/advisor_profile', methods=['GET'])
+def advisor_profile():
+    token = request.headers.get('Authorization')
 
-        # Update the password for the user
-        user_data = download_from_s3(f"users/{email}.json")
+    if not token:
+        return jsonify({"message": "Token is missing"}), 401
+
+    try:
+        token = token.split(" ")[1] if token.startswith("Bearer ") else None
+        if not token:
+            return jsonify({"message": "Invalid token format"}), 401
+
+        decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+        email = decoded_token.get('email')
+
+        user_data = load_user_data(email)
         if not user_data:
             return jsonify({"message": "User not found"}), 404
 
-        # Hash the new password
-        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
-        user_data["password"] = hashed_password
+        # Fetch client data count
+        client_data_url = 'http://localhost:5000/get-all-client-data'
+        response = requests.get(client_data_url)
 
-        # Save the updated user data back to S3
-        upload_to_s3(user_data, f"users/{email}.json")
+        client_count = 0
+        if response.status_code == 200:
+            client_list = response.json().get('data', [])
+            client_count = len(client_list)
 
-        # Remove the reset code entry from S3
-        delete_from_s3(f"password_resets/{email}.json")
+        profile_data = {
+            "email": user_data["email"],
+            "first_name": user_data["first_name"],
+            "last_name": user_data["last_name"],
+            "client_count": client_count
+        }
 
-        return jsonify({"message": "Password reset successfully"}), 200
+        return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token has expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token"}), 401
     except Exception as e:
-        return jsonify({"message": f"Error occurred while resetting password: {str(e)}"}), 500
+        print(f"Error retrieving profile: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+    
+     
+# -------------------------------------------
+
+#  Change Password for Profile
+
+@app.route('/change_password', methods=['POST'])
+def change_password():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid JSON"}), 400
+
+        email = data.get('email')
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+
+        if not all([email, old_password, new_password, confirm_password]):
+            return jsonify({"message": "All fields are required"}), 400
+
+        # Check if new password matches the confirm password
+        if new_password != confirm_password:
+            return jsonify({"message": "Passwords do not match"}), 400
+
+        # Load user data
+        if USE_AWS:
+            # filename = f"{signUp_user_folder}/{email}.json"
+            filename = f"{signUp_user_folder}{email}.json"
+            user_data = load_from_aws(filename)
+        else:
+            filepath = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
+            user_data = load_from_local(filepath)
+
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
+
+        # Check if old password is correct
+        if not bcrypt.check_password_hash(user_data["password"], old_password):
+            return jsonify({"message": "Old password is incorrect"}), 401
+
+        # Hash the new password
+        hashed_new_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+
+        # Update the user data with the new password
+        user_data["password"] = hashed_new_password
+
+        # Save updated user data
+        if USE_AWS:
+            save_to_aws(user_data, filename)
+        else:
+            save_to_local(user_data, filepath)
+
+        return jsonify({"message": "Password reset successful"}), 200
+
+    except Exception as e:
+        print(f"Error in change_password: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+
+ 
+
+
+##########################################################################################################
+
+
 
 
 
@@ -614,46 +812,6 @@ def markdown_to_readable_text(md_text):
     return format_text_from_html(soup)
 
 
-# def markdown_to_readable_text(md_text):
-#     # Convert markdown to HTML
-#     html = markdown2.markdown(md_text)
-
-#     # Parse the HTML
-#     soup = BeautifulSoup(html, "html.parser")
-
-#     # Function to format plain text from tags
-#     def format_text_from_html(soup):
-#         formatted_text = ''
-#         for element in soup:
-#             if element.name == "h1":
-#                 formatted_text += f"\n\n# {element.text.upper()} #\n\n"
-#             elif element.name == "h2":
-#                 formatted_text += f"\n\n## {element.text} ##\n\n"
-#             elif element.name == "h3":
-#                 formatted_text += f"\n\n### {element.text} ###\n\n"
-#             elif element.name == "strong":
-#                 formatted_text += f"**{element.text}**"
-#             elif element.name == "em":
-#                 formatted_text += f"_{element.text}_"
-#             elif element.name == "ul":
-#                 for li in element.find_all("li"):
-#                     formatted_text += f"\n - {li.text}"
-#             elif element.name == "ol":
-#                 for idx, li in enumerate(element.find_all("li"), 1):
-#                     formatted_text += f"\n {idx}. {li.text}"
-#             elif element.name == "table":
-#                 rows = element.find_all("tr")
-#                 for row in rows:
-#                     cols = row.find_all(["th", "td"])
-#                     row_text = ' | '.join(col.text.strip() for col in cols)
-#                     formatted_text += f"{row_text}\n"
-#                 formatted_text += "\n"
-#             else:
-#                 formatted_text += element.text
-
-#         return formatted_text.strip()
-
-#     return format_text_from_html(soup)
 
 def markdown_to_text(md): # og solution code 
     # Simple conversion for markdown to plain text
@@ -665,102 +823,6 @@ def markdown_to_text(md): # og solution code
     return md.strip()
 
 
-# import docx
-
-# def extract_responses_from_docx(personality_file):
-#     """
-#     Extracts responses from a Word document (.docx) where answers are typed in.
-
-#     Args:
-#         personality_file (UploadedFile): The file object uploaded via Streamlit.
-
-#     Returns:
-#         dict: A dictionary containing the questions and the typed answers.
-#     """
-#     try:
-#         doc = docx.Document(personality_file)
-#         responses = {}
-#         current_question = None
-
-#         # Check paragraphs
-#         for para in doc.paragraphs:
-#             text = para.text.strip()
-#             if text:
-#                 # Check if the paragraph contains a question
-#                 if "?" in text or text.endswith(":"):
-#                     current_question = text
-#                     st.write(f"Identified question: {current_question}")  # Debugging log
-#                 else:
-#                     # This is a typed answer
-#                     typed_answer = text.strip()
-#                     st.write(f"Identified typed answer: {typed_answer}")  # Debugging log
-#                     if current_question:
-#                         # If the question already has an answer, append to it (handles multiple responses)
-#                         if current_question in responses:
-#                             responses[current_question] += "; " + typed_answer
-#                         else:
-#                             responses[current_question] = typed_answer
-
-#             # Debugging log to understand document structure
-#             st.write(f"Processing paragraph: {text}")  # Console log for local testing
-
-#         # Check tables for additional responses
-#         for table in doc.tables:
-#             for row in table.rows:
-#                 for cell in row.cells:
-#                     text = cell.text.strip()
-#                     if text:
-#                         if "?" in text or text.endswith(":"):
-#                             current_question = text
-#                             st.write(f"Identified question in table: {current_question}")  # Debugging log
-#                         else:
-#                             typed_answer = text.strip()
-#                             st.write(f"Identified typed answer in table: {typed_answer}")  # Debugging log
-#                             if current_question:
-#                                 if current_question in responses:
-#                                     responses[current_question] += "; " + typed_answer
-#                                 else:
-#                                     responses[current_question] = typed_answer
-
-#         if responses:
-#             st.write("Extracted Responses:")
-#             for question, answer in responses.items():
-#                 st.write(f"**{question}**: {answer}")
-#         else:
-#             st.write("No responses captured. Please check the document formatting or symbols used.")
-
-#         return responses
-
-#     except Exception as e:
-#         st.write(f"Error extracting responses: {e}")  # Console log for local testing
-#         return None
-
-# def determine_investment_personality(responses):
-#     """
-#     Determines the investment personality based on extracted responses.
-
-#     Args:
-#         responses (dict): A dictionary containing the questions and the selected answers.
-
-#     Returns:
-#         str: The determined investment personality.
-#     """
-#     try:
-#         # Prepare input text for the chatbot based on extracted responses
-#         input_text = "User Profile:\n"
-#         for question, response in responses.items():
-#             input_text += f"{question}: {response}\n"
-
-#         # Introduce the chatbot's task and prompt for classification
-#         input_text += "\nYour task is to determine the investment personality based on the above profile."
-
-#         # Here you would send the input_text to your chatbot or classification model
-#         # For demonstration, we'll just return the input_text
-#         return input_text
-
-#     except Exception as e:
-#         st.write(f"Error determining investment personality: {e}")  # Console log for local testing
-#         return None
 
 # def extract_responses_from_docx(personality_file):
 #     try:
@@ -809,64 +871,7 @@ def markdown_to_text(md): # og solution code
 
 import docx
 
-# # st method
-def extract_responses_from_docx(personality_file): # Using text responses parsing
-    """
-    Extracts responses from a Word document (.docx) where the selected answers are listed as text after the options.
 
-    Args:
-        personality_file (str): Path to the Word document file.
-
-    Returns:
-        dict: A dictionary containing the questions and the selected answers.
-    """
-    try:
-        doc = docx.Document(personality_file)
-        responses = {}
-        current_question = None
-
-        for para in doc.paragraphs:
-            text = para.text.strip()
-            if text:
-                # Detect the beginning of a question
-                if "?" in text:
-                    current_question = text
-                # Detect a chosen response (assuming it follows the question and options)
-                elif current_question and not text.startswith(("a.", "b.", "c.", "d.")):
-                    selected_answer = text
-                    responses[current_question] = selected_answer
-                    current_question = None  # Reset for the next question
-
-        if responses:
-            print(responses)
-            # st.write(responses)
-        else:
-            print("\nNo responses captured")
-            st.write("No responses captured")
-        return responses
-    except Exception as e:
-        print(f"Error extracting responses: {e}")
-        return None
-
-# def extract_responses_from_assessment(personality_file): # using boxes
-#     # Load the document
-#     # doc = Document(docx_filename)
-#     doc = docx.Document(personality_file)
-    
-#     # Initialize a list to store responses
-#     responses = []
-    
-#     # Iterate through each paragraph in the document
-#     for para in doc.paragraphs:
-#         text = para.text.strip()
-#         # Check if the paragraph contains a checkbox
-#         if '☒' in text or '☐' in text:
-#             # Extract the response marked with ☒
-#             if '☒' in text:
-#                 response = text.split('☒')[1].strip()
-#                 responses.append(response)
-    
-#     return responses
 
 # import asyncio
 # # from some_generative_ai_library import GenerativeModel  # Replace with actual import
@@ -1865,7 +1870,9 @@ import datetime  # Import the datetime module to get the current year
 def prepare_combined_line_chart_data(data_extracted, initial_investment, inflation_rate=4):
     try:
         # Get the current year
-        curr_year = datetime.datetime.now().year
+        # curr_year = datetime.datetime.now().year
+        curr_year = datetime.now().year
+        
 
         # Print data_extracted to debug the structure
         print("Data extracted:", data_extracted)
@@ -2162,65 +2169,6 @@ def generate_colors(n):
 # import plotly.graph_objects as go
 import numpy as np
 
- 
-# def client_form():
-#     st.title("Client Details Form")
-
-#     with st.form("client_form"):
-#         st.header("Personal Information")
-#         client_name = st.text_input("Client Name")
-#         co_client_name = st.text_input("Co-Client Name")
-#         client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
-#         co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
-#         today_date = st.date_input("Today's Date")
-        
-#         st.header("Financial Information")
-#         current_assets = st.text_area("Current Assets (e.g., type and value)")
-#         liabilities = st.text_area("Liabilities (e.g., type and amount)")
-#         annual_income = st.text_area("Current Annual Income (source and amount)")
-#         annual_contributions = st.text_area("Annual Contributions (e.g., retirement savings)")
-
-#         st.header("Insurance Information")
-#         life_insurance = st.text_input("Life Insurance (e.g., coverage amount)")
-#         disability_insurance = st.text_input("Disability Insurance (e.g., coverage amount)")
-#         long_term_care = st.text_input("Long-Term Care Insurance (e.g., coverage amount)")
-
-#         st.header("Estate Planning")
-#         will_status = st.radio("Do you have a will?", ["Yes", "No"])
-#         trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
-#         power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
-#         healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
-
-#         # Submit button
-#         submitted = st.form_submit_button("Submit")
-
-#         if submitted:
-#             # Save form data
-#             form_data = {
-#                 "Client Name": client_name,
-#                 "Co-Client Name": co_client_name,
-#                 "Client Age": client_age,
-#                 "Co-Client Age": co_client_age,
-#                 "Today's Date": str(today_date),
-#                 "Current Assets": current_assets,
-#                 "Liabilities": liabilities,
-#                 "Annual Income": annual_income,
-#                 "Annual Contributions": annual_contributions,
-#                 "Life Insurance": life_insurance,
-#                 "Disability Insurance": disability_insurance,
-#                 "Long-Term Care Insurance": long_term_care,
-#                 "Will Status": will_status,
-#                 "Trust Status": trust_status,
-#                 "Power of Attorney": power_of_attorney,
-#                 "Healthcare Proxy": healthcare_proxy,
-#             }
-            
-#             # Save to a file or database
-#             with open("client_data.txt", "a") as f:
-#                 f.write(str(form_data) + "\n")
-            
-#             st.success("Form submitted successfully!")
-#             st.session_state.page = "main"  # Redirect back to main page after form submission
 
 
 from datetime import date  # Make sure to import the date class
@@ -2287,134 +2235,6 @@ def is_float(value):
         return False
 
 
-# st method : 
-def plot_assets_liabilities_pie_chart(assets, liabilities, threshold=50): # best plot 
-    """
-    Plots separate pie charts for assets and liabilities. If there are any categories
-    below a specified threshold, they are plotted in an additional small pie chart.
-    
-    Parameters:
-    - assets: dict, keys are asset names, values are their amounts.
-    - liabilities: dict, keys are liability names, values are their amounts.
-    - threshold: int, percentage threshold below which segments are considered small.
-    """
-    # Update matplotlib settings to increase the font size globally
-    # plt.rcParams.update({'font.size': 32})
-
-    plt.rcParams.update({'font.size': 16})
-
-    def plot_pie(data, title):
-        # Filter out zero values and create a summary for small segments
-        total = sum(data.values())
-        filtered_data = {k: v for k, v in data.items() if (v / total) >= threshold / 100}
-        small_segments = {k: v for k, v in data.items() if (v / total) < threshold / 100}
-        small_total = sum(small_segments.values())
-
-        # Plotting logic
-        if small_segments:
-            fig, (ax_main, ax_small) = plt.subplots(1, 2, figsize=(30, 15))  # Side-by-side layout
-        else:
-            fig, ax_main = plt.subplots(figsize=(30, 20))  # Only main chart with larger size
-
-            # fig, ax_main = plt.subplots(figsize=(10, 10))  # Only main chart with larger size
-
-        # Plot main pie chart
-        labels_main = list(filtered_data.keys()) + ([f"Other small {title}"] if small_segments else [])
-        values_main = list(filtered_data.values()) + ([small_total] if small_segments else [])
-        wedges_main, texts_main, autotexts_main = ax_main.pie(
-            values_main, labels=labels_main, autopct='%1.1f%%', colors=plt.cm.Paired.colors, 
-            startangle=140, textprops={'fontsize': 28} #18}  # Larger font size for labels
-        )
-
-        ax_main.set_title(title, fontsize=20)
-        # Position legend to the right of the plot to avoid overlapping
-        ax_main.legend(wedges_main, labels_main, title="Categories", loc="upper right", bbox_to_anchor=(0.001, 0.9), fontsize= 28)#14)
-
-        if small_segments:
-            # Plot additional small pie chart for small segments
-            labels_small = list(small_segments.keys())
-            values_small = list(small_segments.values())
-            wedges_small, texts_small, autotexts_small = ax_small.pie(
-                values_small, labels=labels_small, autopct='%1.1f%%', colors=plt.cm.Paired.colors, 
-                startangle=140, textprops={'fontsize': 24} #14}  # Consistent label size for small chart
-            )
-            ax_small.set_title(f"Small Segments of {title}", fontsize=20)
-            # Position legend to the right of the small pie chart but slightly lower to avoid overlap with the main chart's legend
-            ax_small.legend(wedges_small, labels_small, title="Small Categories", loc="center left", bbox_to_anchor=(1.2, 0.3), fontsize= 22)#12)
-
-        st.pyplot(fig)
-
-    # Convert valid entries to float, ensuring only numeric values are considered
-    assets = {k: float(v) for k, v in assets.items() if isinstance(v, (str, float)) and is_float(v) and float(v) > 0.0}
-    liabilities = {k: float(v) for k, v in liabilities.items() if isinstance(v, (str, float)) and is_float(v) and float(v) > 0.0}
-
-    # Plot pie charts
-    plot_pie(assets, 'Distribution of Assets')
-    plot_pie(liabilities, 'Distribution of Liabilities')
-
-
-# def plot_assets_liabilities_pie_chart(assets, liabilities):# properly plots a big and 1 small pie chart for both assets and liability
-#     # Filter and convert values to float, handle non-numeric or empty inputs
-#     filtered_assets = {k: float(v) for k, v in assets.items() if v and is_float(v) and float(v) > 0 and 'interest' not in k.lower() and 'time' not in k.lower()}
-#     filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and is_float(v) and float(v) > 0 and 'interest' not in k.lower() and 'time' not in k.lower()}
-
-#     # Combine assets and liabilities for total calculation
-#     all_values = {**filtered_assets, **filtered_liabilities}
-#     total_value = sum(all_values.values())
-
-#     # Separate main and small segments
-#     main_segments = {k: v for k, v in all_values.items() if (v / total_value) >= 0.05}
-#     small_segments = {k: v for k, v in all_values.items() if (v / total_value) < 0.05}
-#     small_total = sum(small_segments.values())
-
-#     # Prepare data for main pie chart
-#     main_labels = list(main_segments.keys()) + (["Others"] if small_segments else [])
-#     main_values = list(main_segments.values()) + ([small_total] if small_segments else [])
-
-#     # Prepare data for small pie chart (only if there are small segments)
-#     small_labels = list(small_segments.keys())
-#     small_values = list(small_segments.values())
-
-#     fig, ax = plt.subplots(figsize=(8, 6))
-
-#     # Plot main pie chart
-#     wedges, texts, autotexts = ax.pie(
-#         main_values,
-#         labels=main_labels,
-#         autopct='%1.1f%%',
-#         startangle=140,
-#         colors=plt.cm.Paired.colors,
-#     )
-
-#     # Explode the "Others" slice
-#     if small_segments:
-#         others_index = main_labels.index("Others")
-#         wedges[others_index].set_edgecolor('white')
-#         # wedges[others_index].set_linestyle('--')
-#         wedges[others_index].set_linewidth(2)
-#         wedges[others_index].set_hatch('/')
-
-#     ax.set_title('Assets and Liabilities Distribution')
-
-#     # Draw a second pie chart for "Others"
-#     if small_segments:
-#         fig2, ax2 = plt.subplots(figsize=(8, 6))
-#         wedges_small, texts_small, autotexts_small = ax2.pie(
-#             small_values,
-#             labels=small_labels,
-#             autopct='%1.1f%%',
-#             startangle=140,
-#             colors=plt.cm.Pastel1.colors
-#         )
-
-#         ax2.set_title('Detailed View of "Others" Categories')
-
-#     plt.tight_layout()
-#     st.pyplot(fig)
-#     if small_segments:
-#         st.pyplot(fig2)
-
-
 
 def save_data_to_file(form_data):
     file_path = 'client_data.txt'
@@ -2423,124 +2243,6 @@ def save_data_to_file(form_data):
     # st.success(f"Form data saved to {file_path}")
     print(f"Form data saved to {file_path}")
     
-# st method :
-def client_form():
-    st.title("Client Details Form")
-
-    with st.form("client_form"):
-        st.header("Personal Information")
-        client_name = st.text_input("Client Name")
-        co_client_name = st.text_input("Co-Client Name")
-        client_age = st.number_input("Client Age", min_value=0, max_value=120, value=30, step=1)
-        co_client_age = st.number_input("Co-Client Age", min_value=0, max_value=120, value=30, step=1)
-        today_date = st.date_input("Today's Date")
-
-        st.header("Your Assets (in $)")
-
-        assets = {
-            # 'Annual Income': st.text_input("Annual Income (e.g. , Your Annual Salary Income or other source of income) "),
-            'Cash/Bank Account': st.text_input("Cash/Bank Account"),
-            '401(k), 403(b), 457 Plans': st.text_input("Your 401(k), 403(b), 457 Plans "),
-            'Traditional, SEP and SIMPLE IRAs': st.text_input("Traditional, SEP and SIMPLE IRAs "),
-            'Roth IRA,Roth 401(k)': st.text_input("Roth IRA, Roth 401(k)"),
-            'Brokerage/non-qualified accounts': st.text_input("Brokerage/non-qualified accounts"),
-            'Annuities': st.text_input("Annuities"),
-            '529 Plans': st.text_input("529 Plans"),
-            'Home': st.text_input("Home"),
-            'Other Real Estate': st.text_input("Other Real Estate"),
-            'Business': st.text_input("Business"),
-            'Other': st.text_input("Other")
-        }
-        st.header("Your Liabilities (in $)")
-
-        liabilities = {
-            'Mortgage': st.text_input("Mortgage"),
-            # 'Annual Mortgage Interest Rate': st.number_input("Annual Mortgage Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0, value=12.0, step=0.5),
-            # 'Mortagage Time Period': st.number_input("Mortagage Time Period (Mention the time period of the Mortgage in years)", min_value=0, max_value=100,value=10,step=1),
-
-            'Home Loans': st.text_input("Home Loans"),
-            # 'Home Loans Interest Rate': st.number_input("Home Loan Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0, value=10.0, step=0.5),
-            # 'Home Loans Time Period': st.number_input("Home Loans Time Period (Mention the time period of the Home Loan in years)", min_value=0, max_value=100,value=15,step=1),
-
-            'Vehicle Loans': st.text_input("Vehicle Loans"),
-            # 'Vehicle Loans Interest Rate': st.number_input("Vehicle Loan Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
-            # 'Vehicle Loans Time Period': st.number_input("Vehicle Loans Time Period (Mention the time period of the Car/Vehicle Loan in years)", min_value=0, max_value=100,value=15,step=1),
-
-            'Education Loans': st.text_input("Education Loans"),
-            # 'Education Loans Interest Rate' : st.number_input("Education Loans Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
-            # 'Education Loans Time Period': st.number_input("Education Loans Time Period (Mention the time period of the Education Loan in years)", min_value=0, max_value=100,value=15,step=1),
-
-            # 'Credit Card': st.text_input("Monthly Credit Card Debt (Mention Amount)"),
-            # 'Credit Card Debt Interest Rate': st.number_input("Credit Card Debt Interest Rate (in Percentage%)", min_value=0.0, max_value=100.0,value=10.0, step=0.5),
-
-            'Miscellaneous': st.text_input("Miscellaneous"),
-        }
-
-        st.header("Your Retirement Goal")
-        retirement_age = st.number_input("At what age do you plan to retire?", min_value=0, max_value=120, value=65, step=1)
-        retirement_income = st.text_input("Desired annual retirement income")
-
-        st.header("Your Other Goals")
-        goal_name = st.text_input("Name of the Goal (e.g . , Dream House, Travel, Educational, etc.)")
-        goal_amount = st.text_input("Amount needed for the goal (in $)")
-        goal_timeframe = st.number_input("Timeframe to achieve the goal (in years)", min_value=0, max_value=100, value=5, step=1)
-
-        st.header("Insurance Information")
-        life_insurance_Benefit = st.text_input("Life Insurance-Benefit")
-        life_insurance_Premium = st.text_input("Life Insurance-Premium")
-        disability_insurance_Benefit = st.text_input("Disability Insurance-Benefit")
-        disability_insurance_Premium = st.text_input("Disability Insurance-Premium")
-        long_term_care_benefit = st.text_input("Long-Term Care Insurance-Benefit")
-        long_term_care_premium = st.text_input("Long-Term Care Insurance-Premium")
-
-
-        st.header("Estate Planning")
-        will_status = st.radio("Do you have a will?", ["Yes", "No"])
-        trust_status = st.radio("Do you have any trusts?", ["Yes", "No"])
-        power_of_attorney = st.radio("Do you have a Power of Attorney?", ["Yes", "No"])
-        healthcare_proxy = st.radio("Do you have a Healthcare Proxy?", ["Yes", "No"])
-
-        submitted = st.form_submit_button("Submit")
-
-        if submitted:
-            form_data = {
-                "Client Name": client_name,
-                "Co-Client Name": co_client_name,
-                "Client Age": client_age,
-                "Co-Client Age": co_client_age,
-                "Today's Date": str(today_date),
-                "Assets": assets,
-                "Liabilities": liabilities,
-                "Retirement Age": retirement_age,
-                "Desired Retirement Income": retirement_income,
-                "Goal Name": goal_name,
-                "Goal Amount": goal_amount,
-                "Goal Timeframe": goal_timeframe,
-                "Life Insurance Benefit": life_insurance_Benefit,
-                "Life Insurance Premium": life_insurance_Premium,
-                "Disability Insurance Benefit": disability_insurance_Benefit,
-                "Disability Insurance Premium": disability_insurance_Premium,
-                "Long-Term Care Insurance Benefit": long_term_care_benefit,
-                "Long-Term Care Insurance Premium": long_term_care_premium,
-                "Will Status": will_status,
-                "Trust Status": trust_status,
-                "Power of Attorney": power_of_attorney,
-                "Healthcare Proxy": healthcare_proxy,
-            }
-
-            save_data_to_file(form_data)
-            
-            # # Plot the pie chart
-            # st.subheader("Assets and Liabilities Breakdown")
-            # plot_assets_liabilities_pie_chart(assets, liabilities)
-
-            # Store data in session state and redirect to main
-            st.session_state.assets = assets
-            st.session_state.liabilities = liabilities
-            st.session_state.total_assets, st.session_state.total_liabilities = calculate_totals(assets, liabilities)
-            st.session_state.page = "main"
-            st.success("Data submitted!\nThank You for filling the form !\nReturning to main portal...")
-
 import math
 # calculate compunded amount :
 def calculate_compounded_amount(principal, rate, time):
@@ -2601,115 +2303,6 @@ def calculate_totals(assets, liabilities):
 
     return total_assets, rounded_liabilities #total_liabilities
 
-# st method :
-def create_financial_summary_table(assets, liabilities):
-    # Filter out items with zero value
-    filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
-    filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and float(v) > 0.0}
-
-    # Create DataFrames for assets and liabilities with indices starting from 1
-    assets_df = pd.DataFrame(
-        list(filtered_assets.items()), 
-        columns=['Assets', 'Amount ($)'], 
-        index=range(1, len(filtered_assets) + 1)
-    )
-    liabilities_df = pd.DataFrame(
-        list(filtered_liabilities.items()), 
-        columns=['Liabilities', 'Amount ($)'], 
-        index=range(1, len(filtered_liabilities) + 1)
-    )
-
-    # Calculate total
-    total_assets, total_liabilities = calculate_totals(assets, liabilities)
-
-    # Add total row with index incremented by 1
-    total_assets_row = pd.DataFrame(
-        [['TOTAL', total_assets]], 
-        columns=['Assets', 'Amount ($)'], 
-        index=[len(assets_df) + 1]
-    )
-    total_liabilities_row = pd.DataFrame(
-        [['TOTAL', total_liabilities]], 
-        columns=['Liabilities', 'Amount ($)'], 
-        index=[len(liabilities_df) + 1]
-    )
-
-    # Append total rows to DataFrames
-    assets_df = pd.concat([assets_df, total_assets_row])
-    liabilities_df = pd.concat([liabilities_df, total_liabilities_row])
-
-    # Display tables with formatted values
-    st.subheader("Assets")
-    st.table(assets_df.style.format({'Amount ($)': '{:,.2f}'}))
-
-    st.subheader("Liabilities")
-    st.table(liabilities_df.style.format({'Amount ($)': '{:,.2f}'}))
-
-# st method :
-def plot_bar_graphs(assets, liabilities):
-    # Filter out items with zero values
-    filtered_assets = {k: float(v) for k, v in assets.items() if v and float(v) > 0.0}
-    filtered_liabilities = {k: float(v) for k, v in liabilities.items() if v and float(v) > 0.0}
-
-    # Calculate compounded liabilities
-    # compounded_liabilities = {} 
-
-    # for k, v in filtered_liabilities.items():
-        # if 'Interest Rate' in k or 'Time Period' in k:
-        #     continue  # Skip non-monetary entries
-
-        # if k == 'Credit Card Payment' and liabilities['Credit Card Debt Interest Rate'] == 0.0:
-        #     continue  # Skip if credit card interest rate is zero
-
-        # if k == 'Mortgage':
-        #     interest_rate = liabilities['Annual Mortgage Interest Rate']
-        #     time_period = liabilities['Mortagage Time Period']
-
-        # elif k == 'Home Loans':
-        #     interest_rate = liabilities['Home Loans Interest Rate']
-        #     time_period = liabilities['Home Loans Time Period']
-
-        # elif k == 'Car/Vehicle Loans':
-        #     interest_rate = liabilities['Car/Vehicle Loans Interest Rate']
-        #     time_period = liabilities['Car/Vehicle Loans Time Period']
-
-        # elif k == 'Education Loans':
-        #     interest_rate = liabilities['Education Loans Interest Rate']
-        #     time_period = liabilities['Education Loans Time Period']
-
-        # elif k == 'Credit Card Payment':
-        #     interest_rate = liabilities['Credit Card Debt Interest Rate']
-        #     time_period = 1  # Assuming interest is calculated yearly
-
-        # if interest_rate > 0:
-        #     compounded_amount = float(v) * (1 + float(interest_rate) / 100) ** float(time_period)
-        #     compounded_liabilities[k] = compounded_amount
-        # else:
-        #     compounded_liabilities[k] = float(v)
-
-    # Plot bar graph for assets
-    st.write("### All Assets ")
-    fig1, ax1 = plt.subplots()
-    ax1.bar(filtered_assets.keys(), filtered_assets.values(), color='green')
-    ax1.set_ylabel('Amount ($)')
-    ax1.set_xlabel('Asset Type')
-    ax1.set_title(' All Assets ')
-    plt.xticks(rotation=45)
-    st.pyplot(fig1)
-
-    # Plot bar graph for liabilities
-    st.write("### All Liabilities ")
-    # st.write("### All Liabilities with Compounded Interest")
-    fig2, ax2 = plt.subplots()
-    # ax2.bar(compounded_liabilities.keys(), compounded_liabilities.values(), color='red')
-    ax2.bar(filtered_liabilities.keys(), filtered_liabilities.values(), color='red')    
-    ax2.set_ylabel('Amount ($)')
-    ax2.set_xlabel('Liability Type')
-    ax2.set_title(' All Liabilities ')
-
-    # ax2.set_title(' All Liabilities with Compounded Interest')
-    plt.xticks(rotation=45)
-    st.pyplot(fig2)
 
 
 from docx import Document
@@ -2859,46 +2452,6 @@ trie = preload_trie()
 def home():
     return "Wealth Advisor Chatbot API"
 
-@app.route('/investment-suggestions', methods=['POST'])
-def investment_suggestions():
-    # Get the input data (new or existing client)
-    data = request.get_json()
-
-    # Determine if it's a new client or existing client
-    client_type = data.get("client_type")
-
-    if client_type == "New Client":
-        # Get form details and perform investment suggestions
-
-        # Check if assets and liabilities are provided
-        assets = data.get('assets', None)
-        liabilities = data.get('liabilities', None)
-
-        if assets and liabilities:
-            financial_summary = create_financial_summary_table(assets, liabilities)
-            bar_graphs = plot_bar_graphs(assets, liabilities)
-            pie_chart = plot_assets_liabilities_pie_chart(assets, liabilities)
-
-            return jsonify({
-                "financial_summary": financial_summary,
-                "bar_graphs": "Bar graphs generated.",
-                "pie_chart": "Pie chart generated."
-            })
-
-        return jsonify({"message": "Please fill in the client details to view the assets and liabilities breakdown."})
-
-    elif client_type == "Existing Client":
-        # Search for an existing client in the Trie
-        search_query = data.get("search_query", "").lower()
-        matching_names = trie.search(search_query)
-
-        if matching_names:
-            suggestions = [{"name": name, "client_ids": client_ids} for name, client_ids in matching_names]
-            return jsonify({"suggestions": suggestions})
-        else:
-            return jsonify({"message": "No matching clients found."})
-    
-    return jsonify({"message": "Invalid client type."})
 
 
 
@@ -3025,7 +2578,15 @@ def save_to_word_file(data, file_name):
     file_name = os.path.join("data", file_name)
     doc.save(f"{file_name}.docx")
 
-# store client data in aws :
+
+
+
+
+# Local Folder Path
+CLIENT_DATA_DIR = './client_data'
+ 
+# # store client data in aws :
+ 
 @app.route('/submit-client-data', methods=['POST'])
 def submit_client_data():
     try:
@@ -3033,134 +2594,245 @@ def submit_client_data():
         data = request.get_json()
         if not data:
             return jsonify({'message': 'Invalid or missing request payload'}), 400
-        
+ 
         # Extract client details
         client_name = data.get('clientDetail', {}).get('clientName')
         unique_id = data.get('uniqueId')
-        
+ 
         if not client_name or not unique_id:
             return jsonify({'message': 'Client name and unique ID are required'}), 400
-
+ 
         print(f"Processing data for client: {client_name}, ID: {unique_id}")
-        
-        # Define the S3 key
-        s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
-        
-        # Check if the client data already exists in S3
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            existing_data = json.loads(response['Body'].read().decode('utf-8'))
-            is_update = True
-            print(f"Existing data found for unique ID: {unique_id}")
-        except s3.exceptions.NoSuchKey:
-            existing_data = {}
-            is_update = False
-            print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
-        
-        # Merge or replace the existing data (logic can vary based on requirements)
-        if is_update:
-            existing_data.update(data)
-            data_to_save = existing_data
+ 
+        if USE_AWS:
+            # AWS Logic
+            s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
+            try:
+                # Check if the client data already exists in S3
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+                print(f"Existing data found for unique ID: {unique_id}")
+            except s3.exceptions.NoSuchKey:
+                existing_data = {}
+                is_update = False
+                print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
+ 
+            # Merge or replace the existing data
+            if is_update:
+                existing_data.update(data)
+                data_to_save = existing_data
+            else:
+                data_to_save = data
+ 
+            # Save to S3
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=s3_key,
+                    Body=json.dumps(data_to_save),
+                    ContentType="application/json"
+                )
+                action = "updated" if is_update else "created"
+                print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
+            except Exception as s3_error:
+                logging.error(f"Error uploading data to S3: {s3_error}")
+                return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
+ 
         else:
-            data_to_save = data
-        
-        # Save the updated or new data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=s3_key,
-                Body=json.dumps(data_to_save),
-                ContentType="application/json"
-            )
+            # Local Storage Logic
+            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
+ 
+            # Check if the client data already exists
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                existing_data.update(data)  # Merge the new data
+                is_update = True
+            else:
+                existing_data = data  # New data
+                is_update = False
+ 
+            # Save the data to local storage
+            with open(file_path, 'w') as f:
+                json.dump(existing_data, f, indent=4)
+ 
             action = "updated" if is_update else "created"
-            print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
-        except Exception as s3_error:
-            logging.error(f"Error uploading data to S3: {s3_error}")
-            return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
-        
+            print(f"Client data successfully {action} for unique ID: {unique_id}")
+ 
         # Return a success response
         return jsonify({
             'message': f'Client data successfully {action}.',
             'uniqueId': unique_id
         }), 200
-
+ 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
+ 
+def process_is_new_client(client_data):
+    """
+    Adds `isNewClient` flag to the client data based on order existence.
+    """
+    client_data["isNewClient"] = True  # Default to True
+    client_id = client_data.get("uniqueId")
+ 
+    if client_id:
+        try:
+            order_url = 'http://localhost:5000/show_order_list'  # Replace with actual endpoint
+            response = requests.post(order_url, json={'client_id': client_id})
+ 
+            if response.status_code == 200:
+                orders = response.json().get("transaction_data", [])
+                if len(orders) > 0:
+                    client_data["isNewClient"] = False
+        except Exception as e:
+            print(f"Error checking orders for client {client_id}: {e}")
+ 
+ 
+# # get client data by id :
 
-# get all client data :
-@app.route('/get-all-client-data', methods=['GET'])
-def get_all_client_data():
-    try:
-        # List objects in the S3 bucket
-        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix="client_summary_folder")
-        
-        # Check if there are any objects in the bucket
-        if 'Contents' in response:
-            all_data = []
-            for obj in response['Contents']:
-                # Get the object content
-                try:
-                    file_key = obj['Key']
-                    # Retrieve and decode file content
-                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                    file_data = file_response['Body'].read().decode('utf-8')
-                     # Parse the file content as JSON
-                    data_json = json.loads(file_data)
-                    all_data.append(data_json)
-                except Exception as e:
-                    print(f"Error reading file {obj['Key']}: {e}")
-                    continue
-            
-            return jsonify({
-                # 'message': 'All client data retrieved successfully.',
-                'data': all_data
-            }), 200
-        
-        else:
-            return jsonify({'message': 'No client data found in the bucket.'}), 404
-
-    except Exception as e:
-        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-
-# get client data by client id :
+# Ensure the directory exists
+if not os.path.exists(CLIENT_DATA_DIR):
+    os.makedirs(CLIENT_DATA_DIR)
+ 
+# Get client data by client ID
 @app.route('/get-client-data-by-id', methods=['GET'])
 def get_client_data():
     try:
         # Retrieve client_id from query parameters
         client_id = request.args.get('client_id')
-        
+ 
         # Validate the client_id
         if not client_id:
             return jsonify({'message': 'client_id is required as a query parameter'}), 400
-
-        # Define the S3 key for the object
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-
-        # Retrieve the object from S3
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            # Decode and parse the JSON data
-            client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
+ 
+        if USE_AWS:
+            # AWS Logic
+            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+                return jsonify({
+                    'message': 'Client data retrieved successfully.',
+                    'data': client_data
+                }), 200
+            except s3.exceptions.NoSuchKey:
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            except Exception as e:
+                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+        else:
+            # Local Storage Logic
+            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+ 
+            # Check if the file exists and retrieve the data
+            if not os.path.exists(file_path):
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+ 
+            with open(file_path, 'r') as f:
+                client_data = json.load(f)
+ 
             return jsonify({
                 'message': 'Client data retrieved successfully.',
                 'data': client_data
             }), 200
-        except s3.exceptions.NoSuchKey:
-            return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-        except Exception as e:
-            return jsonify({'message': f"Error retrieving data: {e}"}), 500
-
+ 
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
+  
+ 
+# # get all client data :
 
-# # storing client data using local storage :
-# # Local storage directories
-# LOCAL_STORAGE_DIR = "local_storage"
-# CLIENT_DATA_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
-# # Ensure directories exist
-# os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
+# Local Folder Path
+LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
+ 
+@app.route('/get-all-client-data', methods=['GET'])
+def get_all_client_data():
+    try:
+        all_data = []
+ 
+        if USE_AWS:
+            # AWS Logic
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_data = file_response['Body'].read().decode('utf-8')
+                        data_json = json.loads(file_data)
+ 
+                        # Add isNewClient flag
+                        process_is_new_client(data_json)
+                        all_data.append(data_json)
+                    except Exception as e:
+                        print(f"Error reading file {obj['Key']}: {e}")
+                        continue
+            else:
+                return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+ 
+        else:
+            # Local Storage Logic
+            for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+                    with open(file_path, 'r') as f:
+                        client_data = json.load(f)
+                        process_is_new_client(client_data)
+                        all_data.append(client_data)
+ 
+            if not all_data:
+                return jsonify({'message': 'No client data found in local storage.'}), 404
+ 
+        # Return combined data
+        return jsonify({
+            'message': 'All client data retrieved successfully.',
+            'data': all_data
+        }), 200
+ 
+    except Exception as e:
+        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+    
+    
+# # get client data by client id :
+# @app.route('/get-client-data-by-id', methods=['GET'])
+# def get_client_data():
+#     try:
+#         # Retrieve client_id from query parameters
+#         client_id = request.args.get('client_id')
+        
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+#         # Define the S3 key for the object
+#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+
+#         # Retrieve the object from S3
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#             # Decode and parse the JSON data
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+            
+#             return jsonify({
+#                 'message': 'Client data retrieved successfully.',
+#                 'data': client_data
+#             }), 200
+#         except s3.exceptions.NoSuchKey:
+#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+#         except Exception as e:
+#             return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+#################################################################################################################################
+# storing client data using local storage :
+# Local storage directories
+LOCAL_STORAGE_DIR = "local_storage"
+CLIENT_DATA_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
+# Ensure directories exist
+os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 
 
 # @app.route('/submit-client-data', methods=['POST'])
@@ -3181,7 +2853,7 @@ def get_client_data():
 #         print(f"Processing data for client: {client_name}, ID: {unique_id}")
 
 #         # Define the file path for local storage
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"{unique_id}.json")
+#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
 
 #         # Check if the client data already exists
 #         if os.path.exists(file_path):
@@ -3208,264 +2880,190 @@ def get_client_data():
 #     except Exception as e:
 #         return jsonify({'message': f"An error occurred: {e}"}), 500
 
+
+# # Define the directory where client data is stored
+# CLIENT_DATA_DIR = './client_data/'
+# CLIENT_SUMMARY_DIR = os.path.join(CLIENT_DATA_DIR, "client_data")
+
+# # Ensure the directory exists
+# if not os.path.exists(CLIENT_DATA_DIR):
+#     os.makedirs(CLIENT_DATA_DIR)
+
+# # Get client data by client ID
+# @app.route('/get-client-data-by-id', methods=['GET'])
+# def get_client_data():
+#     try:
+#         # Retrieve client_id from query parameters
+#         client_id = request.args.get('client_id')
+
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+#         # Define the file path for the client data
+#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+
+#         # Check if the file exists and retrieve the data
+#         if not os.path.exists(file_path):
+#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+
+#         with open(file_path, 'r') as f:
+#             client_data = json.load(f)
+
+#         return jsonify({
+#             'message': 'Client data retrieved successfully.',
+#             'data': client_data
+#         }), 200
+
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+# import os
+# import json
+# from flask import Flask, jsonify
+# import requests  # This is for calling the show_order_list API
+ 
+ 
 # @app.route('/get-all-client-data', methods=['GET'])
 # def get_all_client_data():
 #     try:
-#         # Retrieve all JSON files in the client data directory
 #         all_data = []
-#         for filename in os.listdir(CLIENT_DATA_DIR):
+#         client_data_folder = './client_data/client_data'
+ 
+#         # Iterate over all JSON files in the client data folder
+#         for filename in os.listdir(client_data_folder):
 #             if filename.endswith(".json"):
-#                 file_path = os.path.join(CLIENT_DATA_DIR, filename)
+#                 file_path = os.path.join(client_data_folder, filename)
+               
+#                 # Load client data
 #                 with open(file_path, 'r') as f:
 #                     client_data = json.load(f)
+#                     client_id = client_data.get("uniqueId")
+ 
+#                     # Default value for isNewClient
+#                     client_data["isNewClient"] = True
+ 
+#                     # Check if the client has orders by calling /show_order_list API
+#                     if client_id:
+#                         # Make a request to /show_order_list API to check if orders exist
+#                         order_url = f'http://localhost:5000/show_order_list'  # Adjust to your actual endpoint
+#                         response = requests.post(order_url, json={'client_id': client_id})
+ 
+#                         if response.status_code == 200:
+#                             orders = response.json().get("transaction_data", [])
+#                             # If orders exist, set isNewClient to False
+#                             if len(orders) > 0:
+#                                 client_data["isNewClient"] = False
+#                         else:
+#                             # If no orders, set isNewClient to True
+#                             client_data["isNewClient"] = True
+ 
+#                     # Append the client data to the result list
 #                     all_data.append(client_data)
-
+ 
+#         # Handle case when no client data is found
 #         if not all_data:
 #             return jsonify({'message': 'No client data found in local storage.'}), 404
-
+ 
+#         # Return all client data
 #         return jsonify({
 #             'message': 'All client data retrieved successfully.',
 #             'data': all_data
 #         }), 200
-
+ 
 #     except Exception as e:
 #         return jsonify({'message': f"An error occurred while retrieving data: {e}"}), 500
+    
+# investment assessment using Local Storage :
+
+import os
+import json
+
+# LOCAL_STORAGE_DIR = "local_storage"
+CLIENT_DATA_DIR = './client_data/'
+CLIENT_SUMMARY_DIR = os.path.join(CLIENT_DATA_DIR, "client_data")
+PERSONALITY_ASSESSMENT_DIR = "client_data/personality_assessments"
+
+# Ensure directories exist
+os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
+os.makedirs(PERSONALITY_ASSESSMENT_DIR, exist_ok=True)
 
 
-# investor personality assessment  using aws :
-@app.route('/investor-personality-assessment', methods=['POST'])
-async def investor_personality_assessment():
-    try:
-        # Parse incoming request data
-        data = request.json
-        logging.debug(f"Received request data: {data}")
-        
-        if not data:
-            logging.error("No data received in the request.")
-            return jsonify({'message': 'Invalid request: No data received.'}), 400
 
-        client_id = data.get('client_id')
-        assessment_data = data.get('assessment_data')
-
-        if not client_id or not assessment_data:
-            logging.error("Missing client_id or assessment_data.")
-            return jsonify({'message': 'Client ID and assessment data are required.'}), 400
-
-        # Determine the investment personality
-        personality = await determine_investment_personality(assessment_data)
-        logging.info(f"Determined personality for client ID {client_id}: {personality}")
-        
-          # Define the S3 key for client data
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-        existing_data = None
-
-        # Check for existing client data in S3 (to store investment_personality in client detail)
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            existing_data = json.loads(response['Body'].read().decode('utf-8'))
-            logging.info(f"Existing data found for client ID {client_id}: {existing_data}")
-        except s3.exceptions.NoSuchKey:
-            logging.error(f"No existing client data found for client ID {client_id}.")
-            return jsonify({'message': f"No existing client data found for client ID {client_id}."}), 404
-
-        # Update the existing data with the new investment personality
-        if existing_data:
-            existing_data['investment_personality'] = personality
-            logging.info(f"Updated investment personality for client ID {client_id}: {personality}")
-        
-        # Save the updated data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=s3_key,
-                Body=json.dumps(existing_data),
-                ContentType='application/json'
-            )
-            logging.info(f"Client data successfully updated in S3 for client ID: {client_id}")
-        except Exception as e:
-            logging.error(f"Error occurred while saving updated data to S3: {e}")
-            return jsonify({'message': f'Error occurred while saving updated data to S3: {e}'}), 500
+# Personality Assessment using AWS and  Local Storage :
 
 
-        # Check if the file exists in S3
-        file_key = f"{personality_assessment_folder}{client_id}.json"
-        existing_file_data = None
-
-        try:
-            file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-            file_data = file_response['Body'].read().decode('utf-8')
-            existing_file_data = json.loads(file_data)
-            logging.info(f"Existing file data for client ID {client_id}: {existing_file_data}")
-        except s3.exceptions.NoSuchKey:
-            logging.info(f"No existing file found for client ID {client_id}. Creating a new file.")
-
-        # Update or create data
-        updated_data = {
-            'client_id': client_id,
-            'assessment_data': assessment_data,
-            'investment_personality': personality
-        }
-
-        if existing_file_data:
-            # Update the existing file with new data
-            existing_file_data.update(updated_data)
-            updated_data = existing_file_data
-            logging.info(f"Updated data for client ID {client_id}: {updated_data}")
-
-        # Save the data back to S3
-        try:
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=file_key,
-                Body=json.dumps(updated_data),
-                ContentType='application/json'
-            )
-            logging.info(f"Data successfully saved to S3 for clientId: {client_id}")
-        except Exception as e:
-            logging.error(f"Error occurred while saving to S3: {e}")
-            return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
-
-        # Return the result
-        return jsonify(updated_data), 200
-        # return jsonify({
-        #     'message': 'Data saved successfully',
-        #     'client_id': client_id,
-        #     'data': assessment_data,
-        #     'investment_personality': personality
-        # }), 200
-
-    except Exception as e:
-        logging.error(f"Unhandled exception: {e}")
-        return jsonify({'message': 'Internal Server Error'}), 500
- 
- # using get personality using aws 
 @app.route('/get-personality-assessment', methods=['POST'])
-def get_client_data_by_id():
+def get_personality_assessment():
     try:
         # Parse incoming request data
         payload = request.json
-        logging.info(f"Received request payload: {payload}")
-
+ 
         # Validate the payload
-        if not payload or 'client_id' not in payload:
-            logging.error("Invalid request: Missing client_id in payload.")
-            return jsonify({'message': 'client_id is required in the payload.'}), 400
-
         client_id = payload.get('client_id')
-
-        # Ensure client_id is a valid non-empty string
-        if not client_id or not isinstance(client_id, str):
-            logging.error("Invalid client_id: Must be a non-empty string.")
-            return jsonify({'message': 'client_id must be a non-empty string.'}), 400
-
-        # Define folder path for S3
-        folder_path = f"{personality_assessment_folder}"
-        logging.info(f"Looking for files in folder: {folder_path}")
-
-        # List objects in the folder
-        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=folder_path)
-        logging.debug(f"S3 list_objects_v2 response: {response}")
-
-        # Check if the folder contains any objects
-        if 'Contents' not in response:
-            logging.warning(f"No files found in folder: {folder_path}")
-            return jsonify({'message': 'No data found in the specified folder.'}), 404
-
-        # Iterate through the files to find the matching client_id
-        for obj in response['Contents']:
-            file_key = obj['Key']
-
-            # Skip the folder itself and non-JSON files
-            if file_key == folder_path or not file_key.endswith('.json'):
-                continue
-
-            # Fetch file content if the file matches the client_id
-            if f"{client_id}.json" in file_key:
-                try:
-                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                    file_content = json.loads(file_response['Body'].read().decode('utf-8'))
-                    logging.info(f"Found and retrieved data for client_id {client_id}.")
-                    
-                    return jsonify({
-                        'message': 'Data fetched successfully.',
-                        'data': file_content  # Ensure the actual client data is nested in 'data'
-                    }), 200
-                except Exception as fetch_error:
-                    logging.error(f"Error retrieving file {file_key}: {fetch_error}")
-                    return jsonify({'message': 'Error retrieving client data from S3.'}), 500
-
-        # If no matching file is found
-        logging.warning(f"No data found for client_id {client_id}.")
-        return jsonify({'message': 'No data found for the provided client_id.'}), 404
-
+        if not client_id:
+            return jsonify({'message': 'client_id is required in the payload.'}), 400
+ 
+        if USE_AWS:
+            # Define folder path for S3
+            folder_path = f"{personality_assessment_folder}"
+            logging.info(f"Looking for files in folder: {folder_path}")
+ 
+            # List objects in the folder
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=folder_path)
+            logging.debug(f"S3 list_objects_v2 response: {response}")
+ 
+            # Check if the folder contains any objects
+            if 'Contents' not in response:
+                logging.warning(f"No files found in folder: {folder_path}")
+                return jsonify({'message': 'No data found in the specified folder.'}), 404
+ 
+            # Iterate through the files to find the matching client_id
+            for obj in response['Contents']:
+                file_key = obj['Key']
+ 
+                # Skip the folder itself and non-JSON files
+                if file_key == folder_path or not file_key.endswith('.json'):
+                    continue
+ 
+                # Fetch file content if the file matches the client_id
+                if f"{client_id}.json" in file_key:
+                    try:
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_content = json.loads(file_response['Body'].read().decode('utf-8'))
+                        logging.info(f"Found and retrieved data for client_id {client_id}.")
+ 
+                        return jsonify({
+                            'message': 'Data fetched successfully.',
+                            'data': file_content  # Ensure the actual client data is nested in 'data'
+                        }), 200
+                    except Exception as fetch_error:
+                        logging.error(f"Error retrieving file {file_key}: {fetch_error}")
+                        return jsonify({'message': 'Error retrieving client data from S3.'}), 500
+ 
+            logging.warning(f"No matching data found for client_id {client_id} in folder {folder_path}.")
+            return jsonify({'message': 'No data found for the provided client_id.'}), 404
+ 
+        else:
+            # Local Storage Logic
+            file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
+            if not os.path.exists(file_path):
+                return jsonify({'message': 'No data found for the provided client_id.'}), 404
+ 
+            with open(file_path, 'r') as f:
+                file_content = json.load(f)
+ 
+            return jsonify({
+                'message': 'Data fetched successfully.',
+                'data': file_content
+            }), 200
+ 
     except Exception as e:
-        logging.error(f"Unhandled exception: {e}")
-        return jsonify({'message': 'Internal Server Error'}), 500
-    
-
-# # investment assessment using Local Storage :
-
-# import os
-# import json
-
-# LOCAL_STORAGE_DIR = "local_storage"
-# CLIENT_SUMMARY_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
-# PERSONALITY_ASSESSMENT_DIR = os.path.join(LOCAL_STORAGE_DIR, "personality_assessments")
-
-# # Ensure directories exist
-# os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
-# os.makedirs(PERSONALITY_ASSESSMENT_DIR, exist_ok=True)
-
-# @app.route('/investor-personality-assessment', methods=['POST'])
-# async def investor_personality_assessment():
-#     try:
-#         # Parse incoming request data
-#         data = request.json
-#         if not data:
-#             return jsonify({'message': 'Invalid request: No data received.'}), 400
-
-#         client_id = data.get('client_id')
-#         assessment_data = data.get('assessment_data')
-
-#         if not client_id or not assessment_data:
-#             return jsonify({'message': 'Client ID and assessment data are required.'}), 400
-
-#         # Determine the investment personality
-#         personality = await determine_investment_personality(assessment_data)
-
-#         # Update or create the client data
-#         client_file_path = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-#         if os.path.exists(client_file_path):
-#             with open(client_file_path, 'r') as f:
-#                 client_data = json.load(f)
-#         else:
-#             client_data = {"client_id": client_id}
-
-#         client_data['investment_personality'] = personality
-
-#         with open(client_file_path, 'w') as f:
-#             json.dump(client_data, f, indent=4)
-
-#         # Save or update the assessment data
-#         assessment_file_path = os.path.join(PERSONALITY_ASSESSMENT_DIR, f"{client_id}.json")
-#         updated_data = {
-#             'client_id': client_id,
-#             'assessment_data': assessment_data,
-#             'investment_personality': personality
-#         }
-
-#         with open(assessment_file_path, 'w') as f:
-#             json.dump(updated_data, f, indent=4)
-
-#         return jsonify(updated_data), 200
-
-#     except Exception as e:
-#         return jsonify({'message': f'Internal Server Error: {str(e)}'}), 500
-
-
-
-# # Personality Assessment using Local Storage :
-
+        return jsonify({'message': f"Internal Server Error: {str(e)}"}), 500
+ 
+ 
+ 
 # @app.route('/get-personality-assessment', methods=['POST'])
 # def get_client_data_by_id():
 #     try:
@@ -3478,7 +3076,7 @@ def get_client_data_by_id():
 #             return jsonify({'message': 'client_id is required in the payload.'}), 400
 
 #         # Locate the client's assessment data
-#         file_path = os.path.join(PERSONALITY_ASSESSMENT_DIR, f"{client_id}.json")
+#         file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
 #         if not os.path.exists(file_path):
 #             return jsonify({'message': 'No data found for the provided client_id.'}), 404
 
@@ -3492,73 +3090,296 @@ def get_client_data_by_id():
 
 #     except Exception as e:
 #         return jsonify({'message': f'Internal Server Error: {str(e)}'}), 500
-
     
 
-##################################################################################################################################
 
-import logging
-# global investmentPersonality  # Global Variable
-# investmentPersonality = ""
+# # api for generating suggestions with client id using AWS :  
 
-#prev version
-# def generate_chart_data(data):
-#     # Pie Chart
-#     labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
-#     max_allocations = [
-#         int(data['Growth-Oriented Investments'][label]['max']) for label in data['Growth-Oriented Investments']
-#     ] + [
-#         int(data['Conservative Investments'][label]['max']) for label in data['Conservative Investments']
-#     ]
-#     # Generate colors based on the number of labels
-#     all_labels = list({**data['Growth-Oriented Investments'], **data['Conservative Investments']}.keys())
-#     num_labels = len(all_labels)
-#     dynamic_colors = generate_colors(num_labels)
-#     pie_chart_data = {
-#         'labels': labels,
-#         'datasets': [{
-#             'label': 'Investment Allocation',
-#             'data': max_allocations,
-#             'backgroundColor': dynamic_colors,  # Example colors
-#             'hoverOffset': 4
-#         }]
-#     }
-    
-#     # pie_chart_data = {
-#     #     'labels': labels,
-#     #     'datasets': [{
-#     #         'label': 'Investment Allocation',
-#     #         'data': max_allocations,
-#     #         'backgroundColor': ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],  # Example colors
-#     #         'hoverOffset': 4
-#     #     }]
-#     # }
+@app.route('/investor-personality-assessment', methods=['POST'])
+def investor_personality_assessment():
+    try:
+        # Parse incoming request data
+        data = request.json
+        if not data:
+            logging.error("No data received in the request.")
+            return jsonify({'message': 'Invalid request: No data received.'}), 400
+ 
+        client_id = data.get('client_id')
+        assessment_data = data.get('assessment_data')
+ 
+        if not client_id or not assessment_data:
+            logging.error("Missing client_id or assessment_data.")
+            return jsonify({'message': 'Client ID and assessment data are required.'}), 400
+ 
+        logging.info(f"Received assessment data for client ID: {client_id}")
+ 
+        # Determine the investment personality
+        personality = asyncio.run(determine_investment_personality(assessment_data))
+        logging.info(f"Determined personality for client ID {client_id}: {personality}")
+ 
+        # Handle data storage based on USE_AWS flag
+        if USE_AWS:
+            return handle_aws_storage(client_id, assessment_data, personality)
+        else:
+            return handle_local_storage(client_id, assessment_data, personality)
+ 
+    except Exception as e:
+        logging.error(f"Unhandled exception: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
+ 
+ 
+def handle_aws_storage(client_id, assessment_data, personality):
+    try:
+        # Define S3 key for client data
+        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+        existing_data = None
+ 
+        # Check if client data already exists in S3
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+            existing_data = json.loads(response['Body'].read().decode('utf-8'))
+            logging.info(f"Existing data found for client ID {client_id}: {existing_data}")
+        except s3.exceptions.NoSuchKey:
+            logging.warning(f"No existing client data found for client ID {client_id}. Creating a new entry.")
+ 
+        # Update existing data or create new data
+        if not existing_data:
+            existing_data = {}
+        existing_data['investment_personality'] = personality
+ 
+        # Save updated data back to S3
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=s3_key,
+                Body=json.dumps(existing_data),
+                ContentType='application/json'
+            )
+            logging.info(f"Client data successfully updated in S3 for client ID: {client_id}")
+        except Exception as e:
+            logging.error(f"Error occurred while saving updated client data to S3: {e}")
+            return jsonify({'message': f'Error occurred while saving updated data to S3: {e}'}), 500
+ 
+        # Define S3 key for personality assessment file
+        file_key = f"{personality_assessment_folder}{client_id}.json"
+        existing_file_data = None
+ 
+        # Check if personality assessment file already exists in S3
+        try:
+            file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+            file_data = file_response['Body'].read().decode('utf-8')
+            existing_file_data = json.loads(file_data)
+            logging.info(f"Existing personality assessment file data for client ID {client_id}: {existing_file_data}")
+        except s3.exceptions.NoSuchKey:
+            logging.info(f"No existing personality assessment file found for client ID {client_id}. Creating a new file.")
+ 
+        # Update or create personality assessment data
+        updated_data = {
+            'client_id': client_id,
+            'assessment_data': assessment_data,
+            'investment_personality': personality
+        }
+ 
+        if existing_file_data:
+            # Merge new data with existing file data
+            existing_file_data.update(updated_data)
+            updated_data = existing_file_data
+            logging.info(f"Updated personality assessment data for client ID {client_id}: {updated_data}")
+ 
+        # Save personality assessment data back to S3
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(updated_data),
+                ContentType='application/json'
+            )
+            logging.info(f"Personality assessment data successfully saved to S3 for client ID: {client_id}")
+        except Exception as e:
+            logging.error(f"Error occurred while saving personality assessment data to S3: {e}")
+            return jsonify({'message': f'Error occurred while saving personality assessment data to S3: {e}'}), 500
+ 
+        # Return the updated data
+        return jsonify(updated_data), 200
+ 
+    except Exception as e:
+        logging.error(f"Unhandled exception: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
+ 
+def handle_local_storage(client_id, assessment_data, personality):
+    try:
+        personality_file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
+        client_data_dir = os.path.join(CLIENT_DATA_DIR, "client_data")
+        client_file_path = os.path.join(client_data_dir, f"{client_id}.json")
+        personality_data = {}
+ 
+        if os.path.exists(personality_file_path):
+            with open(personality_file_path, 'r') as f:
+                personality_data = json.load(f)
+ 
+        personality_data.update({
+            "client_id": client_id,
+            "assessment_data": assessment_data,
+            "investment_personality": personality
+        })
+ 
+        with open(personality_file_path, 'w') as f:
+            json.dump(personality_data, f, indent=4)
+ 
+        if os.path.exists(client_file_path):
+            with open(client_file_path, 'r') as f:
+                client_data = json.load(f)
+            client_data['investment_personality'] = personality
+        else:
+            client_data = {
+                "client_id": client_id,
+                "investment_personality": personality,
+            }
+ 
+        with open(client_file_path, 'w') as f:
+            json.dump(client_data, f, indent=4)
+ 
+        logging.info(f"Updated client data file for client ID {client_id}")
+ 
+        return jsonify({
+            'client_id': client_id,
+            'investment_personality': personality
+        }), 200
+ 
+    except Exception as e:
+        logging.error(f"Error processing investor assessment: {e}")
+        return jsonify({'message': 'Internal Server Error'}), 500
+ 
+ 
 
-#     # Bar Chart
-#     min_allocations = [
-#         int(data['Growth-Oriented Investments'][label]['min']) for label in data['Growth-Oriented Investments']
-#     ] + [
-#         int(data['Conservative Investments'][label]['min']) for label in data['Conservative Investments']
-#     ]
-#     bar_chart_data = {
-#         'labels': labels,
-#         'datasets': [
-#             {
-#                 'label': 'Allocation for Min returns',
-#                 'data': min_allocations,
-#                 'backgroundColor': 'skyblue'
-#             },
-#             {
-#                 'label': 'Allocation for Max returns',
-#                 'data': max_allocations,
-#                 'backgroundColor': 'lightgreen'
+# @app.route('/investor-personality-assessment', methods=['POST'])
+# def investor_personality_assessment():
+#     try:
+#         # Parse incoming data
+#         data = request.json
+#         client_id = data.get('client_id')
+#         assessment_data = data.get('assessment_data')
+ 
+#         if not client_id or not assessment_data:
+#             return jsonify({'message': 'Client ID and assessment data are required.'}), 400
+ 
+#         logging.info(f"Received assessment data for client ID: {client_id}")
+ 
+#         # Determine investment personality
+#         personality = asyncio.run(determine_investment_personality(assessment_data))
+#         logging.info(f"Determined personality for client ID {client_id}: {personality}")
+ 
+#         # Save assessment data and personality in a dedicated file
+#         personality_file_path = os.path.join(CLIENT_DATA_DIR, f"personality_assessments/{client_id}.json")
+#         client_data_dir = os.path.join(CLIENT_DATA_DIR, "client_data")
+#         client_file_path = os.path.join(client_data_dir, f"{client_id}.json")
+ 
+#         # Update or create personality-specific data
+#         personality_data = {}
+#         if os.path.exists(personality_file_path):
+#             with open(personality_file_path, 'r') as f:
+#                 personality_data = json.load(f)
+ 
+#         personality_data.update({
+#             "client_id": client_id,
+#             "assessment_data": assessment_data,
+#             "investment_personality": personality
+#         })
+ 
+#         with open(personality_file_path, 'w') as f:
+#             json.dump(personality_data, f, indent=4)
+ 
+#         # Update the main client data file
+#         if os.path.exists(client_file_path):
+#             with open(client_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#             # Update investment personality in the existing client file
+#             client_data['investment_personality'] = personality
+#         else:
+#             # If client file does not exist, create it
+#             client_data = {
+#                 "client_id": client_id,
+#                 "investment_personality": personality,
 #             }
-#         ]
-#     }
-#     print(f"Pie Chart Data : {pie_chart_data}")
-#     print(f"Bar Chart Data : {bar_chart_data}")
-    
-#     return pie_chart_data, bar_chart_data
+ 
+#         with open(client_file_path, 'w') as f:
+#             json.dump(client_data, f, indent=4)
+ 
+#         logging.info(f"Updated client data file for client ID {client_id}")
+ 
+#         return jsonify({
+#             'client_id': client_id,
+#             'investment_personality': personality
+#         }), 200
+ 
+#     except Exception as e:
+#         logging.error(f"Error processing investor assessment: {e}")
+#         return jsonify({'message': 'Internal Server Error'}), 500
+ 
+
+##############################################################################################################
+ 
+# @app.route('/personality-assessment', methods=['POST'])
+# def personality_selected():
+#     try:
+#         # Parse incoming data
+#         data = request.json
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+#         investment_personality = data.get('investmentPersonality')
+#         client_name = data.get('clientName')
+#         client_id = data.get('clientId')
+
+#         print(f"Client Name: {client_name}, Investment Personality: {investment_personality}")
+
+#         # Validate required data
+#         if not client_id or not client_name or not investment_personality:
+#             return jsonify({'message': 'Missing client_id, clientName, or investmentPersonality.'}), 400
+
+#         # Load client data from local storage
+#         file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#         if not os.path.exists(file_path):
+#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+
+#         with open(file_path, 'r') as f:
+#             client_data = json.load(f)
+
+#         print(f"Loaded Client Data: {client_data}")
+
+#         # Generate suggestions
+#         try:
+#             result, pie_chart_data, bar_chart_data, combined_chart_data = asyncio.run(
+#                 make_suggestions_using_clientid(
+#                     investment_personality,
+#                     client_name,
+#                     client_data
+#                 )
+#             )
+
+#             html_suggestions = markdown.markdown(result)
+#             format_suggestions = markdown_to_text(html_suggestions)
+
+#             return jsonify({
+#                 "status": 200,
+#                 "message": "Success",
+#                 "investmentSuggestions": format_suggestions,
+#                 "pieChartData": pie_chart_data,
+#                 "barChartData": bar_chart_data,
+#                 "compoundedChartData": combined_chart_data
+#             }), 200
+
+#         except Exception as e:
+#             logging.error(f"Error generating suggestions: {e}")
+#             return jsonify({'message': f"Error generating suggestions: {e}"}), 500
+
+#     except Exception as e:
+#         logging.error(f"Unhandled exception: {e}")
+#         return jsonify({'message': 'Internal Server Error'}), 500
+
+
+###########################################################################################################
+
 
 # generate pie chart data and bar chart data :
 def generate_chart_data(data):
@@ -3974,6 +3795,8 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         print(f"Error in generating prompt or retrieval chain: {e}")
         return None
 
+# # using aws :
+
 async def make_suggestions_using_clientid(investmentPersonality, clientName, client_data):
     try:
         print(f"Processing client data for {clientName}.")
@@ -4033,8 +3856,9 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 500
 
 
+
         
-# api for generating suggestions with client id using aws :
+# # api for generating suggestions with client id :
 
 @app.route('/personality-assessment', methods=['POST'])
 def personality_selected():
@@ -4085,7 +3909,7 @@ def personality_selected():
                 formatSuggestions = markdown_to_text(htmlSuggestions)
                 answer = markdown_table_to_html(formatSuggestions)
                 print(answer)
-               
+                 
                 # Return the Results :
                 
                 # return jsonify({
@@ -4118,112 +3942,8 @@ def personality_selected():
         print(f"An error occurred while requesting Data: {e}")
         return jsonify({'message': f"An error occurred while requesting Data :" + str(e)}, 500)
    
-   
-# # api for generating suggestions with client id using Local Storage :  
 
-# @app.route('/investor-personality-assessment', methods=['POST'])
-# def investor_personality_assessment():
-#     try:
-#         # Parse incoming data
-#         data = request.json
-#         client_id = data.get('client_id')
-#         assessment_data = data.get('assessment_data')
-
-#         if not client_id or not assessment_data:
-#             return jsonify({'message': 'Client ID and assessment data are required.'}), 400
-
-#         logging.info(f"Received assessment data for client ID: {client_id}")
-
-#         # Determine investment personality
-#         personality = asyncio.run(determine_investment_personality(assessment_data))
-#         logging.info(f"Determined personality for client ID {client_id}: {personality}")
-
-#         # Save the assessment data and personality to local storage
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-
-#         # Update or create client data
-#         client_data = {}
-#         if os.path.exists(file_path):
-#             with open(file_path, 'r') as f:
-#                 client_data = json.load(f)
-        
-#         client_data.update({
-#             "client_id": client_id,
-#             "assessment_data": assessment_data,
-#             "investment_personality": personality
-#         })
-
-#         with open(file_path, 'w') as f:
-#             json.dump(client_data, f, indent=4)
-
-#         return jsonify({
-#             'client_id': client_id,
-#             'investment_personality': personality
-#         }), 200
-
-#     except Exception as e:
-#         logging.error(f"Error processing investor assessment: {e}")
-#         return jsonify({'message': 'Internal Server Error'}), 500
-
- 
-# @app.route('/personality-assessment', methods=['POST'])
-# def personality_selected():
-#     try:
-#         # Parse incoming data
-#         data = request.json
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
-
-#         investment_personality = data.get('investmentPersonality')
-#         client_name = data.get('clientName')
-#         client_id = data.get('clientId')
-
-#         print(f"Client Name: {client_name}, Investment Personality: {investment_personality}")
-
-#         # Validate required data
-#         if not client_id or not client_name or not investment_personality:
-#             return jsonify({'message': 'Missing client_id, clientName, or investmentPersonality.'}), 400
-
-#         # Load client data from local storage
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#         if not os.path.exists(file_path):
-#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-
-#         with open(file_path, 'r') as f:
-#             client_data = json.load(f)
-
-#         print(f"Loaded Client Data: {client_data}")
-
-#         # Generate suggestions
-#         try:
-#             result, pie_chart_data, bar_chart_data, combined_chart_data = asyncio.run(
-#                 make_suggestions_using_clientid(
-#                     investment_personality,
-#                     client_name,
-#                     client_data
-#                 )
-#             )
-
-#             html_suggestions = markdown.markdown(result)
-#             format_suggestions = markdown_to_text(html_suggestions)
-
-#             return jsonify({
-#                 "status": 200,
-#                 "message": "Success",
-#                 "investmentSuggestions": format_suggestions,
-#                 "pieChartData": pie_chart_data,
-#                 "barChartData": bar_chart_data,
-#                 "compoundedChartData": combined_chart_data
-#             }), 200
-
-#         except Exception as e:
-#             logging.error(f"Error generating suggestions: {e}")
-#             return jsonify({'message': f"Error generating suggestions: {e}"}), 500
-
-#     except Exception as e:
-#         logging.error(f"Unhandled exception: {e}")
-#         return jsonify({'message': 'Internal Server Error'}), 500
-
+#########################################################################################################################
 
 # Route to handle generating investment suggestions
 import shutil
@@ -4935,91 +4655,10 @@ def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_va
     #     'Return on Investment (ROI)': roi
     # }
 
-#### AWS Method to place order :
-
-@app.route('/order_placed', methods=['POST'])
-def order_placed():
-    try:
-        # Extract data from the request
-        order_data = request.json.get('order_data')
-        client_name = request.json.get('client_name')
-        client_id = request.json.get('client_id')
-        funds = request.json.get('funds')
-        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
-
-        # File key for the S3 object
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-
-        # Load existing data from S3 if available
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
-            client_transactions = json.loads(response['Body'].read().decode('utf-8'))
-            print(f"Loaded existing transactions for client {client_id}")
-        except s3.exceptions.NoSuchKey:
-            # Initialize a new transaction list if the file doesn't exist
-            client_transactions = []
-            print(f"No existing transactions for client {client_id}. Initializing new list.")
-
-        # Process Real Estate or other assets based on asset class
-        assetClass = order_data.get('assetClass')
-        print(f"Processing Asset Class: {assetClass}")
-        
-        if assetClass == 'Real Estate':
-            ownership = order_data.get('ownership')
-            if ownership in ['REIT/Fund', 'Commercial Real Estate (Triple Net Lease)']:
-                # Real estate REIT/fund or commercial real estate transaction
-                new_transaction = {
-                    "AssetClass": assetClass,
-                    "ownership": ownership,
-                    "Date": order_data.get('date'),
-                    "Name": order_data.get('name'),
-                    "TransactionAmount": order_data.get('investmentAmount'),
-                    "DividendYield": order_data.get('dividendYield')
-                }
-            else:
-                # Direct real estate transaction
-                new_transaction = {
-                    "AssetClass": assetClass,
-                    "ownership": ownership,
-                    "Date": order_data.get('date'),
-                    "Name": order_data.get('name'),
-                    "estimated_annual_income": order_data.get('estimated_annual_income'),
-                    "estimated_yield": order_data.get('estimated_yield')
-                }
-        else:
-            # Standard transaction for Stocks, Bonds, etc.
-            new_transaction = {
-                "Market": order_data.get('market'),
-                "AssetClass": assetClass,
-                "Date": order_data.get('date'),
-                "Action": order_data.get('buy_or_sell'),
-                "Name": order_data.get('name'),
-                "Symbol": order_data.get('symbol'),
-                "Units": order_data.get('units'),
-                "UnitPrice": order_data.get('unit_price'),
-                "TransactionAmount": order_data.get('transactionAmount')
-            }
-
-        # Append the new transaction to the client's transaction list
-        client_transactions.append(new_transaction)
-        print(f"Appended transaction for client {client_id}: {new_transaction}")
-
-        # Save the updated data back to S3
-        updated_data = json.dumps(client_transactions, indent=4)
-        s3.put_object(Bucket=S3_BUCKET_NAME, Key=order_list_key, Body=updated_data)
-        print(f"Saved updated transactions for client {client_id} in S3 bucket.")
-
-        return jsonify({"message": "Order placed successfully", "status": 200})
-
-    except Exception as e:
-        print(f"Error occurred while placing order: {e}")
-        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
-
-
 
 # # # Updated Local Storage Code :
 
-# LOCAL_STORAGE_PATH = "data/orders/"
+LOCAL_STORAGE_PATH = "data/orders/"
 
 # @app.route('/order_placed', methods=['POST'])
 # def order_placed():
@@ -5100,47 +4739,190 @@ def order_placed():
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 
+# Using AWS to Place Order :
+
+def create_transaction(order_data, asset_class):
+    """Helper function to create a transaction entry based on asset class"""
+    if asset_class == 'Real Estate':
+        ownership = order_data.get('ownership')
+        if ownership in ['REIT/Fund', 'Commercial Real Estate (Triple Net Lease)']:
+            # Real estate REIT/fund or commercial real estate transaction
+            return {
+                "AssetClass": asset_class,
+                "Ownership": ownership,
+                "Date": order_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+                "Name": order_data.get('name'),
+                "TransactionAmount": order_data.get('investmentAmount'),
+                "DividendYield": order_data.get('dividendYield')
+            }
+        else:
+            # Direct real estate transaction
+            return {
+                "AssetClass": asset_class,
+                "Ownership": ownership,
+                "Date": order_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+                "Name": order_data.get('name'),
+                "EstimatedAnnualIncome": order_data.get('estimated_annual_income'),
+                "EstimatedYield": order_data.get('estimated_yield')
+            }
+    else:
+        # Standard transaction for Stocks, Bonds, etc.
+        return {
+            "Market": order_data.get('market'),
+            "AssetClass": asset_class,
+            "Date": order_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            "Action": order_data.get('buy_or_sell'),
+            "Name": order_data.get('name'),
+            "Symbol": order_data.get('symbol'),
+            "Units": order_data.get('units'),
+            "UnitPrice": order_data.get('unit_price'),
+            "TransactionAmount": order_data.get('transactionAmount')
+        }
+ 
+
+def save_data_to_aws(client_id, client_transactions, order_list_key, order_data):
+    """Helper function to save data to AWS S3"""
+    asset_class = order_data.get('assetClass')
+    new_transaction = create_transaction(order_data, asset_class)
+ 
+    # Append the new transaction to the client's transaction list
+    client_transactions.append(new_transaction)
+    print(f"Appended transaction for client {client_id}: {new_transaction}")
+ 
+    # Save the updated data back to AWS S3
+    updated_data = json.dumps(client_transactions, indent=4)
+    s3.put_object(Bucket=S3_BUCKET_NAME, Key=order_list_key, Body=updated_data)
+    print(f"Saved updated transactions for client {client_id} in S3 bucket.")
+ 
+ 
+def save_data_to_local(client_id, client_transactions, order_file_path, order_data):
+    """Helper function to save data to local storage"""
+    asset_class = order_data.get('assetClass')
+    new_transaction = create_transaction(order_data, asset_class)
+ 
+    # Append the new transaction to the client's transaction list
+    client_transactions.append(new_transaction)
+    print(f"Appended transaction for client {client_id}: {new_transaction}")
+ 
+    # Save the updated data back to local storage
+    os.makedirs(os.path.dirname(order_file_path), exist_ok=True)
+    with open(order_file_path, 'w') as file:
+        json.dump(client_transactions, file, indent=4)
+    print(f"Saved updated transactions for client {client_id} in local storage.")
+ 
 
 
-## Using AWS to Show Order :
+# Local storage path (if USE_AWS is False)
+LOCAL_STORAGE_PATH = "data/orders/"
+ 
+@app.route('/order_placed', methods=['POST'])
+def order_placed():
+    try:
+        # Extract data from the request
+        order_data = request.json.get('order_data')
+        client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
+        client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
+        funds = request.json.get('funds')  # Example extra data if needed
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+ 
+        # Check whether to use AWS or local storage
+        if USE_AWS:
+            # AWS S3 file key for the order list
+            order_list_key = f"{order_list_folder}{client_id}_orders.json"
+           
+            # Load existing data from AWS S3 if available
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+                client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Loaded existing transactions for client {client_id} from S3")
+            except s3.exceptions.NoSuchKey:
+                # Initialize a new transaction list if the file doesn't exist
+                client_transactions = []
+                print(f"No existing transactions for client {client_id}. Initializing new list.")
+           
+            # Save data to AWS S3
+            save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
+ 
+        else:
+            # Local file path for storing orders
+            order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+ 
+            # Load existing data from local storage if available
+            if os.path.exists(order_file_path):
+                with open(order_file_path, 'r') as file:
+                    client_transactions = json.load(file)
+                print(f"Loaded existing transactions for client {client_id} from local storage")
+            else:
+                # Initialize a new transaction list if the file doesn't exist
+                client_transactions = []
+                print(f"No existing transactions for client {client_id}. Initializing new list.")
+ 
+            # Save data to local storage
+            save_data_to_local(client_id, client_transactions, order_file_path, order_data)
+ 
+        return jsonify({"message": "Order placed successfully", "status": 200})
+ 
+    except Exception as e:
+        print(f"Error occurred while placing order: {e}")
+        return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+ 
+
+# ## Using AWS to Show Order :
 @app.route('/show_order_list', methods=['POST'])
 def show_order_list():
     try:
         # Get client_id from the request
         client_id = request.json.get('client_id')
-
+ 
         if not client_id:
             return jsonify({"message": "Client ID is required", "status": 400})
-
-        # Define the S3 file key for the given client ID
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-        print(f"clientIDDDD: {client_id}")
-
-        try:
-            # Fetch the file from the S3 bucket
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
-            file_content = response['Body'].read().decode('utf-8')
-
-            # Parse the file content as JSON
-            client_transactions = json.loads(file_content)
-            print(f"Retrieved transactions for client {client_id}: {client_transactions}")
-
-            return jsonify({"transaction_data": client_transactions, "status": 200})
-
-        except s3.exceptions.NoSuchKey:
-            # Handle case where the file does not exist in S3
-            print(f"No transactions found for client ID: {client_id}")
-            return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
-
-        except Exception as e:
-            print(f"Error occurred while fetching data from S3: {e}")
-            return jsonify({"message": f"Error occurred while fetching data from S3: {str(e)}"}), 500
-
+ 
+        if USE_AWS:
+            # Define the S3 file key for the given client ID
+            order_list_key = f"{order_list_folder}{client_id}_orders.json"
+            print(f"Fetching transactions for client {client_id} from AWS S3")
+ 
+            try:
+                # Fetch the file from the S3 bucket
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+                file_content = response['Body'].read().decode('utf-8')
+ 
+                # Parse the file content as JSON
+                client_transactions = json.loads(file_content)
+                print(f"Retrieved transactions for client {client_id}: {client_transactions}")
+ 
+                return jsonify({"transaction_data": client_transactions, "status": 200})
+ 
+            except s3.exceptions.NoSuchKey:
+                # Handle case where the file does not exist in S3
+                print(f"No transactions found for client ID: {client_id}")
+                return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+ 
+            except Exception as e:
+                print(f"Error occurred while fetching data from S3: {e}")
+                return jsonify({"message": f"Error occurred while fetching data from S3: {str(e)}"}), 500
+ 
+        else:
+            # Local file path for storing orders
+            order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+ 
+            # Check if the order file exists
+            if os.path.exists(order_file_path):
+                # Load transactions from the local file
+                with open(order_file_path, 'r') as file:
+                    client_transactions = json.load(file)
+                print(f"Retrieved transactions for client {client_id}: {client_transactions}")
+                return jsonify({"transaction_data": client_transactions, "status": 200})
+            else:
+                print(f"No transactions found for client ID: {client_id}")
+                return jsonify({"message": "No transactions found for the provided client ID", "status": 404})
+ 
     except Exception as e:
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
-
-
+    
+    
+    
 # Updated Show Order List for Local Storage :
 
 # @app.route('/show_order_list', methods=['POST'])
@@ -5171,48 +4953,76 @@ def show_order_list():
 #         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
 
 
-
 ### Using AWS to show Portfolio of the user :
-# New Version : Saves Daily Changes :
-daily_changes_folder = 'daily-changes-folder' # to be added in aws bucket
+
+# Constants for file paths
+LOCAL_STORAGE_PATH = "local_data"
+ORDER_LIST_PATH = os.path.join(LOCAL_STORAGE_PATH, "orders")
+DAILY_CHANGES_PATH = os.path.join(LOCAL_STORAGE_PATH, "daily_changes")
+PORTFOLIO_PATH = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
+
+# Ensure directories exist for local storage
+os.makedirs(ORDER_LIST_PATH, exist_ok=True)
+os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
+os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
 @app.route('/portfolio', methods=['POST'])
 def portfolio():
     try:
-        # Extract the client_id and current date
+        # Extract client ID and current date
         client_id = request.json.get('client_id')
         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Load existing orders for the client
-        order_list_key = f"{order_list_folder}{client_id}_orders.json"
-        try:
-            with open(order_list_key, 'r') as file:
+        # Load client orders
+        if USE_AWS:
+            # Load orders from AWS S3
+            order_list_key = f"{order_list_folder}{client_id}_orders.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+                client_orders = json.loads(response['Body'].read().decode('utf-8'))
+                logging.info(f"Fetched orders for client_id: {client_id}")
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+            except Exception as e:
+                logging.error(f"Error fetching orders from AWS: {e}")
+                return jsonify({"message": f"Error fetching orders: {e}"}), 500
+        else:
+            # Load orders from local storage
+            order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+            if not os.path.exists(order_file_path):
+                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+            with open(order_file_path, 'r') as file:
                 client_orders = json.load(file)
-        except FileNotFoundError:
-            client_orders = []
-
-        if not client_orders:
-            return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
 
         # Initialize portfolio data and metrics
         portfolio_data = []
         portfolio_current_value = 0
         porfolio_daily_change = 0
         portfolio_investment_gain_loss = 0
-        daily_changes = {}
 
-        # Load existing daily changes for the quarter
-        daily_changes_file = f"{daily_changes_folder}/{client_id}_daily_changes.json"
-        # daily_changes_file = f"{client_id}_daily_changes.json"
-        
-        try:
-            with open(daily_changes_file, 'r') as file:
-                daily_changes = json.load(file)
-        except FileNotFoundError:
-            daily_changes = {}
+        # Load or initialize daily changes
+        if USE_AWS:
+            daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                daily_changes = {}
+            except Exception as e:
+                logging.error(f"Error fetching daily changes from AWS: {e}")
+                return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+        else:
+            daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    daily_changes = json.load(file)
+            else:
+                daily_changes = {}
 
+        # Process client orders
         for order in client_orders:
             asset_class = order.get('AssetClass', 'N/A')
             name = order.get('Name', 'N/A')
@@ -5228,7 +5038,7 @@ def portfolio():
                     current_price = stock.history(period='1d')['Close'].iloc[-1]
                     return current_price
                 except Exception as e:
-                    print(f"Error fetching stock price for {ticker}: {e}")
+                    logging.error(f"Error fetching stock price for {ticker}: {e}")
                     return 0
 
             current_price = fetch_current_stock_price(symbol)
@@ -5276,14 +5086,43 @@ def portfolio():
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
         }
 
-        # Save daily changes to a file
-        with open(daily_changes_file, 'w') as file:
-            json.dump(daily_changes, file, indent=4)
+        # Save daily changes and portfolio data
+        if USE_AWS:
+            # Save daily changes to AWS
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=daily_changes_key,
+                    Body=json.dumps(daily_changes),
+                    ContentType='application/json'
+                )
+                logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving daily changes to AWS: {e}")
+                return jsonify({"message": f"Error saving daily changes: {e}"}), 500
 
-        # Save portfolio data as JSON
-        portfolio_file_path = f"portfolio_{client_id}.json"
-        with open(portfolio_file_path, 'w') as file:
-            json.dump(portfolio_data, file, indent=4)
+            # Save portfolio data to AWS
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=portfolio_key,
+                    Body=json.dumps(portfolio_data),
+                    ContentType='application/json'
+                )
+                logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving portfolio data to AWS: {e}")
+                return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+        else:
+            # Save daily changes locally
+            with open(daily_changes_file, 'w') as file:
+                json.dump(daily_changes, file, indent=4)
+
+            # Save portfolio data locally
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            with open(portfolio_file_path, 'w') as file:
+                json.dump(portfolio_data, file, indent=4)
 
         # Response data
         portfolio_response = {
@@ -5299,452 +5138,11 @@ def portfolio():
         return jsonify(portfolio_response), 200
 
     except Exception as e:
-        print(f"Error occurred in portfolio: {e}")
+        logging.error(f"Error in portfolio: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
-# # Prev Version :
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract the client_id from the POST request
-#         client_id = request.json.get('client_id') #, 'RS4603')
-#         curr_date = request.json.get('curr_date', None) # to be used to check market is open or closed
-#         # print(f"Portfolio of the client with client id is :{client_id}")
-#         order_list_key = f"{order_list_folder}{client_id}_orders.json"
-#         # print(f"client_orders {order_list_key}")
-            
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-
-#         #  Load existing data of order list from S3 if available
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
-#             client_orders = json.loads(response['Body'].read().decode('utf-8'))
-#             print(f"client_orders {client_orders}")
-
-#         except s3.exceptions.NoSuchKey:
-#             # Initialize a new transaction list if the file doesn't exist
-#             client_orders = []
-#             print(f"No existing transactions for client {client_id}. Initializing new list.")
-
-
-#            # Read the order_list.json file
-#         # with open('order_list.json', 'r') as f:
-#         #     order_list = json.load(f)
-
-#         # print(order_list)
-
-#         # # Fetch orders for the client
-#         # client_orders = order_list.get(client_id, [])
-#         # # print(f"The orders are : {client_orders}")
-
-#         # Check if any orders are found
-#         if not client_orders:
-            
-#             return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
-
-
-#         # Filter the transactions for the specific client_id
-#         # client_orders = [order for order in order_list if order.get('client_id') == client_id]
-#         # if not client_orders:
-#         #     return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
-
-#         # Initialize an array to store the portfolio data
-#         portfolio_data = []
-#         print(f"client_ordersclient_orders : {client_orders}")
-#         # Iterate over all transactions for the specific client
-#         portfolio_current_value,porfolio_daily_change,portfolio_daily_change_perc,portfolio_investment_gain_loss,portfolio_investment_gain_loss_perc,portfolio_daily_value_change = 0,0,0,0,0,0
-#         for order in client_orders:
-#             assetClass = order.get('AssetClass', 'N/A')
-#             name = order.get('Name', 'N/A')  # Stock name
-#             # market = order.get('market', 'N/A')
-#             symbol = order.get('Symbol', 'N/A')
-#             units = order.get('Units', 0)
-#             bought_price = order.get('UnitPrice', 0)
-#             transaction_type = order.get('Action', 'N/A')
-#             transaction_amount = order.get('TransactionAmount', 0)
-#             date = order.get('Date', 'N/A')
-            
-#             print(f"\n{assetClass} \n{name} \n{units} \n{bought_price} \n{transaction_type} \n{transaction_amount} \n{date}")
-            
-#             if assetClass == 'Real Estate':
-#                 ownership = order.get('ownership')
-#                 if ownership == 'REIT/Fund' or ownership == 'Commercial Real Estate (Triple Net Lease)':
-#                     InvestmentAmount = order.get('TransactionAmount',500)
-#                     print(f"Investment amount : {InvestmentAmount}")
-#                     DividendYield = order.get('DividendYield',3.2)
-#                     print(f"Dividend Yield : {DividendYield}")
-#                     estimated_annual_income = InvestmentAmount * DividendYield
-#                     print(f"Estimated Annualincome : {estimated_annual_income}")
-#                     estimated_yield = round((InvestmentAmount/DividendYield))
-#                     print(f"Estimated yield : {estimated_yield}")
-                    
-#                     current_price = 0 
-#                     current_value = 0
-#                     daily_price_change = 0
-#                     daily_value_change = 0
-#                     bought_price = 0
-#                     transaction_amount = 0
-#                     investment_gain_loss = 0
-#                     investment_gain_loss_per = 0
-                    
-#                 elif ownership == "Direct":
-#                     pass
-                    
-#             else :
-#                 # Fetch the current stock price from external source (API, database)
-#                 def fetch_current_stock_price(ticker):
-#                     stock = yf.Ticker(ticker)
-#                     try:
-#                         # Fetch the current stock price using the 'regularMarketPrice' field
-#                         current_price = stock.info.get('regularMarketPrice')
-                        
-#                         if current_price is None:
-#                             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
-#                             # Fetch the last closing price if the current price is unavailable
-#                             current_price = stock.history(period='1d')['Close'].iloc[-1]
-                            
-#                         # Ensure we have a valid price at this point
-#                         if current_price is None:
-#                             raise ValueError(f"Unable to fetch current or closing price for {ticker}.")
-                        
-#                         # print(current_price)
-#                         return current_price
-                    
-#                     except Exception as e:
-#                         # Handle exceptions more explicitly
-#                         print(f"Error fetching stock price for {ticker}: {str(e)}")
-#                         return 0
-
-        
-#                 current_price = fetch_current_stock_price(symbol)
-#                 print(f"Current Stock Price is :{current_price}")
-#                 # Calculate difference in price and percentage
-#                 print(f"Bought price is : {bought_price}")
-#                 diff_price = current_price - bought_price
-#                 percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
-
-#                 # Assume daily price change is available (fetch it if possible, or calculate)
-#                 daily_price_change =  diff_price #current_price - order.get('previousDayPrice', bought_price)  # Placeholder logic
-#                 daily_value_change = daily_price_change * units
-#                 current_value = current_price*units
-
-                
-#                 # Calculate investment gain/loss and other financial metrics
-#                 investment_gain_loss = diff_price * units
-#                 investment_gain_loss_per = round(investment_gain_loss/transaction_amount*100,2)
-#                 estimated_annual_income = 0 #order.get('estimatedAnnualIncome', 0)
-#                 estimated_yield = 0 #(estimated_annual_income / (bought_price * units)) * 100 if bought_price > 0 else 0
-
-#             # Append the transaction details to the portfolio_data array
-#             portfolio_data.append({
-#                 "assetClass": assetClass,
-#                 "name": name,
-#                 "symbol": symbol ,
-#                 "Quantity": units,
-#                 "Delayed_Price": current_price, # Delayed Price
-#                 "current_value" : current_value ,
-#                 "Daily_Price_Change": daily_price_change,
-#                 "Daily_Value_Change" : daily_value_change,
-#                 "Amount_Invested_per_Unit" :  bought_price, #transaction_amount/units ,
-#                 "Amount_Invested": transaction_amount,
-#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per ,
-#                 "Investment_Gain_or_Loss": investment_gain_loss,
-#                 "Estimated_Annual_Income": estimated_annual_income,
-#                 "Estimated_Yield": estimated_yield,
-#                 "Time_Held": date,
-#             })
-            
-#             print(f"Portfolio Data is : {portfolio_data}")
-            
-#                 # "Client ID": client_id,
-#                 # "Market": market,
-#                 # "Transaction Type": transaction_type,
-#                 # "Price Per Unit (Bought)": bought_price, 
-#                 # "Difference in Price": diff_price,
-#                 # "Percentage Difference": f"{percentage_diff:.2f}%",
-            
-#             portfolio_current_value += current_value
-#             porfolio_daily_change += daily_price_change
-#             portfolio_daily_value_change += daily_value_change
-#             portfolio_investment_gain_loss += investment_gain_loss
-        
-#         portfolio_daily_change_perc = round(porfolio_daily_change/portfolio_current_value *100 ,2)
-#         portfolio_investment_gain_loss_perc = round(portfolio_investment_gain_loss/portfolio_current_value*100,4)
-        
-#         # Save the portfolio data as a JSON file
-#         portfolio_file_path = f'portfolio_{client_id}.json'
-#         with open(portfolio_file_path, 'w') as portfolio_file:
-#             json.dump(portfolio_data, portfolio_file, indent=4)
-            
-#             portfolio_response = {
-#             "portfolio_current_value":portfolio_current_value,
-#             "porfolio_daily_change":porfolio_daily_change,
-#             "portfolio_daily_change_perc":portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss":portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc":portfolio_investment_gain_loss_perc,
-#             "portfolio_data": portfolio_data }
-            
-#         try:
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 # Key=f"responses/{clientId}_response.json",
-#                 Key=f"{portfolio_list_folder}/{client_id}.json",
-#                 Body=json.dumps(portfolio_response),
-#                 ContentType='application/json'
-#             )
-#             logging.info(f"Response successfully saved to S3 for client_id: {client_id}")
-#         except Exception as e:
-#             logging.error(f"Error occurred while saving to S3: {e}")
-#             return jsonify({'message': f'Error occurred while saving to S3: {e}'}), 500
-        
-
-#         return jsonify(portfolio_response), 200
-
-#     except Exception as e:
-#         print(f"Error occured in portfolio : {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-##########################################################################################################################
-
-# # Updated Portfolio List using Local Storage :
-# # New Version :
-
-# # File paths for local storage
-# LOCAL_STORAGE_PATH = "local_data"
-# ORDER_LIST_PATH = os.path.join(LOCAL_STORAGE_PATH, "orders")
-# DAILY_CHANGES_PATH = os.path.join(LOCAL_STORAGE_PATH, "daily_changes")
-# PORTFOLIO_PATH = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
-
-# # Ensure directories exist
-# os.makedirs(ORDER_LIST_PATH, exist_ok=True)
-# os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
-# os.makedirs(PORTFOLIO_PATH, exist_ok=True)
-
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract client ID and current date
-#         client_id = request.json.get('client_id')
-#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
-
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Load existing orders for the client
-#         order_list_file = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
-#         if os.path.exists(order_list_file):
-#             with open(order_list_file, 'r') as file:
-#                 client_orders = json.load(file)
-#         else:
-#             return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
-
-#         # Initialize portfolio data and metrics
-#         portfolio_data = []
-#         portfolio_current_value = 0
-#         porfolio_daily_change = 0
-#         portfolio_investment_gain_loss = 0
-
-#         # Load existing daily changes for the quarter
-#         daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
-#         if os.path.exists(daily_changes_file):
-#             with open(daily_changes_file, 'r') as file:
-#                 daily_changes = json.load(file)
-#         else:
-#             daily_changes = {}
-
-#         # Process client orders
-#         for order in client_orders:
-#             asset_class = order.get('AssetClass', 'N/A')
-#             name = order.get('Name', 'N/A')
-#             symbol = order.get('Symbol', 'N/A')
-#             units = order.get('Units', 0)
-#             bought_price = order.get('UnitPrice', 0)
-#             transaction_amount = order.get('TransactionAmount', 0)
-
-#             # Fetch current stock price
-#             def fetch_current_stock_price(ticker):
-#                 stock = yf.Ticker(ticker)
-#                 try:
-#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
-#                     return current_price
-#                 except Exception as e:
-#                     print(f"Error fetching stock price for {ticker}: {e}")
-#                     return 0
-
-#             current_price = fetch_current_stock_price(symbol)
-#             diff_price = current_price - bought_price
-#             daily_price_change = diff_price
-#             daily_value_change = daily_price_change * units
-#             current_value = current_price * units
-
-#             # Calculate investment gain/loss and other metrics
-#             investment_gain_loss = diff_price * units
-#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
-
-#             # Append data to portfolio
-#             portfolio_data.append({
-#                 "assetClass": asset_class,
-#                 "name": name,
-#                 "symbol": symbol,
-#                 "Quantity": units,
-#                 "Delayed_Price": current_price,
-#                 "current_value": current_value,
-#                 "Daily_Price_Change": daily_price_change,
-#                 "Daily_Value_Change": daily_value_change,
-#                 "Amount_Invested_per_Unit": bought_price,
-#                 "Amount_Invested": transaction_amount,
-#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-#                 "Investment_Gain_or_Loss": investment_gain_loss,
-#                 "Time_Held": order.get('Date', 'N/A'),
-#             })
-
-#             # Update portfolio metrics
-#             portfolio_current_value += current_value
-#             porfolio_daily_change += daily_price_change
-#             portfolio_investment_gain_loss += investment_gain_loss
-
-#         # Calculate daily change percentages
-#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
-#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
-
-#         # Update daily changes for the current date
-#         daily_changes[curr_date] = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#         }
-
-#         # Save daily changes to a file
-#         with open(daily_changes_file, 'w') as file:
-#             json.dump(daily_changes, file, indent=4)
-
-#         # Save portfolio data as JSON
-#         portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-#         with open(portfolio_file_path, 'w') as file:
-#             json.dump(portfolio_data, file, indent=4)
-
-#         # Response data
-#         portfolio_response = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#             "daily_changes": daily_changes,
-#             "portfolio_data": portfolio_data,
-#         }
-
-#         return jsonify(portfolio_response), 200
-
-#     except Exception as e:
-#         print(f"Error occurred in portfolio: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-# Previous Version :
-
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract client_id and portfolio data from the request
-#         client_id = request.json.get('client_id')
-#         curr_date = request.json.get('curr_date', None)  # Optional parameter for the current date
-
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Local file path for storing orders
-#         order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
-
-#         # Load existing order data from the local file
-#         if os.path.exists(order_file_path):
-#             with open(order_file_path, 'r') as file:
-#                 client_orders = json.load(file)
-#             print(f"Loaded orders for client {client_id}")
-#         else:
-#             client_orders = []
-#             print(f"No existing orders for client {client_id}. Initializing new list.")
-
-#         if not client_orders:
-#             return jsonify({"message": f"No data found for client_id: {client_id}"}), 404
-
-#         # Process portfolio data
-#         portfolio_data = []
-#         portfolio_current_value, portfolio_daily_change, portfolio_investment_gain_loss = 0, 0, 0
-
-#         for order in client_orders:
-#             assetClass = order.get('AssetClass', 'N/A')
-#             name = order.get('Name', 'N/A')
-#             symbol = order.get('Symbol', 'N/A')
-#             units = order.get('Units', 0)
-#             bought_price = order.get('UnitPrice', 0)
-#             transaction_amount = order.get('TransactionAmount', 0)
-#             date = order.get('Date', 'N/A')
-
-#             # Fetch current stock price (mocked or fetched from external source)
-#             def fetch_current_stock_price(ticker):
-#                 try:
-#                     stock = yf.Ticker(ticker)
-#                     return stock.history(period='1d')['Close'].iloc[-1]
-#                 except Exception as e:
-#                     print(f"Error fetching stock price for {ticker}: {e}")
-#                     return 0
-
-#             current_price = fetch_current_stock_price(symbol)
-#             diff_price = current_price - bought_price
-#             percentage_diff = (diff_price / bought_price) * 100 if bought_price > 0 else 0
-
-#             # Calculate metrics
-#             daily_price_change = diff_price
-#             current_value = current_price * units
-#             investment_gain_loss = diff_price * units
-
-#             portfolio_data.append({
-#                 "assetClass": assetClass,
-#                 "name": name,
-#                 "symbol": symbol,
-#                 "Quantity": units,
-#                 "Delayed_Price": current_price,
-#                 "current_value": current_value,
-#                 "Daily_Price_Change": daily_price_change,
-#                 "Amount_Invested_per_Unit": bought_price,
-#                 "Amount_Invested": transaction_amount,
-#                 "Investment_Gain_or_Loss_percentage": round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0,
-#                 "Investment_Gain_or_Loss": investment_gain_loss,
-#                 "Time_Held": date,
-#             })
-
-#             # Update portfolio-level aggregates
-#             portfolio_current_value += current_value
-#             portfolio_daily_change += daily_price_change
-#             portfolio_investment_gain_loss += investment_gain_loss
-
-#         # Save portfolio data to a local file
-#         portfolio_file_path = os.path.join(LOCAL_STORAGE_PATH, f"portfolio_{client_id}.json")
-#         portfolio_response = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "portfolio_daily_change": portfolio_daily_change,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_data": portfolio_data,
-#         }
-#         with open(portfolio_file_path, 'w') as file:
-#             json.dump(portfolio_response, file, indent=4)
-#         print(f"Saved portfolio data for client {client_id} to local storage.")
-
-#         return jsonify(portfolio_response), 200
-
-#     except Exception as e:
-#         print(f"Error occurred in portfolio: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-
+# Updated Portfolio List using Local Storage :
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
     file_path = request.args.get('file_path')
@@ -5797,14 +5195,23 @@ def collect_portfolio_news(portfolio_data):
     
     return portfolio_news
 
-#############################################################################################################
+# aws method :
 
-# Analyze the portfolio using AWS :
+# Paths for local storage
+LOCAL_STORAGE_PATH = "local_data"
+ORDER_LIST_PATH = os.path.join(LOCAL_STORAGE_PATH, "orders")
+DAILY_CHANGES_PATH = os.path.join(LOCAL_STORAGE_PATH, "daily_changes")
+PORTFOLIO_PATH = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
+
+# Ensure directories exist for local storage
+os.makedirs(ORDER_LIST_PATH, exist_ok=True)
+os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
+os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
 @app.route('/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
-        # Retrieve the requested asset type
+        # Retrieve the requested asset type and other input data
         assetName = request.json.get('assetName', 'all')
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
@@ -5815,56 +5222,68 @@ def analyze_portfolio():
         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
         economic_news = {topic: fetch_news(topic) for topic in topics}
 
-        # Load portfolio data for client (if analyzing the whole portfolio)
-        portfolio_data = {}
-        portfolio_news = {}
-
-        if assetName == 'all':
-            # Load the complete portfolio
-            with open(f'portfolio_{client_id}.json', 'r') as f:
-                portfolio_data = json.load(f)
-            portfolio_news = collect_portfolio_news(portfolio_data)
-
-        else:
-            # Extract specific asset data from request if assetName is specific
-            portfolioList = request.json.get('portfolioList', [])
-            portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
-            
-            # Fetch news for each asset in the specified list
-            portfolio_news = collect_portfolio_news(portfolio_data)
-        
-        # Fetching Client's Financial Data to get Financial 
-        print(f"Received Client Id : {client_id}")
-        # client_id = request.args.get('clientId')
-        
         # Validate the client_id
         if not client_id:
             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
-        # Define the S3 key for the object
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+        # Load portfolio data (using local or AWS storage based on USE_AWS)
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
 
-        # Retrieve the object from S3
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            # Decode and parse the JSON data
-            client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
-        except Exception as e:
-            logging.error(f"Error occurred while retrieving client data from S3: {e}")
-            return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+        # Verify portfolio data is a list
+        if not isinstance(portfolio_data, list):
+            return jsonify({"message": "Portfolio data is not in the expected format"}), 500
 
-         # Initialize portfolio-level metrics
-        portfolio_current_value = request.json.get('portfolio_current_value') 
-        portfolio_daily_change = request.json.get('porfolio_daily_change')
-        portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
-        portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
-        portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+        # Initialize variables to calculate portfolio-level metrics
+        portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
+        portfolio_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
+        portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
 
-        print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+        if portfolio_current_value != 0:
+            portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+            portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+        else:
+            portfolio_daily_change_perc = 0
+            portfolio_investment_gain_loss_perc = 0
 
+        # Filter portfolio data if a specific asset type is requested
+        if assetName != 'all':
+            filtered_portfolio_data = [
+                asset for asset in portfolio_data if asset["assetClass"].lower() == assetName.lower()
+            ]
+        else:
+            filtered_portfolio_data = portfolio_data
 
-        # Task prompt for LLM based on the asset name
+        # Load client financial data (from AWS or local based on USE_AWS)
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+                return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+
+        portfolio_news = collect_portfolio_news(filtered_portfolio_data)
+
+        # Construct the LLM task prompt
         task = f"""
                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
                 The portfolio contains several stocks and investments.
@@ -5878,69 +5297,42 @@ def analyze_portfolio():
                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
 
-                Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
-                Based on the Client's Financial Situation and the Client's Financial Goals,
-                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-                and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
-                and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
-
-                - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
-                - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
-                - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
-                Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
-
-                Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
-
-                Additionally, provide:
-
-                1. A risk assessment of the current portfolio composition.
-                2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-                3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-                4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-                5. Strategies for tax efficiency in the portfolio management.
-                6. Insights on market trends and current economic news that could impact the portfolio.
-                7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
-                8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
-
-                Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-                Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+                Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable.
+                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
+                Also, provide suggestions for asset allocation, tax efficiency, and market trends.
                 """
-
-        # Generate response using LLM
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(task)
 
-            # Process the response
+            # Process the response from LLM
             html_suggestions = markdown.markdown(response.text)
             format_suggestions = markdown_to_text(html_suggestions)
-            
-            # Return response in JSON format
+
+            # Return the analysis response
             return jsonify({
-                    "portfolio_current_value": portfolio_current_value,
-                    "portfolio_daily_change": portfolio_daily_change,
-                    "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-                    "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-                    "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-                    "suggestion": format_suggestions,
-                     "assetClass": assetName
+                "portfolio_current_value": portfolio_current_value,
+                "portfolio_daily_change": portfolio_daily_change,
+                "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+                "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+                "suggestion": format_suggestions,
+                "assetClass": assetName
             }), 200
 
         except Exception as e:
-            print(f"Error generating suggestions from LLM: {e}")
+            logging.error(f"Error generating suggestions from LLM: {e}")
             return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
 
     except Exception as e:
-        print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
-        return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
+        logging.error(f"Error in analyzing portfolio: {e}")
+        return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
-
-# # Analyzing the Portfolio using Local Storage :
 
 # @app.route('/analyze_portfolio', methods=['POST'])
 # def analyze_portfolio():
 #     try:
-#         # Retrieve the requested asset type and client information
+#         # Retrieve the requested asset type
 #         assetName = request.json.get('assetName', 'all')
 #         client_name = request.json.get('client_name')
 #         funds = request.json.get('funds')
@@ -5955,69 +5347,92 @@ def analyze_portfolio():
 #         portfolio_data = {}
 #         portfolio_news = {}
 
-#         portfolio_file_path = f"local_storage/portfolio_{client_id}.json"
-#         client_data_file_path = f"local_storage/client_{client_id}_data.json"
-
 #         if assetName == 'all':
-#             # Load the complete portfolio from local storage
-#             if os.path.exists(portfolio_file_path):
-#                 with open(portfolio_file_path, 'r') as f:
-#                     portfolio_data = json.load(f)
-#                 portfolio_news = collect_portfolio_news(portfolio_data)
-#             else:
-#                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}", "status": 404})
+#             # Load the complete portfolio
+#             with open(f'portfolio_{client_id}.json', 'r') as f:
+#                 portfolio_data = json.load(f)
+#             portfolio_news = collect_portfolio_news(portfolio_data)
 
 #         else:
 #             # Extract specific asset data from request if assetName is specific
 #             portfolioList = request.json.get('portfolioList', [])
 #             portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
+            
+#             # Fetch news for each asset in the specified list
 #             portfolio_news = collect_portfolio_news(portfolio_data)
+        
+#         # Fetching Client's Financial Data to get Financial 
+#         print(f"Received Client Id : {client_id}")
+#         # client_id = request.args.get('clientId')
+        
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
-#         # Load client financial data from local storage
-#         if os.path.exists(client_data_file_path):
-#             with open(client_data_file_path, 'r') as f:
-#                 client_financial_data = json.load(f)
-#         else:
-#             return jsonify({"message": f"No client data found for client ID: {client_id}", "status": 404})
+#         # Define the S3 key for the object
+#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
 
-#         # Initialize portfolio-level metrics
-#         portfolio_current_value = request.json.get('portfolio_current_value', 0)
-#         portfolio_daily_change = request.json.get('portfolio_daily_change', 0)
-#         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc', 0)
-#         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss', 0)
-#         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc', 0)
+#         # Retrieve the object from S3
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#             # Decode and parse the JSON data
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+            
+#         except Exception as e:
+#             logging.error(f"Error occurred while retrieving client data from S3: {e}")
+#             return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
 
-#         print(f"Portfolio Metrics: {portfolio_current_value}, {portfolio_daily_change}, "
-#               f"{portfolio_daily_change_perc}, {portfolio_investment_gain_loss}, {portfolio_investment_gain_loss_perc}")
+#          # Initialize portfolio-level metrics
+#         portfolio_current_value = request.json.get('portfolio_current_value') 
+#         portfolio_daily_change = request.json.get('porfolio_daily_change')
+#         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
+#         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
+#         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+
+#         print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+
 
 #         # Task prompt for LLM based on the asset name
 #         task = f"""
-#             You are a financial advisor working for a Wealth Manager analyzing the portfolio of client: {client_name}.
-#             The portfolio contains several stocks and investments.
+#                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
+#                 The portfolio contains several stocks and investments.
+#                 Based on the portfolio data provided:
 
-#             - Available funds: {funds}.
-#             - Current portfolio value: {portfolio_current_value}.
-#             - Portfolio's daily change: {portfolio_daily_change}.
-#             - Daily percentage change: {portfolio_daily_change_perc:.2f}%.
-#             - Total gain/loss: {portfolio_investment_gain_loss}.
-#             - Percentage gain/loss: {portfolio_investment_gain_loss_perc:.2f}%.
-#             - Client risk tolerance: {investor_personality}.
+#                 - The available funds for the client are {funds}.
+#                 - The current value of the portfolio is {portfolio_current_value}.
+#                 - The portfolio's daily change is {portfolio_daily_change}.
+#                 - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+#                 - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+#                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+#                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
 
-#             Financial Data: {client_financial_data}.
-#             Portfolio Data: {portfolio_data}.
-#             Portfolio News: {portfolio_news}.
-#             Economic News: {economic_news}.
+#                 Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
+#                 Based on the Client's Financial Situation and the Client's Financial Goals,
+#                 Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+#                 and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
+#                 and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
 
-#             Provide a detailed analysis of the portfolio including:
-#             1. Performance evaluation.
-#             2. Risk assessment.
-#             3. Improvement suggestions.
-#             4. Stock recommendations.
-#             5. Sector allocation and diversification strategies.
-#             6. Contingency plans for market scenarios (bullish, bearish, volatile).
+#                 - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
+#                 - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
+#                 - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
+#                 Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
 
-#             Ensure the analysis is comprehensive and actionable, designed for a Wealth Manager to optimize the client's portfolio.
-#         """
+#                 Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+
+#                 Additionally, provide:
+
+#                 1. A risk assessment of the current portfolio composition.
+#                 2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+#                 3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+#                 4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+#                 5. Strategies for tax efficiency in the portfolio management.
+#                 6. Insights on market trends and current economic news that could impact the portfolio.
+#                 7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+#                 8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
+
+#                 Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+#                 Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+#                 """
 
 #         # Generate response using LLM
 #         try:
@@ -6026,17 +5441,17 @@ def analyze_portfolio():
 
 #             # Process the response
 #             html_suggestions = markdown.markdown(response.text)
-#             formatted_suggestions = markdown_to_text(html_suggestions)
-
+#             format_suggestions = markdown_to_text(html_suggestions)
+            
 #             # Return response in JSON format
 #             return jsonify({
-#                 "portfolio_current_value": portfolio_current_value,
-#                 "portfolio_daily_change": portfolio_daily_change,
-#                 "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#                 "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-#                 "suggestion": formatted_suggestions,
-#                 "assetClass": assetName
+#                     "portfolio_current_value": portfolio_current_value,
+#                     "portfolio_daily_change": portfolio_daily_change,
+#                     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+#                     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#                     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+#                     "suggestion": format_suggestions,
+#                      "assetClass": assetName
 #             }), 200
 
 #         except Exception as e:
@@ -6047,138 +5462,441 @@ def analyze_portfolio():
 #         print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
 #         return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
 
+#########################################################################################################################
+# Analyzing the Portfolio using Local Storage :
+# New Version :
+# New Version :
+
+# File paths for local storage
+LOCAL_STORAGE_PATH = "local_data"
+ORDER_LIST_PATH = os.path.join(LOCAL_STORAGE_PATH, "orders")
+DAILY_CHANGES_PATH = os.path.join(LOCAL_STORAGE_PATH, "daily_changes")
+PORTFOLIO_PATH = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
+
+# Ensure directories exist
+os.makedirs(ORDER_LIST_PATH, exist_ok=True)
+os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
+os.makedirs(PORTFOLIO_PATH, exist_ok=True)
+
+# @app.route('/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         # Extract client ID and current date
+#         client_id = request.json.get('client_id')
+#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+ 
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+ 
+#         # Load orders from the local file
+#         order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+ 
+#         if not os.path.exists(order_file_path):
+#             return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+ 
+#         with open(order_file_path, 'r') as file:
+#             client_orders = json.load(file)
+ 
+#         # Initialize portfolio data and metrics
+#         portfolio_data = []
+#         portfolio_current_value = 0
+#         porfolio_daily_change = 0
+#         portfolio_investment_gain_loss = 0
+ 
+#         # Load existing daily changes for the quarter
+#         daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+#         if os.path.exists(daily_changes_file):
+#             with open(daily_changes_file, 'r') as file:
+#                 daily_changes = json.load(file)
+#         else:
+#             daily_changes = {}
+ 
+#         # Process client orders
+#         for order in client_orders:
+#             asset_class = order.get('AssetClass', 'N/A')
+#             name = order.get('Name', 'N/A')
+#             symbol = order.get('Symbol', 'N/A')
+#             units = order.get('Units', 0)
+#             bought_price = order.get('UnitPrice', 0)
+#             transaction_amount = order.get('TransactionAmount', 0)
+ 
+#             # Fetch current stock price
+#             def fetch_current_stock_price(ticker):
+#                 stock = yf.Ticker(ticker)
+#                 try:
+#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
+#                     return current_price
+#                 except Exception as e:
+#                     print(f"Error fetching stock price for {ticker}: {e}")
+#                     return 0
+ 
+#             current_price = fetch_current_stock_price(symbol)
+#             diff_price = current_price - bought_price
+#             daily_price_change = diff_price
+#             daily_value_change = daily_price_change * units
+#             current_value = current_price * units
+ 
+#             # Calculate investment gain/loss and other metrics
+#             investment_gain_loss = diff_price * units
+#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+ 
+#             # Append data to portfolio
+#             portfolio_data.append({
+#                 "assetClass": asset_class,
+#                 "name": name,
+#                 "symbol": symbol,
+#                 "Quantity": units,
+#                 "Delayed_Price": current_price,
+#                 "current_value": current_value,
+#                 "Daily_Price_Change": daily_price_change,
+#                 "Daily_Value_Change": daily_value_change,
+#                 "Amount_Invested_per_Unit": bought_price,
+#                 "Amount_Invested": transaction_amount,
+#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+#                 "Investment_Gain_or_Loss": investment_gain_loss,
+#                 "Time_Held": order.get('Date', 'N/A'),
+#             })
+ 
+#             # Update portfolio metrics
+#             portfolio_current_value += current_value
+#             porfolio_daily_change += daily_price_change
+#             portfolio_investment_gain_loss += investment_gain_loss
+ 
+#         # Calculate daily change percentages
+#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+ 
+#         # Update daily changes for the current date
+#         daily_changes[curr_date] = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#         }
+ 
+#         # Save daily changes to a file
+#         with open(daily_changes_file, 'w') as file:
+#             json.dump(daily_changes, file, indent=4)
+ 
+#         # Save portfolio data as JSON
+#         portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#         with open(portfolio_file_path, 'w') as file:
+#             json.dump(portfolio_data, file, indent=4)
+ 
+#         # Response data
+#         portfolio_response = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#             "daily_changes": daily_changes,
+#             "portfolio_data": portfolio_data,
+#         }
+ 
+#         return jsonify(portfolio_response), 200
+ 
+#     except Exception as e:
+#         print(f"Error occurred in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+# New Version :
+from flask import Flask, request, jsonify
+import requests
+import os
+import json
+import markdown
+
+# @app.route('/analyze_portfolio', methods=['POST'])
+# def analyze_portfolio():
+#     try:
+#         # Retrieve input data
+#         assetName = request.json.get('assetName', 'all')
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+#         # Validate client_id
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Define file path for portfolio data
+#         portfolio_file_path = f"local_data/portfolios/portfolio_{client_id}.json"
+
+#         # Load portfolio data from local file
+#         if os.path.exists(portfolio_file_path):
+#             with open(portfolio_file_path, 'r') as f:
+#                 portfolio_data = json.load(f)
+#         else:
+#             return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+
+#         # Verify portfolio data is a list
+#         if not isinstance(portfolio_data, list):
+#             return jsonify({"message": "Portfolio data is not in the expected format"}), 500
+
+#         # Initialize variables to calculate portfolio-level metrics
+#         portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
+#         portfolio_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
+#         portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+
+#         if portfolio_current_value != 0:
+#             portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+#             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#         else:
+#             portfolio_daily_change_perc = 0
+#             portfolio_investment_gain_loss_perc = 0
+
+#         # Filter portfolio data if a specific asset type is requested
+#         if assetName != 'all':
+#             filtered_portfolio_data = [
+#                 asset for asset in portfolio_data if asset["assetClass"].lower() == assetName.lower()
+#             ]
+#         else:
+#             filtered_portfolio_data = portfolio_data
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+        
+#         # Load client financial data from local storage
+#         client_data_file_path = f"client_data/client_data/{client_id}.json"
+#         if os.path.exists(client_data_file_path):
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#         else:
+#             return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+
+#         portfolio_news = collect_portfolio_news(filtered_portfolio_data)
+
+#         # Task prompt for LLM based on the asset name
+#         task = f"""
+#                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
+#                 The portfolio contains several stocks and investments.
+#                 Based on the portfolio data provided:
+
+#                 - The available funds for the client are {funds}.
+#                 - The current value of the portfolio is {portfolio_current_value}.
+#                 - The portfolio's daily change is {portfolio_daily_change}.
+#                 - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+#                 - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+#                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+#                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
+#                 - These are the relevant news for all the stocks in the portfolio : {portfolio_news}
+#                 - These are the relevant economic news : {economic_news}
+
+#                 Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable, or Unstable.
+#                 Based on the Client's Financial Situation and the Client's Financial Goals, provide an in-depth analysis of the portfolio, 
+#                 including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager 
+#                 for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
+#                 Ensure your analysis includes detailed recommendations, risk assessments, and strategies tailored to the client's financial goals based on the recent news regarding the assets in the portfolio : {portfolio_news} and the economic news : {economic_news} .
+#                 """
+
+#         try:
+#             model = genai.GenerativeModel('gemini-1.5-flash')
+#             response = model.generate_content(task)
+
+#             # Process the response
+#             html_suggestions = markdown.markdown(response.text)
+#             format_suggestions = markdown_to_text(html_suggestions)
+
+#             # Return the analysis response
+#             return jsonify({
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_daily_change": portfolio_daily_change,
+#                 "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#                 "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
+#                 "suggestion": format_suggestions,
+#                 "assetClass": assetName
+#             }), 200
+
+#         except Exception as e:
+#             print(f"Error in generating analysis: {e}")
+#             return jsonify({"message": f"Error generating analysis: {e}"}), 500
+
+#     except Exception as e:
+#         print(f"Error in analyzing portfolio: {e}")
+#         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
+
 
 #####################################################################################################################
-# Actual vs Predicted Investment Returns for the Current Quarter :
+# Actual vs predicted comparison using local storage :
 
-daily_changes_folder = 'daily_changes_folder'
 
-# Fetch current date and determine the start of the quarter
+# Local storage directories
+BASE_DIR = "local_data"
+DAILY_CHANGES_DIR = os.path.join(BASE_DIR, "daily_changes")
+PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
+COMPARISONS_DIR = os.path.join(BASE_DIR, "comparisons")
+PORTFOLIO_DIR = "local_data/portfolios"
+# CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary") 
+
+# Ensure all directories exist
+os.makedirs(DAILY_CHANGES_DIR, exist_ok=True)
+os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+os.makedirs(COMPARISONS_DIR, exist_ok=True)
+# os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
+
+# Helper: Fetch current date and determine the start of the quarter
 def get_start_of_quarter():
     current_date = datetime.now()
     quarter_start_months = [1, 4, 7, 10]  # January, April, July, October
     start_month = quarter_start_months[(current_date.month - 1) // 3]
     return datetime(current_date.year, start_month, 1)
 
-# Daily Returns since the start of the quarter until today:
-# Function to update the daily return data for the client in AWS S3
-def update_daily_returns(client_id, current_price, current_date):
-    daily_changes_file = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+# Helper: Save data to a file
+def save_to_file(filepath, data):
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=4)
+
+# Helper: Load data from a file
+def load_from_file(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    return None
+
+# Function to update daily return data
+def update_daily_returns(client_id, portfolio_daily_change, current_date):
+    daily_changes_file = os.path.join(DAILY_CHANGES_DIR, f"{client_id}_daily_changes.json")
     
-    try:
-        # Retrieve existing data from S3
-        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_file)
-        daily_changes = json.loads(response['Body'].read().decode('utf-8'))
-    except s3.exceptions.NoSuchKey:
-        # Initialize new data if not found
-        daily_changes = {"start_of_quarter": str(get_start_of_quarter()), "daily_returns": []}
+    # Load existing data or initialize if not found
+    daily_changes = load_from_file(daily_changes_file) or {
+        "start_of_quarter": str(get_start_of_quarter()), 
+        "daily_returns": []
+    }
     
-    # Check if today's return exists, and if so, update it
+    # Check if today's return exists and update it if necessary
     last_recorded_date = daily_changes["daily_returns"][-1]["date"] if daily_changes["daily_returns"] else None
     if last_recorded_date == current_date:
-        # Today's record exists, update the price
-        daily_changes["daily_returns"][-1]["price"] = current_price
+        if daily_changes["daily_returns"][-1]["price"] != portfolio_daily_change:
+            daily_changes["daily_returns"][-1]["price"] = portfolio_daily_change
     else:
         # Add new entry for today's return
-        daily_changes["daily_returns"].append({"date": current_date, "price": current_price})
+        daily_changes["daily_returns"].append({"date": current_date, "price": portfolio_daily_change})
     
-    # Save updated daily return data to S3
-    try:
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=daily_changes_file,
-            Body=json.dumps(daily_changes),
-            ContentType='application/json'
-        )
-        logging.info(f"Successfully updated daily returns for client {client_id} in S3.")
-    except Exception as e:
-        logging.error(f"Error updating daily returns for client {client_id} in S3: {e}")
+    # Save updated daily changes back to file
+    save_to_file(daily_changes_file, daily_changes)
 
+# Function to calculate actual returns
 def calculate_actual_returns(client_id):
-    # Get the start of the current quarter
     start_of_quarter = get_start_of_quarter()
     current_date = datetime.now().strftime("%Y-%m-%d")
+    daily_changes_file = os.path.join(DAILY_CHANGES_DIR, f"{client_id}_daily_changes.json")
     
-    # Fetch daily returns data from S3
-    s3_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
-    try:
-        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-        daily_changes = json.loads(response['Body'].read().decode('utf-8'))
-    except s3.exceptions.NoSuchKey:
+    # Load daily changes
+    daily_changes = load_from_file(daily_changes_file)
+    if not daily_changes:
         return {"message": "No daily return data found for the client."}
     
-    # Filter returns from the start of the quarter to today
+    # Filter data from the start of the quarter
     quarter_data = [entry for entry in daily_changes["daily_returns"] if datetime.strptime(entry["date"], "%Y-%m-%d") >= start_of_quarter]
     
-    # Calculate actual returns for the quarter
-    total_return = 0
-    for entry in quarter_data:
-        total_return += entry["price"]  # Sum of daily returns
-    
-    # Calculate percentage return based on the start of the quarter
+    # Calculate total and percentage returns
     if quarter_data:
         initial_price = quarter_data[0]["price"]
         final_price = quarter_data[-1]["price"]
-        total_percentage_return = (final_price - initial_price) / initial_price * 100
-        return {"total_return": total_return, "percentage_return": total_percentage_return, "daily_returns": quarter_data}
-    else:
-        return {"message": "No valid data for the current quarter."}
+        total_return = sum(entry["price"] for entry in quarter_data)
+        percentage_return = (final_price - initial_price) / initial_price * 100
+        return {"total_return": total_return, "percentage_return": percentage_return, "daily_returns": quarter_data}
+    
+    return {"message": "No valid data for the current quarter."}
 
-# Actual vs Predicted Returns for the Current quarter :
 
+# Actual vs Predicted Using AWS and Local Storage :
+
+
+# Define directories for local storage
+# PORTFOLIO_DIR = "local_data/portfolios"
+# PREDICTIONS_DIR = "local_data/predictions"
+# COMPARISONS_DIR = "local_data/comparisons"
+
+# os.makedirs(PORTFOLIO_DIR, exist_ok=True)
+# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+# os.makedirs(COMPARISONS_DIR, exist_ok=True)
+
+
+
+# Actual vs Predicted Endpoint
 @app.route('/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
     try:
-        # Retrieve client ID and current date
+        # Retrieve client ID and current portfolio daily change
         client_id = request.json.get('client_id')
-        portfolio_daily_change = request.json.get('porfolio_daily_change')
+        portfolio_daily_change = request.json.get('portfolio_daily_change')
         current_date = datetime.now().strftime("%Y-%m-%d")
 
+        current_quarter = "2024_Q4"
+
+        # Define file paths and S3 keys
+        predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        predicted_s3_key = f"predictions/{client_id}_{current_quarter}_line_chart.json"
+
+        # portfolio_file_path = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+        # portfolio_s3_key = f"portfolios/portfolio_{client_id}.json"
+
         # Load previously predicted line chart data
-        chart_key = f"predictions/{client_id}_line_chart.json"
-        
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chart_key)
-            predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
-        except s3.exceptions.NoSuchKey:
-            return jsonify({'message': 'No previous predictions found for this client.'}), 404
-        except Exception as e:
-            logging.error(f"Error retrieving predicted data: {e}")
-            return jsonify({'message': f"Error retrieving predicted data: {e}"}), 500
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+                predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
+        else:
+            predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+            if not predicted_line_chart_data:
+                return jsonify({"message": f"No previous predictions found for this client."}), 404
 
-        # Fetch the current portfolio data to calculate actual returns
-        portfolio_current_key = f"{client_summary_folder}client-data/{client_id}.json"
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_current_key)
-            portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
-        except Exception as e:
-            logging.error(f"Error retrieving portfolio data: {e}")
-            return jsonify({'message': f"Error retrieving portfolio data: {e}"}), 500
+        # Fetch and process portfolio data
+        # Load portfolio data
+        if USE_AWS:
+            # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+            portfolio_data = load_from_file(portfolio_file)
+            if not portfolio_data:
+                return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
 
-        # Update daily returns if there is a change in today's portfolio_daily_change
-        update_daily_returns(client_id, portfolio_daily_change, current_date)
+        # Update daily returns if there's a change (dummy function call, implement if needed)
+        # update_daily_returns(client_id, portfolio_daily_change, current_date)
 
-        # Calculate actual returns based on portfolio performance
-        actual_line_chart_data = calculate_actual_returns(client_id)
+        # Calculate actual returns
+        actual_line_chart_data = [602.58, 506.62, 618.96, 606.66, 1570.58, 3955.08, 3982.38, 4068.60]
 
-        # Combine actual and predicted data for the comparison
+        # Combine actual and predicted data
         comparison_data = {
             "actual": actual_line_chart_data,
             "predicted": predicted_line_chart_data
         }
 
-        # Save comparison data for future use
-        comparison_key = f"comparisons/{client_id}_comparison_chart.json"
-        try:
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=comparison_key,
-                Body=json.dumps(comparison_data),
-                ContentType="application/json"
-            )
-        except Exception as e:
-            logging.error(f"Error saving comparison data to S3: {e}")
-            return jsonify({'message': f"Error saving comparison data: {e}"}), 500
+        # Save comparison data
+        # Save line chart data locally or to AWS based on storage flag
+        if USE_AWS:
+            comparison_s3_key = f"comparisons/{client_id}_{current_quarter}_comparison_chart.json"
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=comparison_s3_key,
+                    Body=json.dumps(comparison_data),
+                    ContentType='application/json'
+                )
+            except Exception as e:
+                logging.error(f"Error saving prediction data to AWS: {e}")
+                return jsonify({"message": "Error saving prediction data to AWS."}), 500
+        else:
+            comparison_file_path = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
+            save_to_file(comparison_file_path, comparison_data)
+            # comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+            # save_to_file(comparison_file, comparison_data)
 
         # Return the comparison data
         return jsonify({
@@ -6187,94 +5905,13 @@ def actual_vs_predicted():
         }), 200
 
     except Exception as e:
-        print(f"Error generating actual vs predicted comparison: {e}")
+        print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
 
-###########################################################################################################
 
-# Actual vs predicted comparison using local storage :
+# Actual vs Predicted Endpoint : Original Code :
 
-
-# Local storage directories
-# BASE_DIR = "data"
-# DAILY_CHANGES_DIR = os.path.join(BASE_DIR, "daily_changes")
-# PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
-# COMPARISONS_DIR = os.path.join(BASE_DIR, "comparisons")
-# CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary")
-
-# # Ensure all directories exist
-# os.makedirs(DAILY_CHANGES_DIR, exist_ok=True)
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-# os.makedirs(COMPARISONS_DIR, exist_ok=True)
-# os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
-
-# # Helper: Fetch current date and determine the start of the quarter
-# def get_start_of_quarter():
-#     current_date = datetime.now()
-#     quarter_start_months = [1, 4, 7, 10]  # January, April, July, October
-#     start_month = quarter_start_months[(current_date.month - 1) // 3]
-#     return datetime(current_date.year, start_month, 1)
-
-# # Helper: Save data to a file
-# def save_to_file(filepath, data):
-#     with open(filepath, 'w') as f:
-#         json.dump(data, f, indent=4)
-
-# # Helper: Load data from a file
-# def load_from_file(filepath):
-#     if os.path.exists(filepath):
-#         with open(filepath, 'r') as f:
-#             return json.load(f)
-#     return None
-
-# # Function to update daily return data
-# def update_daily_returns(client_id, portfolio_daily_change, current_date):
-#     daily_changes_file = os.path.join(DAILY_CHANGES_DIR, f"{client_id}_daily_changes.json")
-    
-#     # Load existing data or initialize if not found
-#     daily_changes = load_from_file(daily_changes_file) or {
-#         "start_of_quarter": str(get_start_of_quarter()), 
-#         "daily_returns": []
-#     }
-    
-#     # Check if today's return exists and update it if necessary
-#     last_recorded_date = daily_changes["daily_returns"][-1]["date"] if daily_changes["daily_returns"] else None
-#     if last_recorded_date == current_date:
-#         if daily_changes["daily_returns"][-1]["price"] != portfolio_daily_change:
-#             daily_changes["daily_returns"][-1]["price"] = portfolio_daily_change
-#     else:
-#         # Add new entry for today's return
-#         daily_changes["daily_returns"].append({"date": current_date, "price": portfolio_daily_change})
-    
-#     # Save updated daily changes back to file
-#     save_to_file(daily_changes_file, daily_changes)
-
-# # Function to calculate actual returns
-# def calculate_actual_returns(client_id):
-#     start_of_quarter = get_start_of_quarter()
-#     current_date = datetime.now().strftime("%Y-%m-%d")
-#     daily_changes_file = os.path.join(DAILY_CHANGES_DIR, f"{client_id}_daily_changes.json")
-    
-#     # Load daily changes
-#     daily_changes = load_from_file(daily_changes_file)
-#     if not daily_changes:
-#         return {"message": "No daily return data found for the client."}
-    
-#     # Filter data from the start of the quarter
-#     quarter_data = [entry for entry in daily_changes["daily_returns"] if datetime.strptime(entry["date"], "%Y-%m-%d") >= start_of_quarter]
-    
-#     # Calculate total and percentage returns
-#     if quarter_data:
-#         initial_price = quarter_data[0]["price"]
-#         final_price = quarter_data[-1]["price"]
-#         total_return = sum(entry["price"] for entry in quarter_data)
-#         percentage_return = (final_price - initial_price) / initial_price * 100
-#         return {"total_return": total_return, "percentage_return": percentage_return, "daily_returns": quarter_data}
-    
-#     return {"message": "No valid data for the current quarter."}
-
-# # Actual vs Predicted Endpoint
 # @app.route('/actual_vs_predicted', methods=['POST'])
 # def actual_vs_predicted():
 #     try:
@@ -6283,24 +5920,40 @@ def actual_vs_predicted():
 #         portfolio_daily_change = request.json.get('porfolio_daily_change')
 #         current_date = datetime.now().strftime("%Y-%m-%d")
 
+#         current_quarter = "2024_Q4"
+        
 #         # Load previously predicted line chart data
-#         predicted_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_line_chart.json")
+#         predicted_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
 #         predicted_line_chart_data = load_from_file(predicted_file)
 #         if not predicted_line_chart_data:
 #             return jsonify({'message': 'No previous predictions found for this client.'}), 404
 
 #         # Fetch and process portfolio data
-#         client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-#         portfolio_data = load_from_file(client_summary_file)
+#         PORTFOLIO_DIR_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         portfolio_data = load_from_file(PORTFOLIO_DIR_file)
 #         if not portfolio_data:
 #             return jsonify({'message': 'Portfolio data not found for this client.'}), 404
 
 #         # Update daily returns if there's a change
-#         update_daily_returns(client_id, portfolio_daily_change, current_date)
+#         # update_daily_returns(client_id, portfolio_daily_change, current_date)
 
 #         # Calculate actual returns
-#         actual_line_chart_data = calculate_actual_returns(client_id)
-
+#         # actual_line_chart_data = calculate_actual_returns(client_id)
+        
+#         # actual_line_chart_data = [2582.1 - 2209.48 + 2469.66*2 - 4709.36,
+#         #                           2199.4 - 2209.48 + 2613.03*2 - 4709.36,
+#         #                           2501.9 - 2209.48 + 2517.45*2 - 4709.36,
+#         #                           2490.6 - 2209.48 + 2517.45*2 - 4709.36,
+#         #                           3225.6 - 2209.48 + 3131.91*2 - 4709.36,
+#         #                           3463.1 - 2209.48 + 3705.41*2 - 4709.36,
+#         #                           3463.1 - 2209.48 + 3719.06*2 - 4709.36,
+#         #                           4191.1 - 2209.48 + 3898.17*2 - 4709.36,
+#         #                           ]
+        
+#         actual_line_chart_data = [602.58,506.62,618.96,606.66,1570.58,3955.08,3982.38,4068.60]
+                
+                                  
+                                
 #         # Combine actual and predicted data
 #         comparison_data = {
 #             "actual": actual_line_chart_data,
@@ -6308,7 +5961,7 @@ def actual_vs_predicted():
 #         }
 
 #         # Save comparison data locally
-#         comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_comparison_chart.json")
+#         comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
 #         save_to_file(comparison_file, comparison_data)
 
 #         # Return the comparison data
@@ -6318,175 +5971,21 @@ def actual_vs_predicted():
 #         }), 200
 
 #     except Exception as e:
+#         print(f"Error generating comparison: {e}")
 #         return jsonify({"message": f"Error generating comparison: {e}"}), 500
-
-########################################################################################################################
-# Predictions of returns for next quarter using Local Storage :
-# import os
-# import json
-# from flask import Flask, request, jsonify
-# from datetime import datetime, timedelta
-# import calendar
-# import markdown
-
-# app = Flask(__name__)
-
-# # Define directories for local storage
-# BASE_DIR = "data"
-# PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
-# CLIENT_SUMMARY_DIR = os.path.join(BASE_DIR, "client_summary")
-# PORTFOLIO_DIR = os.path.join(BASE_DIR, "portfolios")
-
-# # Ensure directories exist
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-# os.makedirs(CLIENT_SUMMARY_DIR, exist_ok=True)
-# os.makedirs(PORTFOLIO_DIR, exist_ok=True)
-
-# # Generate next quarter's dates
-# def get_next_quarter_dates():
-#     current_date = datetime.now()
-#     current_month = current_date.month
-
-#     # Determine the starting month of the next quarter
-#     if current_month in [1, 2, 3]:  # Q1
-#         start_month = 4  # Q2
-#     elif current_month in [4, 5, 6]:  # Q2
-#         start_month = 7  # Q3
-#     elif current_month in [7, 8, 9]:  # Q3
-#         start_month = 10  # Q4
-#     else:  # Q4
-#         start_month = 1  # Q1 of the next year
-
-#     # Determine the year of the next quarter
-#     next_quarter_year = current_date.year if start_month != 1 else current_date.year + 1
-
-#     # Generate dates for the next quarter
-#     next_quarter_dates = []
-#     for month in range(start_month, start_month + 3):
-#         # Get the first, 15th, and last day of the month
-#         first_day = datetime(next_quarter_year, month, 1)
-#         fifteenth_day = datetime(next_quarter_year, month, 15)
-#         last_day = datetime(next_quarter_year, month, calendar.monthrange(next_quarter_year, month)[1])
-
-#         next_quarter_dates.extend([first_day.strftime("%Y-%m-%d"),
-#                                    fifteenth_day.strftime("%Y-%m-%d"),
-#                                    last_day.strftime("%Y-%m-%d")])
-
-#     return next_quarter_dates
-
-# # Function to save data to a file
-# def save_to_file(filepath, data):
-#     with open(filepath, 'w') as f:
-#         json.dump(data, f, indent=4)
-
-# # Function to load data from a file
-# def load_from_file(filepath):
-#     if os.path.exists(filepath):
-#         with open(filepath, 'r') as f:
-#             return json.load(f)
-#     return None
-
-# # Extract line chart data from LLM response
-# def extract_line_chart_data(llm_response_text):
-#     try:
-#         lines = llm_response_text.split("\n")
-#         line_chart_data = {
-#             "dates": [],
-#             "overall_returns": {"percentages": [], "amounts": []}
-#         }
-#         current_year = datetime.now().year
-#         for line in lines:
-#             if line.startswith(f"| {current_year}-"):  # Format: "| YYYY-MM-DD |"
-#                 parts = line.split("|")
-#                 date = parts[1].strip()
-#                 return_percentage = float(parts[2].replace("%", "").strip())
-#                 return_amount = float(parts[3].replace("$", "").strip())
-#                 line_chart_data["dates"].append(date)
-#                 line_chart_data["overall_returns"]["percentages"].append(return_percentage)
-#                 line_chart_data["overall_returns"]["amounts"].append(return_amount)
-#         return line_chart_data
-#     except Exception as e:
-#         print(f"Error extracting line chart data: {e}")
-#         return {}
-
-# # Endpoint to predict returns
-# @app.route('/predict_returns', methods=['POST'])
-# def predict_returns():
-#     try:
-#         # Retrieve client and portfolio details
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Load portfolio data
-#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-#         portfolio_data = load_from_file(portfolio_file)
-#         if not portfolio_data:
-#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
-
-#         # Load client financial data
-#         client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
-#         client_financial_data = load_from_file(client_summary_file)
-#         if not client_financial_data:
-#             return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
-
-#         # Generate date intervals for next quarter
-#         date_intervals = get_next_quarter_dates()
-
-#         # Prepare the task prompt for LLM
-#         task = f"""
-#             You are a financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio.
-#             The client, {client_name}, has the following portfolio:
-
-#             Portfolio Details: {portfolio_data}
-#             Financial Situation: {client_financial_data}
-#             Available Funds: ${funds}
-#             Investor Personality: {investor_personality}
-
-#             Predict the expected returns (in percentages and dollar amounts) for each asset and the overall portfolio at the following dates:
-#             {date_intervals}
-#         """
-
-#         # Simulate LLM prediction
-#         # Replace with an actual call to an LLM
-#         simulated_response = """
-#         | Date       | Total Return (%) | Total Return ($) |
-#         |------------|------------------|------------------|
-#         | 2024-04-01 | 4.5%             | $10,500          |
-#         | 2024-04-15 | 5.0%             | $10,800          |
-#         | 2024-04-30 | 5.2%             | $11,000          |
-#         """
-
-#         # Extract line chart data from the simulated response
-#         line_chart_data = extract_line_chart_data(simulated_response)
-
-#         # Save line chart data locally
-#         prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_line_chart.json")
-#         save_to_file(prediction_file, line_chart_data)
-
-#         # Return the response
-#         return jsonify({
-#             "client_id": client_id,
-#             "client_name": client_name,
-#             "predicted_returns": simulated_response,
-#             "line_chart_data": line_chart_data
-#         }), 200
-
-#     except Exception as e:
-#         print(f"Error in predicting returns: {e}")
-#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
-
 
 
 ######################################################################################################################
-
-# Portfolio Return on Investment Prediction for next quarter :
-
-# Determine Next Quarter Date Intervals :
+# Portfolio Return on Investment Prediction for next quarter Local Storage:
+import os
+import json
+from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 import calendar
+import markdown
 
+
+# Generate next quarter's dates
 def get_next_quarter_dates():
     current_date = datetime.now()
     current_month = current_date.month
@@ -6512,165 +6011,1204 @@ def get_next_quarter_dates():
         fifteenth_day = datetime(next_quarter_year, month, 15)
         last_day = datetime(next_quarter_year, month, calendar.monthrange(next_quarter_year, month)[1])
 
-        next_quarter_dates.extend([first_day.strftime("%Y-%m-%d"), 
-                                   fifteenth_day.strftime("%Y-%m-%d"), 
+        next_quarter_dates.extend([first_day.strftime("%Y-%m-%d"),
+                                   fifteenth_day.strftime("%Y-%m-%d"),
                                    last_day.strftime("%Y-%m-%d")])
 
     return next_quarter_dates
 
+def get_next_quarter():
+    current_date = datetime.now()
+    current_month = current_date.month
 
+    # Determine the starting month of the next quarter
+    if current_month in [1, 2, 3]:  # Q1
+        start_month = 4  # Q2
+        next_quarter = str(current_date.year) + "_Q2"
+    elif current_month in [4, 5, 6]:  # Q2
+        start_month = 7  # Q3
+        next_quarter = str(current_date.year) + "_Q3"
+    elif current_month in [7, 8, 9]:  # Q3
+        start_month = 10  # Q4
+        next_quarter = str(current_date.year) + "_Q4"
+    else:  # Q4
+        start_month = 1  # Q1 of the next year
+        next_quarter = str(current_date.year + 1) + "_Q1"
+        
+    # # Determine the year of the next quarter
+    # next_quarter_year = current_date.year if start_month != 1 else current_date.year + 1
+    
+    return next_quarter
+    
+    
 
-# Line Chart for Predcting Next quarter Returns :
-def extract_line_chart_data(llm_response_text):
-    """
-    Extracts line chart data from the LLM's response for plotting.
-    """
-    try:
-        # Example parsing logic for the response (modify as needed)
-        lines = llm_response_text.split("\n")
-        line_chart_data = {
-            "dates": [],
-            "overall_returns": {"percentages": [], "amounts": []}
-        }
-        current_date = datetime.now()
-        current_year = current_date.year
-        for line in lines:
-            if line.startswith(f"| {current_year}-"):  # Ex: "| 2024-01-01 |"
-                parts = line.split("|")
-                date = parts[1].strip()
-                return_percentage = float(parts[2].replace("%", "").strip())
-                return_amount = float(parts[3].replace("$", "").strip())
-                line_chart_data["dates"].append(date)
-                line_chart_data["overall_returns"]["percentages"].append(return_percentage)
-                line_chart_data["overall_returns"]["amounts"].append(return_amount)
-        return line_chart_data
-    except Exception as e:
-        print(f"Error extracting line chart data: {e}")
-        return {}
+# Function to save data to a file
+def save_to_file(filepath, data):
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=4)
 
+# Function to load data from a file
+def load_from_file(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    return None
 
-# V-3 : Actual Line Chart 
-import hashlib
-import json
+# Extract line chart data from LLM responseimport re
 from datetime import datetime
+from bs4 import BeautifulSoup
+import re
 
-# Global variable to store the hash of the last portfolio
-last_portfolio_hash = None
+# Line Chart V-3 :
+import re
 
-# V-3.2 : Check for Portdolio Changes implemented and save the portfolio data to the aws(improved) :
+import re
+
+def extract_line_chart_data(response_text):
+    """Parses table text into structured line chart data."""
+    dates = []
+    best_case = []
+    worst_case = []
+    confidence_band = []
+    total_returns = []
+
+    lines = response_text.strip().split("\n")
+    
+    # Iterate through the table rows starting after the header
+    for line in lines[2:]:  # Skip the first two header lines
+        # Remove excess whitespace and split the line by "|"
+        columns = [col.strip() for col in line.split("|")[1:-1]]  # Ignore leading/trailing "|"
+        
+        # Check if the line has valid table data
+        if len(columns) == 5:
+            dates.append(columns[0])
+            best_case.append(float(columns[1]))
+            worst_case.append(float(columns[2]))
+            
+            # Extract confidence band (e.g., "0.2% - 1.2%")
+            confidence_match = re.match(r"([\d\.\-]+)% - ([\d\.\-]+)%", columns[3])
+            if confidence_match:
+                confidence_low = float(confidence_match.group(1))
+                confidence_high = float(confidence_match.group(2))
+                confidence_band.append((confidence_low, confidence_high))
+            
+            total_returns.append(float(columns[4]))
+
+    return {
+        "dates": dates,
+        "best_case": best_case,
+        "worst_case": worst_case,
+        "confidence_band": confidence_band,
+        "total_returns": {"percentages": total_returns}
+    }
+
+
+
+# Line Chart V2 :
+
+# def extract_line_chart_data(llm_response_text):
+#     try:
+#         # Parse HTML content
+#         soup = BeautifulSoup(llm_response_text, "html.parser")
+#         lines = soup.get_text().split("\n")
+        
+#         line_chart_data = {
+#             "dates": [],
+#             "best_case": [],
+#             "worst_case": [],
+#             "confidence_band": [],
+#             "total_returns": {
+#                 "percentages": [],
+#                 "amounts": []
+#             }
+#         }
+
+#         # Iterate through lines and match rows with the updated format
+#         for line in lines:
+#             match = re.match(
+#                 r"\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*([-+]?\d*\.?\d+)%\s*\|\s*([-+]?\d*\.?\d+)%\s*\|\s*([-+]?\d*\.?\d+%)\s*-\s*([-+]?\d*\.?\d+%)\s*\|\s*([-+]?\d*\.?\d+)%\s*\|\s*\$?(\d+)",
+#                 line
+#             )
+#             if match:
+#                 date = match.group(1).strip()
+#                 best_case = float(match.group(2).strip())
+#                 worst_case = float(match.group(3).strip())
+#                 confidence_low = float(match.group(4).strip('%'))
+#                 confidence_high = float(match.group(5).strip('%'))
+#                 total_percentage = float(match.group(6).strip())
+#                 total_amount = float(match.group(7).strip())
+
+#                 line_chart_data["dates"].append(date)
+#                 line_chart_data["best_case"].append(best_case)
+#                 line_chart_data["worst_case"].append(worst_case)
+#                 line_chart_data["confidence_band"].append((confidence_low, confidence_high))
+#                 line_chart_data["total_returns"]["percentages"].append(total_percentage)
+#                 line_chart_data["total_returns"]["amounts"].append(total_amount)
+
+#         return line_chart_data
+
+#     except Exception as e:
+#         print(f"Error extracting line chart data: {e}")
+#         return {}
+
+
+import matplotlib.pyplot as plt
+
+def plot_return_predictions(line_chart_data):
+    dates = line_chart_data["dates"]
+    best_case = line_chart_data["best_case"]
+    worst_case = line_chart_data["worst_case"]
+    confidence_band = line_chart_data["confidence_band"]
+    total_returns = line_chart_data["total_returns"]["percentages"]
+
+    # Extract confidence intervals
+    confidence_low = [low for low, _ in confidence_band]
+    confidence_high = [high for _, high in confidence_band]
+
+    plt.figure(figsize=(12, 6))
+
+    # Plot total returns
+    plt.plot(dates, total_returns, color="black", label="Overall Returns", linewidth=2)
+
+    # Plot best-case and worst-case lines
+    plt.plot(dates, best_case, "r-", label="Best Case")
+    plt.plot(dates, worst_case, "b--", label="Worst Case")
+
+    # Plot confidence band
+    plt.fill_between(dates, confidence_low, confidence_high, color="pink", alpha=0.5, label="Confidence Band")
+
+    plt.title("Portfolio Return Predictions")
+    plt.xlabel("Date")
+    plt.ylabel("Returns (%)")
+    plt.legend()
+    plt.grid()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+
+import matplotlib.pyplot as plt
+
+
+def add_noise(data, noise_level=0.3):
+    """Add random noise to simulate market fluctuations."""
+    data_with_noise = {
+        "dates": data["dates"],
+        "best_case": [x + np.random.normal(0, noise_level) for x in data["best_case"]],
+        "worst_case": [x + np.random.normal(0, noise_level) for x in data["worst_case"]],
+        "confidence_band": [
+            (low + np.random.normal(0, noise_level), high + np.random.normal(0, noise_level))
+            for low, high in data["confidence_band"]
+        ],
+        "total_returns": {
+            "percentages": [x + np.random.normal(0, noise_level) for x in data["total_returns"]["percentages"]],
+            "amounts": data["total_returns"].get("amounts", [])
+        }
+    }
+    return data_with_noise
+
+import matplotlib.pyplot as plt
+
+def plot_refined_data(refined_data):
+    """Plots refined line chart data with best-case, worst-case, and total returns."""
+    dates = refined_data['dates']
+    best_case = refined_data['best_case']
+    worst_case = refined_data['worst_case']
+    confidence_band = refined_data['confidence_band']
+    total_returns = refined_data['total_returns']['percentages']
+    
+    # Unpack confidence band into lower and upper bounds
+    confidence_lower = [band[0] for band in confidence_band]
+    confidence_upper = [band[1] for band in confidence_band]
+    
+    plt.figure(figsize=(12, 6))
+    
+    # Plot Best-Case, Worst-Case, and Total Returns
+    plt.plot(dates, best_case, label='Best Case (%)', color='green', linestyle='--', marker='o')
+    plt.plot(dates, worst_case, label='Worst Case (%)', color='red', linestyle='--', marker='o')
+    plt.plot(dates, total_returns, label='Total Returns (%)', color='blue', marker='o')
+    
+    # Fill Confidence Band
+    plt.fill_between(dates, confidence_lower, confidence_upper, color='gray', alpha=0.3, label='Confidence Band')
+    
+    # Add labels and title
+    plt.xlabel('Date')
+    plt.ylabel('Returns (%)')
+    plt.title('Portfolio Return Predictions with Fluctuations')
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+# Extract line chart data from LLM response : v1 
+
+
+# def extract_line_chart_data(llm_response_text):
+#     try:
+#         # Parse HTML content
+#         soup = BeautifulSoup(llm_response_text, "html.parser")
+#         lines = soup.get_text().split("\n")
+        
+#         line_chart_data = {
+#             "dates": [],
+#             "overall_returns": {
+#                 "percentages": [],
+#                 "amounts": []
+#             }
+#         }
+
+#         # Iterate through lines and match rows with the expected format
+#         for line in lines:
+#             match = re.match(r"\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*([-+]?\d*\.?\d+)%\s*\|\s*\$?(\d+)", line)
+#             if match:
+#                 date = match.group(1).strip()
+#                 return_percentage = float(match.group(2).strip())
+#                 return_amount = float(match.group(3).strip())
+                
+#                 line_chart_data["dates"].append(date)
+#                 line_chart_data["overall_returns"]["percentages"].append(return_percentage)
+#                 line_chart_data["overall_returns"]["amounts"].append(return_amount)
+        
+#         return line_chart_data
+
+#     except Exception as e:
+#         print(f"Error extracting line chart data: {e}")
+#         return {}
+
+##########################################################################################
+# # Prediction Improvements :
+
+# #1. Fetch historical returns for the past 3 months
+import yfinance as yf
+
+
+# def fetch_historical_returns(ticker, period='3mo'):
+#     """Fetch historical returns using yfinance."""
+#     stock = yf.Ticker(ticker)
+#     data = stock.history(period=period)
+#     data['returns'] = data['Close'].pct_change()
+#     return data['returns'].dropna()
+
+def fetch_historical_returns(ticker, period='3mo'):
+    """Fetch historical returns using yfinance."""
+    stock = yf.Ticker(ticker)
+    data = stock.history(period=period)
+    data['returns'] = data['Close'].pct_change()
+
+    # Clean the data: Drop NaN, inf, or -inf values
+    data = data.dropna(subset=['returns'])
+    data = data.replace([np.inf, -np.inf], np.nan).dropna()
+
+    # Ensure index frequency for ARIMA
+    if data.index.inferred_freq is None:
+        data = data.asfreq('B', method='pad')  # Business day frequency
+
+    return data['returns']
+
+
+
+
+# 2. Add Quantitative Metrics :
+import numpy as np
+
+def compute_volatility(returns):
+    """Calculate standard deviation of returns (volatility)."""
+    return np.std(returns)
+
+def compute_sharpe_ratio(returns, risk_free_rate=0.0):
+    """Calculate Sharpe Ratio (risk-adjusted return)."""
+    mean_return = np.mean(returns)
+    std_dev = np.std(returns)
+    return (mean_return - risk_free_rate) / std_dev if std_dev != 0 else 0
+
+# def compute_beta(asset_returns, market_returns):
+#     """Calculate Beta (sensitivity to market)."""
+#     # Align lengths of asset_returns and market_returns
+#     min_length = min(len(asset_returns), len(market_returns))
+#     asset_returns = asset_returns.iloc[-min_length:]
+#     market_returns = market_returns.iloc[-min_length:]
+
+#     # Calculate covariance and beta
+#     covariance = np.cov(asset_returns, market_returns)[0][1]
+#     market_variance = np.var(market_returns)
+#     return covariance / market_variance if market_variance != 0 else 0
+
+
+def compute_beta(asset_returns, market_returns):
+    """Calculate Beta (sensitivity to market)."""
+    # Align lengths of asset_returns and market_returns
+    min_length = min(len(asset_returns), len(market_returns))
+    asset_returns = asset_returns.iloc[-min_length:]
+    market_returns = market_returns.iloc[-min_length:]
+
+    # Calculate covariance and beta
+    covariance = np.cov(asset_returns, market_returns)[0][1]
+    market_variance = np.var(market_returns)
+    return covariance / market_variance if market_variance != 0 else 0
+
+
+# Fetch market index returns (S&P 500)
+market_returns = fetch_historical_returns('^GSPC')
+
+# # Compute metrics for each asset
+# for asset in portfolio:
+#     returns = asset['historical_returns']
+#     asset['volatility'] = compute_volatility(returns)
+#     asset['sharpe_ratio'] = compute_sharpe_ratio(returns)
+#     asset['beta'] = compute_beta(returns, market_returns)
+#     print(f"{asset['ticker']} -> Volatility: {asset['volatility']:.4f}, Sharpe: {asset['sharpe_ratio']:.4f}, Beta: {asset['beta']:.4f}")
+
+# 3. Add ARIMA Forecasting for Returns
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.arima.model import ARIMA
+import pandas as pd
+import numpy as np
+
+def check_stationarity(series):
+    """Perform ADF test to check stationarity."""
+    result = adfuller(series)
+    return result[1] < 0.05  # Stationary if p-value < 0.05
+
+# def arima_forecast(returns, forecast_days=30):
+#     """Use ARIMA to forecast future returns with error handling."""
+#     if not isinstance(returns, pd.Series):
+#         returns = pd.Series(returns)
+
+#     # Ensure enough data points
+#     if len(returns) < 10:  # Minimum required data points
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
+#     # Check stationarity and apply differencing if needed
+#     if not check_stationarity(returns):
+#         returns = returns.diff().dropna()
+
+#     # ARIMA model with error handling
+#     try:
+#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False, enforce_invertibility=False)
+#         model_fit = model.fit()
+#         forecast = model_fit.forecast(steps=forecast_days)
+#         return forecast
+#     except Exception as e:
+#         print(f"ARIMA failed: {e}")
+#         return pd.Series([np.mean(returns)] * forecast_days)  # Fallback to mean prediction
+
+from statsmodels.tsa.arima.model import ARIMA
+
+def arima_forecast(returns, forecast_days=30):
+    """Use ARIMA to forecast future returns with error handling."""
+    if not isinstance(returns, pd.Series):
+        returns = pd.Series(returns)
+
+    # Clean data
+    returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+    # Ensure enough data points
+    if len(returns) < 10:
+        return pd.Series([np.mean(returns)] * forecast_days)
+
+    # Ensure the index has a frequency
+    if returns.index.inferred_freq is None:
+        returns = returns.asfreq('B')  # Business day frequency
+
+    # Check stationarity and apply differencing if needed
+    if not check_stationarity(returns):
+        returns = returns.diff().dropna()
+
+    # ARIMA model with error handling
+    try:
+        model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+        model_fit = model.fit()
+        forecast = model_fit.forecast(steps=forecast_days)
+        return forecast
+    except Exception as e:
+        print(f"ARIMA failed: {e}")
+        # Fallback: Return constant mean forecast
+        return pd.Series([np.mean(returns)] * forecast_days)
+
+
+# 4. Simulate Realistic Fluctuations
+import random
+
+def simulate_fluctuations(base_value, volatility, days=30):
+    """Simulate fluctuations based on volatility."""
+    simulated = [base_value]
+    for _ in range(1, days):
+        noise = random.uniform(-volatility, volatility)
+        simulated.append(simulated[-1] * (1 + noise))
+    return simulated
+
+# Simulate for each asset
+# for asset in portfolio:
+#     volatility = asset['volatility']
+#     base_return = asset['forecasted_returns'].iloc[0]
+#     asset['simulated_returns'] = simulate_fluctuations(base_return, volatility)
+#     print(f"Simulated returns for {asset['ticker']}: {asset['simulated_returns'][:5]}")
+
+# 5. Validate Predictions
+def validate_predictions(predictions, historical_returns, threshold=0.1):
+    """Smooth out predictions exceeding a threshold deviation."""
+    validated = []
+    # last_known = historical_returns[-1]
+    last_known = historical_returns.iloc[-1]
+    for pred in predictions:
+        if abs(pred - last_known) > threshold:
+            pred = (pred + last_known) / 2  # Smooth deviations
+        validated.append(pred)
+        last_known = pred
+    return validated
+
+# Validate for each asset
+# for asset in portfolio:
+#     asset['validated_returns'] = validate_predictions(
+#         asset['simulated_returns'], asset['historical_returns'])
+#     print(f"Validated returns for {asset['ticker']}")
+
+
+# 6. Visualize Predictions with Confidence Bands
+import matplotlib.pyplot as plt
+
+def plot_with_confidence(asset_name, best_case, worst_case):
+    """Plot predictions with confidence bands."""
+    days = len(best_case)
+    dates = [datetime.datetime.today() + datetime.timedelta(days=i) for i in range(days)]
+    
+    lower_bound = [min(b, w) for b, w in zip(best_case, worst_case)]
+    upper_bound = [max(b, w) for b, w in zip(best_case, worst_case)]
+    
+    plt.figure(figsize=(10, 6))
+    plt.fill_between(dates, lower_bound, upper_bound, color='pink', alpha=0.2, label="Confidence Band")
+    plt.plot(dates, best_case, color='red', label='Best Case')
+    plt.plot(dates, worst_case, color='blue', linestyle='dashed', label='Worst Case')
+    plt.title(f"{asset_name} Return Predictions")
+    plt.xlabel("Date")
+    plt.ylabel("Returns")
+    plt.legend()
+    plt.show()
+
+# # # # Plot for each asset
+# # for asset in portfolio:
+# #     best_case = [r * 1.05 for r in asset['validated_returns']]
+# #     worst_case = [r * 0.95 for r in asset['validated_returns']]
+# #     plot_with_confidence(asset['ticker'], best_case, worst_case)
+
+
+
+
+
+
+############################################################################################
+# Endpoint to predict returns
+
+# Define directories
+# PORTFOLIO_DIR = "local_data/portfolios"
+# CLIENT_SUMMARY_DIR = "client_data/client_data"
+# PREDICTIONS_DIR = "local_data/predictions"
+# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+
+#################################################################################################
+# # Updated New Implementation Version :
+
+#  getting error
+
+from statsmodels.tsa.stattools import adfuller
+from pmdarima import auto_arima
+
+
+# Constants
+FORECAST_DAYS = 63  # 3 months (approx business days)
+MARKET_INDEX = '^GSPC'  # S&P 500
+# PREDICTIONS_DIR = "predictions/"
+
+# Local storage directories
+BASE_DIR = "local_data"
+PREDICTIONS_DIR = os.path.join(BASE_DIR, "predictions")
+os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+
+# PORTFOLIO_DIR = "portfolios/"
+CLIENT_SUMMARY_DIR =  "client_data/client_data" #"client_summary/"
+
+# --- Utility Functions ---
+
+
+def adf_test(returns):
+    """Perform stationarity test."""
+    result = adfuller(returns)
+    return "Stationary" if result[1] < 0.05 else "Non-Stationary"
+
+
+# # --- Flask Endpoint ---
+
+# v-2 :
+
 
 @app.route('/predict_returns', methods=['POST'])
 def predict_returns():
     try:
-        # Retrieve portfolio and client data from the request
+        # Retrieve client and portfolio details
         client_id = request.json.get('client_id')
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
 
         # Load portfolio data
-        with open(f'portfolio_{client_id}.json', 'r') as f:
-            portfolio_data = json.load(f)
+        portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+        portfolio_data = load_from_file(portfolio_file)
+        if portfolio_data is None:
+            return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
 
-        # Load financial data from S3
-        s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
-        except Exception as e:
-            logging.error(f"Error retrieving client financial data: {e}")
-            return jsonify({'message': f'Error retrieving client financial data: {e}'}), 500
+        # Load market data for beta calculation
+        market_returns = fetch_historical_returns(MARKET_INDEX)
 
-        # Fetch news for the portfolio assets
+        # Prepare date intervals
+        next_quarter = get_next_quarter()
+        print(f"Next Quarter: {next_quarter}")
+
+        confidence_data = []
+        
+        # Iterate over each asset in the portfolio
+        
+        for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+            ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+            if not ticker:
+                continue
+
+            # Fetch historical returns
+            historical_returns = fetch_historical_returns(ticker)
+            if historical_returns.empty:
+                print(f"No valid returns for {ticker}. Assigning defaults.")
+                asset['volatility'] = 0.8
+                asset['sharpe_ratio'] = 0.7
+                asset['beta'] = 0.5
+                asset['forecasted_returns'] = [0] * FORECAST_DAYS
+                asset['simulated_returns'] = [0] * FORECAST_DAYS
+                continue
+
+            # Metrics Calculation
+            volatility = compute_volatility(historical_returns)
+            print(volatility)
+            sharpe_ratio = compute_sharpe_ratio(historical_returns)
+            print(sharpe_ratio)
+            beta = compute_beta(historical_returns, market_returns)
+            print(beta)
+            stationarity = adf_test(historical_returns)
+            print(stationarity)
+
+            # Forecasting
+            forecasted_returns = arima_forecast(historical_returns)
+            print(forecasted_returns)
+            simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+            print(simulated_returns)
+
+            # Save metrics back to the portfolio
+            asset['volatility'] = volatility
+            asset['sharpe_ratio'] = sharpe_ratio
+            asset['beta'] = beta
+            asset['stationarity'] = stationarity
+            asset['forecasted_returns'] = forecasted_returns.tolist()
+            asset['simulated_returns'] = simulated_returns
+
+            
+            
+        # Load client financial data
+        if USE_AWS:
+            # client_summary_key = f"{client_summary_folder}{client_id}.json"
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+                client_financial_data = load_from_file(client_summary_file)
+                if not client_financial_data:
+                    return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+                logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+                # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+        else:
+            client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+            client_financial_data = load_from_file(client_summary_file)
+            if not client_financial_data:
+                return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+        # Initialize economic news to pass to LLM
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+        economic_news = {topic: fetch_news(topic) for topic in topics}
         portfolio_news = collect_portfolio_news(portfolio_data)
 
-        # Prepare date intervals for predictions
+        # Generate date intervals for next quarter
         date_intervals = get_next_quarter_dates()
+        next_quarter = get_next_quarter()
 
-        # Prepare prompt for the LLM
         task = f"""
-            You are a financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio.
+            You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+            You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+            - Random market fluctuations (up and down movements).
+            - Economic volatility.
+            - Natural noise in predictions.
             The client, {client_name}, has the following portfolio:
-            
+
             Portfolio Details: {portfolio_data}
+            Portfolio Analyis: {asset}
             Financial Situation: {client_financial_data}
             Available Funds: ${funds}
             Investor Personality: {investor_personality}
-            
-            Consider these factors:
-            1. Economic trends such as inflation, interest rates, and geopolitical events.
-            2. Past performance of assets in the portfolio.
-            3. Risk tolerance based on investor personality.
-            4. The current news and economic news for the assets in the portfolio: {portfolio_news}
-
-            Predict the expected returns (in percentages and dollar amounts) for each asset and the overall portfolio at the following dates:
+            Portfolio News: {portfolio_news}
+            Economic News: {economic_news}
+                     
+            Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+            Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
 
-            Provide the output in the following format:
+            Predict the portfolio's **daily returns** over the next 3 months. Include:
+            1. **Best-Case Scenario** (High returns under favorable conditions).
+            2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+            3. **Confidence Band** (Range of returns at 95% confidence level).
             
-            #### Predicted Returns:
-            - **Asset-wise Predictions (Per Date)**:
-              | Date       | Asset Name | Predicted Return (%) | Predicted Return ($) |
-              |------------|------------|----------------------|-----------------------|
-              | 2024-01-01 | Asset 1    | 5.5%                | $500                 |
-              | 2024-01-15 | Asset 1    | 5.8%                | $520                 |
-              | ...        | ...        | ...                 | ...                  |
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
 
-            - **Overall Portfolio Return**:
-              | Date       | Total Return (%) | Total Return ($) |
-              |------------|------------------|------------------|
-              | 2024-01-01 | 4.5%            | $10,500          |
-              | ...        | ...             | ...              |
+            Example of simulated_response = 
+            ### Response Format:
+            | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            |------------|-----------------------|-----------------------|---------------------|------------------|
+            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
 
-            Ensure the output is comprehensive and formatted for easy parsing into a line chart.
+            
+            Your Response must be in the above table format no messages is required just table format data.
         """
+        
+        # Simulate LLM prediction
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(task)
+        simulated_response = markdown_to_text(response.text)
+        print(simulated_response)
+        line_chart_data = extract_line_chart_data(simulated_response)
+        print(f"\nLine Chart Data :{line_chart_data}")
+        
+        refined_line_chart_data = add_noise(line_chart_data)
+        print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
+        
+        # Plot return predictions :
+        plot_return_predictions(line_chart_data)
+        plot_refined_data(refined_line_chart_data)
+        # plot_return_predictions_with_fluctuations(refined_line_chart_data)
 
-        # Call the LLM model to generate predictions
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(task)
+        # Save predictions
+        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+        save_to_file(prediction_file, refined_line_chart_data)
 
-            # Process the LLM response
-            html_predictions = markdown.markdown(response.text)
-            formatted_predictions = markdown_to_text(html_predictions)
-
-            # Extract line chart data from the response
-            line_chart_data = extract_line_chart_data(response.text)
-
-            # Save line chart data to AWS
-            chart_key = f"predictions/{client_id}_line_chart.json"
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=chart_key,
-                    Body=json.dumps(line_chart_data),
-                    ContentType="application/json"
-                )
-            except Exception as e:
-                logging.error(f"Error saving line chart data to S3: {e}")
-                return jsonify({'message': f"Error saving line chart data: {e}"}), 500
-
-            # Return response with line chart data
-            return jsonify({
-                "client_id": client_id,
-                "client_name": client_name,
-                "predicted_returns": formatted_predictions,
-                "line_chart_data": line_chart_data
-            }), 200
-
-        except Exception as e:
-            print(f"Error generating predictions from LLM: {e}")
-            return jsonify({"message": f"Error generating predictions: {e}"}), 500
+        # Return the response
+        return jsonify({
+            "client_id": client_id,
+            "client_name": client_name,
+            "predicted_returns": simulated_response,
+            "line_chart_data": refined_line_chart_data
+        }), 200
 
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+    
+######################################################################################################################
+
+# New Improved Working Code :
+
+# @app.route('/predict_returns', methods=['POST'])
+# def predict_returns():
+#     try:
+#         # Retrieve client and portfolio details
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+#         # Load portfolio data
+#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         portfolio_data = load_from_file(portfolio_file)
+#         if portfolio_data is None:
+#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load market data for beta calculation
+#         market_returns = fetch_historical_returns(MARKET_INDEX)
+
+#         # Prepare date intervals
+#         next_quarter = get_next_quarter()
+#         print(f"Next Quarter: {next_quarter}")
+
+#         confidence_data = []
+        
+#         # Iterate over each asset in the portfolio
+        
+#         for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+#             ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+#             if not ticker:
+#                 continue
+
+#             # Fetch historical returns
+#             historical_returns = fetch_historical_returns(ticker)
+#             if historical_returns.empty:
+#                 print(f"No valid returns for {ticker}. Assigning defaults.")
+#                 asset['volatility'] = 0.8
+#                 asset['sharpe_ratio'] = 0.7
+#                 asset['beta'] = 0.5
+#                 asset['forecasted_returns'] = [0] * FORECAST_DAYS
+#                 asset['simulated_returns'] = [0] * FORECAST_DAYS
+#                 continue
+
+#             # Metrics Calculation
+#             volatility = compute_volatility(historical_returns)
+#             print(volatility)
+#             sharpe_ratio = compute_sharpe_ratio(historical_returns)
+#             print(sharpe_ratio)
+#             beta = compute_beta(historical_returns, market_returns)
+#             print(beta)
+#             stationarity = adf_test(historical_returns)
+#             print(stationarity)
+
+#             # Forecasting
+#             forecasted_returns = arima_forecast(historical_returns)
+#             print(forecasted_returns)
+#             simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+#             print(simulated_returns)
+
+#             # Save metrics back to the portfolio
+#             asset['volatility'] = volatility
+#             asset['sharpe_ratio'] = sharpe_ratio
+#             asset['beta'] = beta
+#             asset['stationarity'] = stationarity
+#             asset['forecasted_returns'] = forecasted_returns.tolist()
+#             asset['simulated_returns'] = simulated_returns
+
+            
+            
+#         # Load client financial data
+#         if USE_AWS:
+#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#                 client_financial_data = load_from_file(client_summary_file)
+#                 if not client_financial_data:
+#                     return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+#                 logging.error(f"Error retrieving client financial data from AWS: {e}")
+#                 # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#         else:
+#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#             client_financial_data = load_from_file(client_summary_file)
+#             if not client_financial_data:
+#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         date_intervals = get_next_quarter_dates()
+#         next_quarter = get_next_quarter()
+
+
+        # task = f"""
+        #     You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+        #     You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
+        #     The client, {client_name}, has the following portfolio:
+
+        #     Portfolio Details: {portfolio_data}
+        #     Portfolio Analyis: {asset}
+        #     Financial Situation: {client_financial_data}
+        #     Available Funds: ${funds}
+        #     Investor Personality: {investor_personality}
+        #     Portfolio News: {portfolio_news}
+        #     Economic News: {economic_news}
+
+        #     Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+        #     Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+        #     {date_intervals}
+            
+        #     Example of simulated_response = 
+        #     | Date       | Total Return (%) | Total Return ($) |
+        #     |------------|------------------|------------------|
+        #     | 2024-04-01 | 4.5%             | $10,500          |
+        #     | 2024-04-15 | 5.0%             | $10,800          |
+        #     | 2024-04-30 | 5.2%             | $11,000          |
+        #     |------------|------------------|------------------|
+            
+        #     Your Response must be in the above table format no messages is required just table format data.
+        # """
+
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+#         simulated_response = markdown_to_text(response.text)
+#         line_chart_data = extract_line_chart_data(simulated_response)
+
+#         # Save predictions
+#         prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+#         save_to_file(prediction_file, line_chart_data)
+
+#         # Return the response
+#         return jsonify({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             # "portfolio_data": portfolio_data.to_dict(orient='records'),
+#             "predicted_returns": simulated_response,
+#             "line_chart_data": line_chart_data
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+
+#############################################################################################################
+
+# Using AWS :
+
+# # File paths for local storage
+# LOCAL_STORAGE_PATH = "local_data"
+# PORTFOLIO_DIR = os.path.join(LOCAL_STORAGE_PATH, "portfolios")
+# CLIENT_SUMMARY_DIR = "client_data/client_data"
+# PREDICTIONS_DIR = os.path.join(LOCAL_STORAGE_PATH, "predictions")
+
+# # Ensure directories exist for local storage
+# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+
+# # Predict returns based on client data
+# @app.route('/predict_returns', methods=['POST'])
+# def predict_returns():
+#     try:
+#         # Retrieve client and portfolio details
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+#         # Load portfolio data
+#         if USE_AWS:
+#             # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#         else:
+#             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#             portfolio_data = load_from_file(portfolio_file)
+#             if not portfolio_data:
+#                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Calculate portfolio-level metrics
+#         total_current_value = sum(asset["current_value"] for asset in portfolio_data)
+#         total_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
+#         total_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+
+#         total_daily_change_perc = (total_daily_change / total_current_value * 100) if total_current_value else 0
+#         total_investment_gain_loss_perc = (total_investment_gain_loss / total_current_value * 100) if total_current_value else 0
+
+#         # Load client financial data
+#         if USE_AWS:
+#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except : # Exception as e:
+#                 try:
+#                     client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#                     client_financial_data = load_from_file(client_summary_file)
+#                     if not client_financial_data:
+#                         return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#                 except Exception as e:
+#                     logging.error(f"Error retrieving client financial data from AWS: {e}")
+#                     return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#         else:
+#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#             client_financial_data = load_from_file(client_summary_file)
+#             if not client_financial_data:
+#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         date_intervals = get_next_quarter_dates()
+#         next_quarter = get_next_quarter()
+
+#         # Prepare the task prompt for LLM
+        
+#         task = f"""
+#             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+#             You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
+#             The client, {client_name}, has the following portfolio:
+
+#             Portfolio Details: {portfolio_data}
+#             Financial Situation: {client_financial_data}
+#             Available Funds: ${funds}
+#             Investor Personality: {investor_personality}
+#             Portfolio News: {portfolio_news}
+#             Economic News: {economic_news}
+
+#             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+#             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+#             {date_intervals}
+            
+#             Example of simulated_response = 
+#             | Date       | Total Return (%) | Total Return ($) |
+#             |------------|------------------|------------------|
+#             | 2024-04-01 | 4.5%             | $10,500          |
+#             | 2024-04-15 | 5.0%             | $10,800          |
+#             | 2024-04-30 | 5.2%             | $11,000          |
+#             |------------|------------------|------------------|
+            
+#             Your Response must be in the above table format no messages is required just table format data.
+#         """
+
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+
+#         # Process the response
+#         html_suggestions = markdown.markdown(response.text)
+#         simulated_response = markdown_to_text(html_suggestions)
+
+#         # Extract line chart data from the simulated response
+#         line_chart_data = extract_line_chart_data(simulated_response)
+
+#         # Save line chart data locally or to AWS based on storage flag
+#         if USE_AWS:
+#             prediction_key = f"predictions/{client_id}_{next_quarter}_line_chart.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=prediction_key,
+#                     Body=json.dumps(line_chart_data),
+#                     ContentType='application/json'
+#                 )
+#             except Exception as e:
+#                 logging.error(f"Error saving prediction data to AWS: {e}")
+#                 return jsonify({"message": "Error saving prediction data to AWS."}), 500
+#         else:
+#             prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+#             save_to_file(prediction_file, line_chart_data)
+
+#         # Return the response
+#         return jsonify({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             "predicted_returns": simulated_response,
+#             "line_chart_data": line_chart_data
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+
+
+# # original version :
+
+# @app.route('/predict_returns', methods=['POST'])
+# def predict_returns():
+#     try:
+#         # Retrieve client and portfolio details
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+#         # Load portfolio data
+#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         portfolio_data = load_from_file(portfolio_file)
+#         if not portfolio_data:
+#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Calculate portfolio-level metrics
+#         total_current_value = sum(asset["current_value"] for asset in portfolio_data)
+#         total_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
+#         total_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+
+#         # Ensure calculations are meaningful
+#         total_daily_change_perc = (total_daily_change / total_current_value * 100) if total_current_value else 0
+#         total_investment_gain_loss_perc = (total_investment_gain_loss / total_current_value * 100) if total_current_value else 0
+
+#         # Load client financial data
+#         client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#         client_financial_data = load_from_file(client_summary_file)
+#         if not client_financial_data:
+#             return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+        
+#          # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         # date_intervals = [
+#         #     "2024-10-01", "2024-10-15", "2024-10-31",
+#         #     "2024-11-01", "2024-11-15", "2024-11-30",
+#         #     "2024-12-01", "2024-12-15", "2024-12-31"
+#         # ] 
+#         date_intervals = get_next_quarter_dates()
+    
+#         # next_quarter = "2024_Q4" 
+#         next_quarter = get_next_quarter()
+#         print(f"Next Quarter : {next_quarter}")
+        
+#         # Prepare the task prompt for LLM
+        # task = f"""
+        #     You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+        #     You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict.
+        #     The client, {client_name}, has the following portfolio:
+
+        #     Portfolio Details: {portfolio_data}
+        #     Financial Situation: {client_financial_data}
+        #     Available Funds: ${funds}
+        #     Investor Personality: {investor_personality}
+        #     Portfolio News: {portfolio_news}
+        #     Economic News: {economic_news}
+
+        #     Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+        #     Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+        #     {date_intervals}
+            
+        #     Example of simulated_response = 
+        #     | Date       | Total Return (%) | Total Return ($) |
+        #     |------------|------------------|------------------|
+        #     | 2024-04-01 | 4.5%             | $10,500          |
+        #     | 2024-04-15 | 5.0%             | $10,800          |
+        #     | 2024-04-30 | 5.2%             | $11,000          |
+        #     |------------|------------------|------------------|
+            
+        #     Your Response must be in the above table format no messages is required just table format data.
+        # """
+
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+
+#         # Process the response
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"\nHTML Suggestions : {html_suggestions}")
+        
+#         simulated_response = markdown_to_text(html_suggestions)
+        
+#         print(f"\nSimulated Response : {simulated_response}")
+#         # Extract line chart data from the simulated response
+#         line_chart_data = extract_line_chart_data(simulated_response)
+        
+#         print(f"\nLine Chart Data : {line_chart_data}")
+        
+#         # Save line chart data locally
+#         prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+#         save_to_file(prediction_file, line_chart_data)
+
+#         # Return the response
+#         return jsonify({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             "predicted_returns": simulated_response,
+#             "line_chart_data": line_chart_data
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
 
 
 ########################################################################################################################
+# Portfolio Return on Investment Prediction for next quarter using aws :
 
-# V-3.1 : Check for Portdolio Changes implemented and save the portfolio data to the aws :
+# Determine Next Quarter Date Intervals :
+# from datetime import datetime, timedelta
+# import calendar
 
+# def get_next_quarter_dates():
+#     current_date = datetime.now()
+#     current_month = current_date.month
+
+#     # Determine the starting month of the next quarter
+#     if current_month in [1, 2, 3]:  # Q1
+#         start_month = 4  # Q2
+#     elif current_month in [4, 5, 6]:  # Q2
+#         start_month = 7  # Q3
+#     elif current_month in [7, 8, 9]:  # Q3
+#         start_month = 10  # Q4
+#     else:  # Q4
+#         start_month = 1  # Q1 of the next year
+
+#     # Determine the year of the next quarter
+#     next_quarter_year = current_date.year if start_month != 1 else current_date.year + 1
+
+#     # Generate dates for the next quarter
+#     next_quarter_dates = []
+#     for month in range(start_month, start_month + 3):
+#         # Get the first, 15th, and last day of the month
+#         first_day = datetime(next_quarter_year, month, 1)
+#         fifteenth_day = datetime(next_quarter_year, month, 15)
+#         last_day = datetime(next_quarter_year, month, calendar.monthrange(next_quarter_year, month)[1])
+
+#         next_quarter_dates.extend([first_day.strftime("%Y-%m-%d"), 
+#                                    fifteenth_day.strftime("%Y-%m-%d"), 
+#                                    last_day.strftime("%Y-%m-%d")])
+
+#     return next_quarter_dates
+
+
+
+# # Line Chart for Predcting Next quarter Returns :
+# def extract_line_chart_data(llm_response_text):
+#     """
+#     Extracts line chart data from the LLM's response for plotting.
+#     """
+#     try:
+#         # Example parsing logic for the response (modify as needed)
+#         lines = llm_response_text.split("\n")
+#         line_chart_data = {
+#             "dates": [],
+#             "overall_returns": {"percentages": [], "amounts": []}
+#         }
+#         current_date = datetime.now()
+#         current_year = current_date.year
+#         for line in lines:
+#             if line.startswith(f"| {current_year}-"):  # Ex: "| 2024-01-01 |"
+#                 parts = line.split("|")
+#                 date = parts[1].strip()
+#                 return_percentage = float(parts[2].replace("%", "").strip())
+#                 return_amount = float(parts[3].replace("$", "").strip())
+#                 line_chart_data["dates"].append(date)
+#                 line_chart_data["overall_returns"]["percentages"].append(return_percentage)
+#                 line_chart_data["overall_returns"]["amounts"].append(return_amount)
+#         return line_chart_data
+#     except Exception as e:
+#         print(f"Error extracting line chart data: {e}")
+#         return {}
+
+
+# # V-3 : Actual Line Chart 
+# import hashlib
+# import json
+# from datetime import datetime
+
+# Global variable to store the hash of the last portfolio
+# last_portfolio_hash = None
+
+# V-3 : Check for Portdolio Changes implemented :
 # @app.route('/predict_returns', methods=['POST'])
 # def predict_returns():
 #     global last_portfolio_hash
@@ -6767,20 +7305,28 @@ def predict_returns():
 #             # Extract line chart data from the response
 #             predicted_line_chart_data = extract_line_chart_data(response.text)
 
+#             # Fetch actual returns for the portfolio
+#             actual_line_chart_data = get_actual_returns(client_id)
+
+#             # Combine actual and predicted data for line chart
+#             line_chart_data = {
+#                 "actual": actual_line_chart_data,
+#                 "predicted": predicted_line_chart_data
+#             }
 
 #             # Save predictions and line chart data for reuse
 #             result = {
 #                 "client_id": client_id,
 #                 "client_name": client_name,
 #                 "predicted_returns": formatted_predictions,
-#                 "line_chart_data": predicted_line_chart_data
+#                 "line_chart_data": line_chart_data
 #             }
 #             with open(f'predictions_{client_id}.json', 'w') as f:
 #                 json.dump(result, f, indent=4)
 
 #             # Return response with line chart data
 #             return jsonify(result), 200
-        
+
 #         except Exception as e:
 #             print(f"Error generating predictions from LLM: {e}")
 #             return jsonify({"message": f"Error generating predictions: {e}"}), 500
@@ -6791,7 +7337,6 @@ def predict_returns():
 
 
 # # V-2 : with Line Chart Data
-
 # # # Predict Next Quarter Returns
 # @app.route('/predict_returns', methods=['POST'])
 # def predict_returns():
