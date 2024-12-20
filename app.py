@@ -4565,46 +4565,129 @@ def extract_excel_data(file_path):
 MARKET_ASSETS_FOLDER = "market_assets/"
 LOCAL_STORAGE_PATH = "local_data"
 
+# Helper function for Timestamp serialization
 
-def fetch_all_stocks_for_market(market_name):
-    """Fetch all listed stocks for the given US market."""
+def serialize_timestamp(obj):
+    """
+    Convert Timestamp or datetime objects to ISO format strings.
+    """
+    if isinstance(obj, (pd.Timestamp, datetime)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def save_to_aws_with_timestamp(data, filename):
     try:
-        if market_name.lower() == "nasdaq":
-            url = "https://api.nasdaq.com/api/screener/stocks?exchange=nasdaq"
-            data = pd.read_json(url)
-            stocks = data['data']['table']['rows']
-            assets = [{"symbol": stock['symbol'], "name": stock['name']} for stock in stocks]
+        serialized_data = json.dumps(data, default=serialize_timestamp)  # Use the custom serializer
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=filename,
+            Body=serialized_data,
+            ContentType='application/json'
+        )
+        print(f"Data saved to AWS at {filename}")
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        print(f"AWS credentials error: {e}")
+        raise
+    except Exception as e:
+        print(f"Error saving to AWS: {e}")
+        raise
 
-        elif market_name.lower() == "nyse":
-            url = "https://api.nasdaq.com/api/screener/stocks?exchange=nyse"
-            data = pd.read_json(url)
-            stocks = data['data']['table']['rows']
-            assets = [{"symbol": stock['symbol'], "name": stock['name']} for stock in stocks]
 
-        elif market_name.lower() == "s&p500":
-            # Fetch S&P 500 components using yfinance
-            sp500 = yf.Ticker("^GSPC").history(period="1d")
-            tickers = sp500.index.tolist()
-            assets = [{"symbol": ticker, "name": ticker} for ticker in tickers]
+# import yfinance as yf
 
-        elif market_name.lower() == "dowjones":
-            # Fetch Dow Jones components using yfinance
-            dow = yf.Ticker("^DJI").history(period="1d")
-            tickers = dow.index.tolist()
-            assets = [{"symbol": ticker, "name": ticker} for ticker in tickers]
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
+import requests
+
+# Fetch Stocks for NASDAQ,NYSE,S&P500 and DOW JONES :
+
+def fetch_all_stocks_for_market_dynamic(market_name):
+    """
+    Fetch all stocks for a given market.
+    Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
+    """
+    try:
+        market_name = market_name.lower()
+        assets = []
+
+        # Fetch for NASDAQ and NYSE using Alpha Vantage
+        if market_name == "nasdaq":
+            exchange_code = "NASDAQ"
+        elif market_name == "nyse":
+            exchange_code = "NYSE"
         else:
-            return None
+            exchange_code = None
 
-        print(f"\Assets :\n{assets}")
-        return assets
+        if exchange_code:
+            # Alpha Vantage API for NASDAQ and NYSE
+            url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
+            response = requests.get(url)
+
+            if response.status_code == 200:
+                stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
+                for row in stocks[1:]:  # Skip header row
+                    data = row.split(",")
+                    if len(data) > 2 and data[2].strip() == exchange_code:
+                        symbol = data[0]
+                        name = data[1]
+                        assets.append({"name": name, "symbol": symbol})
+                return assets
+            else:
+                print(f"Alpha Vantage API error: {response.status_code}")
+                return []
+
+        # Fetch for S&P500 and Dow Jones using Wikipedia
+        elif market_name == "s&p500":
+            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+            response = requests.get(url)
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, "html.parser")
+                table = soup.find("table", {"id": "constituents"})
+                rows = table.find_all("tr")[1:]  # Skip header row
+                for row in rows:
+                    cols = row.find_all("td")
+                    symbol = cols[0].text.strip()
+                    name = cols[1].text.strip()
+                    assets.append({"name": name, "symbol": symbol})
+                    
+                print(f"\nAssets : \n{assets}")        
+                    
+                return assets
+            else:
+                print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
+                return []
+
+        elif market_name == "dowjones":
+            url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+            response = requests.get(url)
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, "html.parser")
+                table = soup.find("table", {"class": "wikitable sortable"})
+                rows = table.find_all("tr")[1:]  # Skip header row
+                for row in rows:
+                    cols = row.find_all("td")
+                    symbol = cols[2].text.strip()
+                    name = cols[1].text.strip()
+                    assets.append({"name": name, "symbol": symbol})
+                
+                print(f"\nAssets : \n{assets}")    
+                    
+                return assets
+            else:
+                print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
+                return []
+
+        # If no matching market is found
+        return []
 
     except Exception as e:
-        print(f"Error fetching all stocks for {market_name}: {e}")
-        return None
+        print(f"Error fetching stocks for {market_name}: {e}")
+        return []
 
 
-# API to fetch or update market assets
 @app.route('/market-assets', methods=['POST'])
 def market_assets():
     try:
@@ -4621,7 +4704,10 @@ def market_assets():
             assets = load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename))
 
         # Fetch updated assets for the market
-        updated_assets = fetch_all_stocks_for_market(market_name)
+        
+        updated_assets = fetch_all_stocks_for_market_dynamic(market_name)
+        # updated_assets = fetch_all_stocks_for_market_alpha_vantage(market_name)
+        
         if not updated_assets:
             return jsonify({"message": f"No data found for the market: {market_name}"}), 404
 
@@ -4629,7 +4715,7 @@ def market_assets():
         if not assets or updated_assets != assets:
             # Update the assets list
             if USE_AWS:
-                save_to_aws(updated_assets, filename)
+                save_to_aws_with_timestamp(updated_assets, filename)
             else:
                 save_to_local(updated_assets, os.path.join(LOCAL_STORAGE_PATH, filename))
             message = "Assets list updated successfully"
@@ -4649,7 +4735,7 @@ def market_assets():
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
-
+####################################################################################
 # Fetch Current Stock Price :
 
 @app.route('/current_stock_price', methods=['POST'])

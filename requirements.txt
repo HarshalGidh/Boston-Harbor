@@ -38,3 +38,4 @@ flask-mail
 pyjwt
 statsmodels
 pmdarima
+yahoo_fin
