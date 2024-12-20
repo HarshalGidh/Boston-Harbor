@@ -1125,7 +1125,7 @@ async def make_retrieval_chain(retriever,investmentPersonality,clientName,monthl
 
                                 ### Example Output:
                                 
-                                #### Client Financial Details:
+                                #### Client Financial Details: 
                                 | Asset Type          | Current Value ($) | Annual Contribution ($) |
                                 |----------------------|-------------------|--------------------------|
                                 | 401(k), 403(b), 457  | 300               | 15                       |
@@ -4602,25 +4602,22 @@ import requests
 
 # Fetch Stocks for NASDAQ,NYSE,S&P500 and DOW JONES :
 
-def fetch_all_stocks_for_market_dynamic(market_name):
+# # V-2 :
+
+def fetch_all_assets_by_preference(market_name, preference=None):
     """
-    Fetch all stocks for a given market.
+    Fetch assets for a given market and filter by type if preference is provided.
     Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
+    Preferences: "stocks", "etfs", "bonds", "commodities", "mutual funds".
     """
     try:
         market_name = market_name.lower()
+        preference = preference.lower() if preference else None
         assets = []
 
         # Fetch for NASDAQ and NYSE using Alpha Vantage
-        if market_name == "nasdaq":
-            exchange_code = "NASDAQ"
-        elif market_name == "nyse":
-            exchange_code = "NYSE"
-        else:
-            exchange_code = None
-
-        if exchange_code:
-            # Alpha Vantage API for NASDAQ and NYSE
+        if market_name in ["nasdaq", "nyse"]:
+            exchange_code = "NASDAQ" if market_name == "nasdaq" else "NYSE"
             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
             response = requests.get(url)
 
@@ -4631,13 +4628,18 @@ def fetch_all_stocks_for_market_dynamic(market_name):
                     if len(data) > 2 and data[2].strip() == exchange_code:
                         symbol = data[0]
                         name = data[1]
-                        assets.append({"name": name, "symbol": symbol})
+                        # asset_type = data[3].strip().lower()  # Assuming the asset type is in the 4th column
+
+                        # Filter based on preference
+                        if preference : #or asset_type == preference:
+                            assets.append({"name": name, "symbol": symbol, "type": preference})
+                            
                 return assets
             else:
                 print(f"Alpha Vantage API error: {response.status_code}")
                 return []
 
-        # Fetch for S&P500 and Dow Jones using Wikipedia
+        # Fetch for S&P500 using Wikipedia
         elif market_name == "s&p500":
             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
             response = requests.get(url)
@@ -4650,15 +4652,15 @@ def fetch_all_stocks_for_market_dynamic(market_name):
                     cols = row.find_all("td")
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
-                    assets.append({"name": name, "symbol": symbol})
-                    
-                print(f"\nAssets : \n{assets}")        
-                    
+                    # S&P 500 typically contains only stocks
+                    if not preference or preference == "stocks":
+                        assets.append({"name": name, "symbol": symbol, "type": "stock"})
                 return assets
             else:
                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
                 return []
 
+        # Fetch for Dow Jones using Wikipedia
         elif market_name == "dowjones":
             url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
             response = requests.get(url)
@@ -4671,10 +4673,9 @@ def fetch_all_stocks_for_market_dynamic(market_name):
                     cols = row.find_all("td")
                     symbol = cols[2].text.strip()
                     name = cols[1].text.strip()
-                    assets.append({"name": name, "symbol": symbol})
-                
-                print(f"\nAssets : \n{assets}")    
-                    
+                    # Dow Jones typically contains only stocks
+                    if not preference or preference == "stocks":
+                        assets.append({"name": name, "symbol": symbol, "type": "stock"})
                 return assets
             else:
                 print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
@@ -4684,8 +4685,96 @@ def fetch_all_stocks_for_market_dynamic(market_name):
         return []
 
     except Exception as e:
-        print(f"Error fetching stocks for {market_name}: {e}")
+        print(f"Error fetching assets for {market_name}: {e}")
         return []
+
+
+# # v-1 :
+
+# def fetch_all_stocks_for_market_dynamic(market_name):
+#     """
+#     Fetch all stocks for a given market.
+#     Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
+#     """
+#     try:
+#         market_name = market_name.lower()
+#         assets = []
+
+#         # Fetch for NASDAQ and NYSE using Alpha Vantage
+#         if market_name == "nasdaq":
+#             exchange_code = "NASDAQ"
+#         elif market_name == "nyse":
+#             exchange_code = "NYSE"
+#         else:
+#             exchange_code = None
+
+#         if exchange_code:
+#             # Alpha Vantage API for NASDAQ and NYSE
+#             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
+#             response = requests.get(url)
+
+#             if response.status_code == 200:
+#                 stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
+#                 for row in stocks[1:]:  # Skip header row
+#                     data = row.split(",")
+#                     if len(data) > 2 and data[2].strip() == exchange_code:
+#                         symbol = data[0]
+#                         name = data[1]
+#                         assets.append({"name": name, "symbol": symbol})
+#                 return assets
+#             else:
+#                 print(f"Alpha Vantage API error: {response.status_code}")
+#                 return []
+
+#         # Fetch for S&P500 and Dow Jones using Wikipedia
+#         elif market_name == "s&p500":
+#             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 from bs4 import BeautifulSoup
+#                 soup = BeautifulSoup(response.content, "html.parser")
+#                 table = soup.find("table", {"id": "constituents"})
+#                 rows = table.find_all("tr")[1:]  # Skip header row
+#                 for row in rows:
+#                     cols = row.find_all("td")
+#                     symbol = cols[0].text.strip()
+#                     name = cols[1].text.strip()
+#                     assets.append({"name": name, "symbol": symbol})
+                    
+#                 print(f"\nAssets : \n{assets}")        
+                    
+#                 return assets
+#             else:
+#                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
+#                 return []
+
+#         elif market_name == "dowjones":
+#             url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 from bs4 import BeautifulSoup
+#                 soup = BeautifulSoup(response.content, "html.parser")
+#                 table = soup.find("table", {"class": "wikitable sortable"})
+#                 rows = table.find_all("tr")[1:]  # Skip header row
+#                 for row in rows:
+#                     cols = row.find_all("td")
+#                     symbol = cols[2].text.strip()
+#                     name = cols[1].text.strip()
+#                     assets.append({"name": name, "symbol": symbol})
+                
+#                 print(f"\nAssets : \n{assets}")    
+                    
+#                 return assets
+#             else:
+#                 print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
+#                 return []
+
+#         # If no matching market is found
+#         return []
+
+#     except Exception as e:
+#         print(f"Error fetching stocks for {market_name}: {e}")
+#         return []
 
 
 @app.route('/market-assets', methods=['POST'])
@@ -4693,6 +4782,9 @@ def market_assets():
     try:
         data = request.get_json()
         market_name = data.get("market_name")
+        preference = data.get("preference")
+        # preference = "stocks"
+        
         if not market_name:
             return jsonify({"message": "Market name is required"}), 400
 
@@ -4705,8 +4797,9 @@ def market_assets():
 
         # Fetch updated assets for the market
         
-        updated_assets = fetch_all_stocks_for_market_dynamic(market_name)
-        # updated_assets = fetch_all_stocks_for_market_alpha_vantage(market_name)
+        # updated_assets = fetch_all_stocks_for_market_dynamic(market_name)
+        updated_assets = fetch_all_assets_by_preference(market_name,preference)
+        
         
         if not updated_assets:
             return jsonify({"message": f"No data found for the market: {market_name}"}), 404
@@ -4732,6 +4825,101 @@ def market_assets():
 
     except Exception as e:
         print(f"Error in market-assets API: {e}")
+        return jsonify({"message": f"Internal server error: {e}"}), 500
+
+##################################################### Fetch Cryptocurrencies from Exchanges ####################################
+
+
+@app.route('/crypto-assets', methods=['POST'])
+def fetch_cryptos_from_exchange():
+    """
+    Fetch the list of cryptocurrencies available on a given exchange.
+    Supported exchanges: Coinbase, Binance, Binance.US, Coincheck.
+    """
+    try:
+        exchange_name = data.get("exchange_name")
+        exchange_name = exchange_name.lower()
+        # exchange_name = "coinbase" 
+        # exchanges = ["Coinbase", "Binance", "Binance.US", "Coincheck"]  
+    
+        cryptos = []
+
+        if exchange_name == "coinbase":
+            url = "https://api.pro.coinbase.com/products"
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                for item in data:
+                    base_currency = item["base_currency"]
+                    quote_currency = item["quote_currency"]
+                    if base_currency not in cryptos:
+                        cryptos.append(base_currency)
+                
+                print(f"\nCryptos on {exchange_name}:")
+                print(list(set(cryptos)))
+                
+                # return list(set(cryptos))
+                return jsonify({
+                    "message": "Cryptos list sent successfully",
+                    "exchange_name": exchange_name,
+                    "cryptos": list(set(cryptos))
+                }), 200
+            else:
+                print(f"Failed to fetch data from Coinbase: {response.status_code}")
+                return []
+
+        elif exchange_name == "binance":
+            url = "https://api.binance.com/api/v3/exchangeInfo"
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                for symbol in data["symbols"]:
+                    base_asset = symbol["baseAsset"]
+                    if base_asset not in cryptos:
+                        cryptos.append(base_asset)
+                
+                print(f"\nCryptos on {exchange_name}:")
+                print(list(set(cryptos)))
+                
+                # return list(set(cryptos))
+                return jsonify({
+                    "message": "Cryptos list sent successfully",
+                    "exchange_name": exchange_name,
+                    "cryptos": list(set(cryptos))
+                }), 200
+            else:
+                print(f"Failed to fetch data from Binance: {response.status_code}")
+                return []
+
+        elif exchange_name == "binance.us":
+            url = "https://api.binance.us/api/v3/exchangeInfo"
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                for symbol in data["symbols"]:
+                    base_asset = symbol["baseAsset"]
+                    if base_asset not in cryptos:
+                        cryptos.append(base_asset)
+                
+                print(f"\nCryptos on {exchange_name}:")
+                print(list(set(cryptos)))
+                
+                # return list(set(cryptos))
+                return jsonify({
+                    "message": "Cryptos list sent successfully",
+                    "exchange_name": exchange_name,
+                    "cryptos": list(set(cryptos))
+                }), 200
+            else:
+                print(f"Failed to fetch data from Binance.US: {response.status_code}")
+                return []
+
+        else:
+            print("Exchange not supported.")
+            return jsonify({"message": f"No Crypto Exchange found : {e}"}), 404
+        
+    except Exception as e:
+        print(f"Error fetching cryptos for {exchange_name}: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
