@@ -4997,7 +4997,6 @@ def fetch_commodities():
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
 # v-2 :
-
 @app.route('/crypto-assets', methods=['POST'])
 def fetch_cryptos_from_exchange():
     """
@@ -5007,11 +5006,10 @@ def fetch_cryptos_from_exchange():
     try:
         data = request.get_json()
         exchange_name = data.get("exchange_name", "").lower()
-        
         cryptos = []
 
         if exchange_name == "coingecko":
-            # CoinGecko API to fetch all cryptocurrencies
+            # Fetch data from CoinGecko
             url = "https://api.coingecko.com/api/v3/coins/markets"
             params = {
                 "vs_currency": "usd",
@@ -5023,78 +5021,71 @@ def fetch_cryptos_from_exchange():
             if response.status_code == 200:
                 data = response.json()
                 for coin in data:
-                    symbol = coin["symbol"].upper()
-                    name = coin["name"]
-                    cryptos.append({"name": name, "symbol": symbol})
-                
-                print(f"\nCryptos on {exchange_name}:")
-                print(cryptos)
-                
-                return jsonify({
-                    "message": "Cryptos list sent successfully",
-                    "exchange_name": exchange_name,
-                    "cryptos": cryptos
-                }), 200
+                    if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
+                        symbol = coin["symbol"].upper()
+                        cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+                    else:
+                        cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
             else:
-                print(f"Failed to fetch data from CoinGecko: {response.status_code}")
-                return jsonify({
-                    "message": f"Failed to fetch data from CoinGecko: {response.status_code}"
-                }), 500
+                return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
 
         elif exchange_name == "binance":
+            # Fetch data from Binance
             url = "https://api.binance.com/api/v3/exchangeInfo"
             response = requests.get(url)
             if response.status_code == 200:
                 data = response.json()
-                for symbol in data["symbols"]:
-                    base_asset = symbol["baseAsset"]
-                    if base_asset not in cryptos:
-                        cryptos.append(base_asset)
-                
-                print(f"\nCryptos on {exchange_name}:")
-                print(list(set(cryptos)))
-                
-                return jsonify({
-                    "message": "Cryptos list sent successfully",
-                    "exchange_name": exchange_name,
-                    "cryptos": list(set(cryptos))
-                }), 200
+                for symbol_info in data["symbols"]:
+                    base_asset = symbol_info["baseAsset"]
+                    quote_asset = symbol_info["quoteAsset"]
+                    
+                    if base_asset == 'ETH' or base_asset == 'BTC':
+                        cryptos.append({
+                            "symbol": f"{base_asset}-USD",
+                            "name": f"{base_asset}"
+                        })
+                    else:
+                        cryptos.append({
+                            "symbol": base_asset,
+                            "name": f"{base_asset}"
+                        })
             else:
-                print(f"Failed to fetch data from Binance: {response.status_code}")
-                return jsonify({
-                    "message": f"Failed to fetch data from Binance: {response.status_code}"
-                }), 500
+                return jsonify({"message": f"Failed to fetch data from Binance: {response.status_code}"}), 500
 
         elif exchange_name == "binance.us":
+            # Fetch data from Binance.US
             url = "https://api.binance.us/api/v3/exchangeInfo"
             response = requests.get(url)
             if response.status_code == 200:
                 data = response.json()
-                for symbol in data["symbols"]:
-                    base_asset = symbol["baseAsset"]
-                    if base_asset not in cryptos:
-                        cryptos.append(base_asset)
-                
-                print(f"\nCryptos on {exchange_name}:")
-                print(list(set(cryptos)))
-                
-                return jsonify({
-                    "message": "Cryptos list sent successfully",
-                    "exchange_name": exchange_name,
-                    "cryptos": list(set(cryptos))
-                }), 200
+                for symbol_info in data["symbols"]:
+                    base_asset = symbol_info["baseAsset"]
+                    quote_asset = symbol_info["quoteAsset"]
+                    
+                    if base_asset == 'ETH' or base_asset == 'BTC':
+                        cryptos.append({
+                            "symbol": f"{base_asset}-USD",
+                            "name": f"{base_asset}"
+                        })
+                    else:
+                        cryptos.append({
+                            "symbol": base_asset,
+                            "name": f"{base_asset}"
+                        })
             else:
-                print(f"Failed to fetch data from Binance.US: {response.status_code}")
-                return jsonify({
-                    "message": f"Failed to fetch data from Binance.US: {response.status_code}"
-                }), 500
+                return jsonify({"message": f"Failed to fetch data from Binance.US: {response.status_code}"}), 500
 
         else:
-            print("Exchange not supported.")
             return jsonify({"message": "Exchange not supported."}), 404
-        
+
+        # Return the list of cryptos
+        return jsonify({
+            "message": "Cryptos list fetched successfully.",
+            "exchange_name": exchange_name,
+            "cryptos": cryptos
+        }), 200
+
     except Exception as e:
-        print(f"Error fetching cryptos for {exchange_name}: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
@@ -5104,40 +5095,44 @@ def fetch_cryptos_from_exchange():
 # def fetch_cryptos_from_exchange():
 #     """
 #     Fetch the list of cryptocurrencies available on a given exchange.
-#     Supported exchanges: Coinbase, Binance, Binance.US, Coincheck.
+#     Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
 #     """
 #     try:
 #         data = request.get_json()
-#         exchange_name = data.get("exchange_name")
-#         exchange_name = exchange_name.lower()
-#         # exchange_name = "coinbase" 
-#         # exchanges = ["Coinbase", "Binance", "Binance.US", "Coincheck"]  
-    
+#         exchange_name = data.get("exchange_name", "").lower()
+        
 #         cryptos = []
 
-#         if exchange_name == "coinbase":
-#             url = "https://api.pro.coinbase.com/products"
-#             response = requests.get(url)
+#         if exchange_name == "coingecko":
+#             # CoinGecko API to fetch all cryptocurrencies
+#             url = "https://api.coingecko.com/api/v3/coins/markets"
+#             params = {
+#                 "vs_currency": "usd",
+#                 "order": "market_cap_desc",
+#                 "per_page": 250,
+#                 "page": 1,
+#             }
+#             response = requests.get(url, params=params)
 #             if response.status_code == 200:
 #                 data = response.json()
-#                 for item in data:
-#                     base_currency = item["base_currency"]
-#                     quote_currency = item["quote_currency"]
-#                     if base_currency not in cryptos:
-#                         cryptos.append(base_currency)
+#                 for coin in data:
+#                     symbol = coin["symbol"].upper()
+#                     name = coin["name"]
+#                     cryptos.append({"name": name, "symbol": symbol})
                 
 #                 print(f"\nCryptos on {exchange_name}:")
-#                 print(list(set(cryptos)))
+#                 print(cryptos)
                 
-#                 # return list(set(cryptos))
 #                 return jsonify({
 #                     "message": "Cryptos list sent successfully",
 #                     "exchange_name": exchange_name,
-#                     "cryptos": list(set(cryptos))
+#                     "cryptos": cryptos
 #                 }), 200
 #             else:
-#                 print(f"Failed to fetch data from Coinbase: {response.status_code}")
-#                 return []
+#                 print(f"Failed to fetch data from CoinGecko: {response.status_code}")
+#                 return jsonify({
+#                     "message": f"Failed to fetch data from CoinGecko: {response.status_code}"
+#                 }), 500
 
 #         elif exchange_name == "binance":
 #             url = "https://api.binance.com/api/v3/exchangeInfo"
@@ -5152,7 +5147,6 @@ def fetch_cryptos_from_exchange():
 #                 print(f"\nCryptos on {exchange_name}:")
 #                 print(list(set(cryptos)))
                 
-#                 # return list(set(cryptos))
 #                 return jsonify({
 #                     "message": "Cryptos list sent successfully",
 #                     "exchange_name": exchange_name,
@@ -5160,7 +5154,9 @@ def fetch_cryptos_from_exchange():
 #                 }), 200
 #             else:
 #                 print(f"Failed to fetch data from Binance: {response.status_code}")
-#                 return []
+#                 return jsonify({
+#                     "message": f"Failed to fetch data from Binance: {response.status_code}"
+#                 }), 500
 
 #         elif exchange_name == "binance.us":
 #             url = "https://api.binance.us/api/v3/exchangeInfo"
@@ -5175,7 +5171,6 @@ def fetch_cryptos_from_exchange():
 #                 print(f"\nCryptos on {exchange_name}:")
 #                 print(list(set(cryptos)))
                 
-#                 # return list(set(cryptos))
 #                 return jsonify({
 #                     "message": "Cryptos list sent successfully",
 #                     "exchange_name": exchange_name,
@@ -5183,15 +5178,18 @@ def fetch_cryptos_from_exchange():
 #                 }), 200
 #             else:
 #                 print(f"Failed to fetch data from Binance.US: {response.status_code}")
-#                 return []
+#                 return jsonify({
+#                     "message": f"Failed to fetch data from Binance.US: {response.status_code}"
+#                 }), 500
 
 #         else:
 #             print("Exchange not supported.")
-#             return jsonify({"message": f"No Crypto Exchange found : {e}"}), 404
+#             return jsonify({"message": "Exchange not supported."}), 404
         
 #     except Exception as e:
 #         print(f"Error fetching cryptos for {exchange_name}: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
+
 
 
 ####################################################################################
