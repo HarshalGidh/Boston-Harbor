@@ -355,12 +355,19 @@ def email_verification():
             recipients=[email]
         )
         msg.body = (
-            f"Hello,\n\n"
-            f"Your email has been successfully verified. Use the following link to complete your sign-up process:\n\n"
+            f"Dear User,\n\n"
+            f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
+            f"Click the link below to finish setting up your account:\n"
             f"{sign_up_link}\n\n"
-            f"If you did not request this verification, please ignore this email.\n\n"
-            f"Thank you."
+            f"Thank you for choosing us.\n\n"
         )
+        # msg.body = (
+        #     f"Hello,\n\n"
+        #     f"Your email has been successfully verified. Use the following link to complete your sign-up process:\n\n"
+        #     f"{sign_up_link}\n\n"
+        #     f"If you did not request this verification, please ignore this email.\n\n"
+        #     f"Thank you."
+        # )
         print(f"Sending email to: {email}\nContent: {msg.body}")
        
         # Send the email
@@ -4602,7 +4609,7 @@ import requests
 
 # Fetch Stocks for NASDAQ,NYSE,S&P500 and DOW JONES :
 
-# # V-2 :
+# # V-3 :
 
 def fetch_all_assets_by_preference(market_name, preference=None):
     """
@@ -4628,12 +4635,10 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     if len(data) > 2 and data[2].strip() == exchange_code:
                         symbol = data[0]
                         name = data[1]
-                        # asset_type = data[3].strip().lower()  # Assuming the asset type is in the 4th column
 
                         # Filter based on preference
-                        if preference : #or asset_type == preference:
+                        if preference:  # Assuming preference is handled externally
                             assets.append({"name": name, "symbol": symbol, "type": preference})
-                            
                 return assets
             else:
                 print(f"Alpha Vantage API error: {response.status_code}")
@@ -4652,35 +4657,13 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     cols = row.find_all("td")
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
-                    # S&P 500 typically contains only stocks
                     if not preference or preference == "stocks":
                         assets.append({"name": name, "symbol": symbol, "type": "stock"})
                 return assets
             else:
                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
                 return []
-
-        # Fetch for Dow Jones using Wikipedia
-        elif market_name == "dowjones":
-            url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
-            response = requests.get(url)
-            if response.status_code == 200:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(response.content, "html.parser")
-                table = soup.find("table", {"class": "wikitable sortable"})
-                rows = table.find_all("tr")[1:]  # Skip header row
-                for row in rows:
-                    cols = row.find_all("td")
-                    symbol = cols[2].text.strip()
-                    name = cols[1].text.strip()
-                    # Dow Jones typically contains only stocks
-                    if not preference or preference == "stocks":
-                        assets.append({"name": name, "symbol": symbol, "type": "stock"})
-                return assets
-            else:
-                print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
-                return []
-
+            
         # If no matching market is found
         return []
 
@@ -4688,93 +4671,6 @@ def fetch_all_assets_by_preference(market_name, preference=None):
         print(f"Error fetching assets for {market_name}: {e}")
         return []
 
-
-# # v-1 :
-
-# def fetch_all_stocks_for_market_dynamic(market_name):
-#     """
-#     Fetch all stocks for a given market.
-#     Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
-#     """
-#     try:
-#         market_name = market_name.lower()
-#         assets = []
-
-#         # Fetch for NASDAQ and NYSE using Alpha Vantage
-#         if market_name == "nasdaq":
-#             exchange_code = "NASDAQ"
-#         elif market_name == "nyse":
-#             exchange_code = "NYSE"
-#         else:
-#             exchange_code = None
-
-#         if exchange_code:
-#             # Alpha Vantage API for NASDAQ and NYSE
-#             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
-#             response = requests.get(url)
-
-#             if response.status_code == 200:
-#                 stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
-#                 for row in stocks[1:]:  # Skip header row
-#                     data = row.split(",")
-#                     if len(data) > 2 and data[2].strip() == exchange_code:
-#                         symbol = data[0]
-#                         name = data[1]
-#                         assets.append({"name": name, "symbol": symbol})
-#                 return assets
-#             else:
-#                 print(f"Alpha Vantage API error: {response.status_code}")
-#                 return []
-
-#         # Fetch for S&P500 and Dow Jones using Wikipedia
-#         elif market_name == "s&p500":
-#             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-#             response = requests.get(url)
-#             if response.status_code == 200:
-#                 from bs4 import BeautifulSoup
-#                 soup = BeautifulSoup(response.content, "html.parser")
-#                 table = soup.find("table", {"id": "constituents"})
-#                 rows = table.find_all("tr")[1:]  # Skip header row
-#                 for row in rows:
-#                     cols = row.find_all("td")
-#                     symbol = cols[0].text.strip()
-#                     name = cols[1].text.strip()
-#                     assets.append({"name": name, "symbol": symbol})
-                    
-#                 print(f"\nAssets : \n{assets}")        
-                    
-#                 return assets
-#             else:
-#                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
-#                 return []
-
-#         elif market_name == "dowjones":
-#             url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
-#             response = requests.get(url)
-#             if response.status_code == 200:
-#                 from bs4 import BeautifulSoup
-#                 soup = BeautifulSoup(response.content, "html.parser")
-#                 table = soup.find("table", {"class": "wikitable sortable"})
-#                 rows = table.find_all("tr")[1:]  # Skip header row
-#                 for row in rows:
-#                     cols = row.find_all("td")
-#                     symbol = cols[2].text.strip()
-#                     name = cols[1].text.strip()
-#                     assets.append({"name": name, "symbol": symbol})
-                
-#                 print(f"\nAssets : \n{assets}")    
-                    
-#                 return assets
-#             else:
-#                 print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
-#                 return []
-
-#         # If no matching market is found
-#         return []
-
-#     except Exception as e:
-#         print(f"Error fetching stocks for {market_name}: {e}")
-#         return []
 
 
 @app.route('/market-assets', methods=['POST'])
@@ -4827,46 +4723,323 @@ def market_assets():
         print(f"Error in market-assets API: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
+
+################################################ Fetch Bonds from Categories #################################################
+
+# def fetch_treasure_bonds():
+#     """
+#     Fetch bond data (Treasury Yields) from Alpha Vantage.
+#     """
+#     try:
+#         url = f"https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=monthly&maturity=10year&apikey={ALPHA_VANTAGE_API_KEY}"
+#         response = requests.get(url)
+
+#         if response.status_code == 200:
+#             data = response.json()
+#             if "data" in data:
+#                 bonds = []
+#                 for item in data["data"]:
+#                     maturity_date = item.get("maturityDate", "N/A")
+#                     yield_rate = item.get("value", "N/A")
+#                     bonds.append({"name": f"10 Year Treasury", "symbol": "10Y", "yield": yield_rate, "maturity": maturity_date})
+
+#                 return bonds
+#             else:
+#                 print("No bond data available.")
+#                 return []
+#         else:
+#             print(f"Alpha Vantage API error: {response.status_code}")
+#             return []
+#     except Exception as e:
+#         print(f"Error fetching bonds: {e}")
+#         return []
+    
+
+# Fetch Treasury Bonds
+def fetch_treasury_bonds():
+    try:
+        url = f"https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=monthly&maturity=10year&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data:
+                bonds = []
+                for item in data["data"]:
+                    maturity_date = item.get("maturityDate", "N/A")
+                    yield_rate = item.get("value", "N/A")
+                    bonds.append({
+                        "name": "10 Year Treasury",
+                        "symbol": "10Y",
+                        "yield": yield_rate,
+                        "maturity": maturity_date
+                    })
+                return bonds
+            else:
+                print("No bond data available.")
+                return []
+        else:
+            print(f"Alpha Vantage API error: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Error fetching Treasury bonds: {e}")
+        return []
+
+# Fetch Corporate Bonds
+def fetch_corporate_bonds():
+    try:
+        url = f"https://www.alphavantage.co/query?function=CORPORATE_BOND&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data:
+                bonds = [
+                    {
+                        "name": item.get("name", "N/A"),
+                        "symbol": item.get("symbol", "N/A"),
+                        "yield": item.get("yield", "N/A"),
+                        "maturity": item.get("maturityDate", "N/A")
+                    }
+                    for item in data["data"]
+                ]
+                return bonds
+            else:
+                print("No corporate bond data available.")
+                return []
+        else:
+            print(f"Alpha Vantage API error: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Error fetching Corporate bonds: {e}")
+        return []
+
+# Fetch Mortgage-Related Bonds
+def fetch_mortgage_related_bonds():
+    try:
+        url = f"https://www.alphavantage.co/query?function=MORTGAGE_RELATED_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data:
+                bonds = [
+                    {
+                        "name": item.get("name", "N/A"),
+                        "symbol": item.get("symbol", "N/A"),
+                        "yield": item.get("yield", "N/A"),
+                        "maturity": item.get("maturityDate", "N/A")
+                    }
+                    for item in data["data"]
+                ]
+                return bonds
+            else:
+                print("No mortgage-related bond data available.")
+                return []
+        else:
+            print(f"Alpha Vantage API error: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Error fetching Mortgage-Related bonds: {e}")
+        return []
+
+# Fetch Municipal Bonds
+def fetch_municipal_bonds():
+    try:
+        url = f"https://www.alphavantage.co/query?function=MUNICIPAL_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data:
+                bonds = [
+                    {
+                        "name": item.get("name", "N/A"),
+                        "symbol": item.get("symbol", "N/A"),
+                        "yield": item.get("yield", "N/A"),
+                        "maturity": item.get("maturityDate", "N/A")
+                    }
+                    for item in data["data"]
+                ]
+                return bonds
+            else:
+                print("No municipal bond data available.")
+                return []
+        else:
+            print(f"Alpha Vantage API error: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Error fetching Municipal bonds: {e}")
+        return []
+
+
+# Fetch Money Market Bonds
+def fetch_money_market_bonds():
+    """
+    Fetch Money Market bond data from Alpha Vantage.
+    """
+    try:
+        url = f"https://www.alphavantage.co/query?function=MONEY_MARKET_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data:
+                bonds = [
+                    {
+                        "name": item.get("name", "N/A"),
+                        "symbol": item.get("symbol", "N/A"),
+                        "yield": item.get("yield", "N/A"),
+                        "maturity": item.get("maturityDate", "N/A")
+                    }
+                    for item in data["data"]
+                ]
+                return bonds
+            else:
+                print("No money market bond data available.")
+                return []
+        else:
+            print(f"Alpha Vantage API error: {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"Error fetching Money Market bonds: {e}")
+        return []
+
+# API to Fetch Bonds :
+
+@app.route('/fetch-bonds', methods=['POST'])
+def fetch_bonds():
+    try:
+        data = request.get_json()
+        category = data.get("category")
+
+        # Map category to functions
+        category_mapping = {
+            "treasury": fetch_treasury_bonds,
+            "corporate": fetch_corporate_bonds,
+            "mortgage": fetch_mortgage_related_bonds,
+            "municipal": fetch_municipal_bonds,
+            "money_market": fetch_money_market_bonds
+        }
+
+        if category in category_mapping:
+            bonds = category_mapping[category]()
+            return jsonify({"category": category, "bonds": bonds}), 200
+        else:
+            return jsonify({"message": f"Category {category} not recognized."}), 400
+
+    except Exception as e:
+        print(f"Error in fetch-bonds API: {e}")
+        return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+
+# API to Fetch Bonds :
+
+# @app.route('/fetch-bonds',  methods=['POST'])
+# def fetch_bonds():
+#     try:
+#         data = request.get_json()
+#         category= data.get("category")
+#         if category == "treasure":
+#             bonds = fetch_treasure_bonds()
+            
+#             print(f"{category} Bonds :\n{bonds}")
+            
+#             return jsonify({"bonds": bonds}), 200
+    
+#     except Exception as e:
+        
+#         print(f"Error in fetch-bonds API: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+###################################################### Fetch Commodities #######################################################
+
+
+# API to Fetch commodity data :
+
+@app.route('/fetch-commodities', methods=['POST'])
+def fetch_commodities():
+    
+    try:
+        data = request.get_json()
+        commodities= data.get("commodities")
+        # commodities = ["WTI", "BRENT", "NATURAL_GAS", "GOLD", "SILVER"]
+        assets = []
+
+        for commodity in commodities:
+            url = f"https://www.alphavantage.co/query?function=COMMODITY_EXCHANGE_RATE&from_symbol={commodity}&apikey={ALPHA_VANTAGE_API_KEY}"
+            response = requests.get(url)
+
+            if response.status_code == 200:
+                data = response.json()
+                if "Realtime Currency Exchange Rate" in data:
+                    price = data["Realtime Currency Exchange Rate"].get("5. Exchange Rate", "N/A")
+                    assets.append({"name": commodity, "price": price})
+            else:
+                print(f"Failed to fetch {commodity}: {response.status_code}")
+                
+        print(f"Commodities :\n{assets}")
+        
+        # return assets
+        return jsonify({
+                    "message": "Commodities list sent successfully",
+                    "commodities": assets,
+                    "price" : assets['price'],
+                }), 200
+    except Exception as e:
+        print(f"Error fetching commodities: {e}")
+        return []
+
+
+
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
+# v-2 :
 
 @app.route('/crypto-assets', methods=['POST'])
 def fetch_cryptos_from_exchange():
     """
     Fetch the list of cryptocurrencies available on a given exchange.
-    Supported exchanges: Coinbase, Binance, Binance.US, Coincheck.
+    Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
     """
     try:
-        exchange_name = data.get("exchange_name")
-        exchange_name = exchange_name.lower()
-        # exchange_name = "coinbase" 
-        # exchanges = ["Coinbase", "Binance", "Binance.US", "Coincheck"]  
-    
+        data = request.get_json()
+        exchange_name = data.get("exchange_name", "").lower()
+        
         cryptos = []
 
-        if exchange_name == "coinbase":
-            url = "https://api.pro.coinbase.com/products"
-            response = requests.get(url)
+        if exchange_name == "coingecko":
+            # CoinGecko API to fetch all cryptocurrencies
+            url = "https://api.coingecko.com/api/v3/coins/markets"
+            params = {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 250,
+                "page": 1,
+            }
+            response = requests.get(url, params=params)
             if response.status_code == 200:
                 data = response.json()
-                for item in data:
-                    base_currency = item["base_currency"]
-                    quote_currency = item["quote_currency"]
-                    if base_currency not in cryptos:
-                        cryptos.append(base_currency)
+                for coin in data:
+                    symbol = coin["symbol"].upper()
+                    name = coin["name"]
+                    cryptos.append({"name": name, "symbol": symbol})
                 
                 print(f"\nCryptos on {exchange_name}:")
-                print(list(set(cryptos)))
+                print(cryptos)
                 
-                # return list(set(cryptos))
                 return jsonify({
                     "message": "Cryptos list sent successfully",
                     "exchange_name": exchange_name,
-                    "cryptos": list(set(cryptos))
+                    "cryptos": cryptos
                 }), 200
             else:
-                print(f"Failed to fetch data from Coinbase: {response.status_code}")
-                return []
+                print(f"Failed to fetch data from CoinGecko: {response.status_code}")
+                return jsonify({
+                    "message": f"Failed to fetch data from CoinGecko: {response.status_code}"
+                }), 500
 
         elif exchange_name == "binance":
             url = "https://api.binance.com/api/v3/exchangeInfo"
@@ -4881,7 +5054,6 @@ def fetch_cryptos_from_exchange():
                 print(f"\nCryptos on {exchange_name}:")
                 print(list(set(cryptos)))
                 
-                # return list(set(cryptos))
                 return jsonify({
                     "message": "Cryptos list sent successfully",
                     "exchange_name": exchange_name,
@@ -4889,7 +5061,9 @@ def fetch_cryptos_from_exchange():
                 }), 200
             else:
                 print(f"Failed to fetch data from Binance: {response.status_code}")
-                return []
+                return jsonify({
+                    "message": f"Failed to fetch data from Binance: {response.status_code}"
+                }), 500
 
         elif exchange_name == "binance.us":
             url = "https://api.binance.us/api/v3/exchangeInfo"
@@ -4904,7 +5078,6 @@ def fetch_cryptos_from_exchange():
                 print(f"\nCryptos on {exchange_name}:")
                 print(list(set(cryptos)))
                 
-                # return list(set(cryptos))
                 return jsonify({
                     "message": "Cryptos list sent successfully",
                     "exchange_name": exchange_name,
@@ -4912,15 +5085,113 @@ def fetch_cryptos_from_exchange():
                 }), 200
             else:
                 print(f"Failed to fetch data from Binance.US: {response.status_code}")
-                return []
+                return jsonify({
+                    "message": f"Failed to fetch data from Binance.US: {response.status_code}"
+                }), 500
 
         else:
             print("Exchange not supported.")
-            return jsonify({"message": f"No Crypto Exchange found : {e}"}), 404
+            return jsonify({"message": "Exchange not supported."}), 404
         
     except Exception as e:
         print(f"Error fetching cryptos for {exchange_name}: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+# V-1 :
+
+# @app.route('/crypto-assets', methods=['POST'])
+# def fetch_cryptos_from_exchange():
+#     """
+#     Fetch the list of cryptocurrencies available on a given exchange.
+#     Supported exchanges: Coinbase, Binance, Binance.US, Coincheck.
+#     """
+#     try:
+#         data = request.get_json()
+#         exchange_name = data.get("exchange_name")
+#         exchange_name = exchange_name.lower()
+#         # exchange_name = "coinbase" 
+#         # exchanges = ["Coinbase", "Binance", "Binance.US", "Coincheck"]  
+    
+#         cryptos = []
+
+#         if exchange_name == "coinbase":
+#             url = "https://api.pro.coinbase.com/products"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for item in data:
+#                     base_currency = item["base_currency"]
+#                     quote_currency = item["quote_currency"]
+#                     if base_currency not in cryptos:
+#                         cryptos.append(base_currency)
+                
+#                 print(f"\nCryptos on {exchange_name}:")
+#                 print(list(set(cryptos)))
+                
+#                 # return list(set(cryptos))
+#                 return jsonify({
+#                     "message": "Cryptos list sent successfully",
+#                     "exchange_name": exchange_name,
+#                     "cryptos": list(set(cryptos))
+#                 }), 200
+#             else:
+#                 print(f"Failed to fetch data from Coinbase: {response.status_code}")
+#                 return []
+
+#         elif exchange_name == "binance":
+#             url = "https://api.binance.com/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol in data["symbols"]:
+#                     base_asset = symbol["baseAsset"]
+#                     if base_asset not in cryptos:
+#                         cryptos.append(base_asset)
+                
+#                 print(f"\nCryptos on {exchange_name}:")
+#                 print(list(set(cryptos)))
+                
+#                 # return list(set(cryptos))
+#                 return jsonify({
+#                     "message": "Cryptos list sent successfully",
+#                     "exchange_name": exchange_name,
+#                     "cryptos": list(set(cryptos))
+#                 }), 200
+#             else:
+#                 print(f"Failed to fetch data from Binance: {response.status_code}")
+#                 return []
+
+#         elif exchange_name == "binance.us":
+#             url = "https://api.binance.us/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol in data["symbols"]:
+#                     base_asset = symbol["baseAsset"]
+#                     if base_asset not in cryptos:
+#                         cryptos.append(base_asset)
+                
+#                 print(f"\nCryptos on {exchange_name}:")
+#                 print(list(set(cryptos)))
+                
+#                 # return list(set(cryptos))
+#                 return jsonify({
+#                     "message": "Cryptos list sent successfully",
+#                     "exchange_name": exchange_name,
+#                     "cryptos": list(set(cryptos))
+#                 }), 200
+#             else:
+#                 print(f"Failed to fetch data from Binance.US: {response.status_code}")
+#                 return []
+
+#         else:
+#             print("Exchange not supported.")
+#             return jsonify({"message": f"No Crypto Exchange found : {e}"}), 404
+        
+#     except Exception as e:
+#         print(f"Error fetching cryptos for {exchange_name}: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ####################################################################################
@@ -5652,7 +5923,6 @@ def analyze_portfolio():
 
         portfolio_news = collect_portfolio_news(filtered_portfolio_data)
 
-        # Construct the LLM task prompt
         task = f"""
                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
                 The portfolio contains several stocks and investments.
@@ -5666,10 +5936,51 @@ def analyze_portfolio():
                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
 
-                Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable.
-                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
-                Also, provide suggestions for asset allocation, tax efficiency, and market trends.
+                Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
+                Based on the Client's Financial Situation and the Client's Financial Goals,
+                Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+                and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
+                and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+
+                - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
+                - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
+                - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
+                Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+
+                Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+                Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable irrespective of their current investmnets or remaining funds or current returns.If the user has a good portfolio mention that as well.
+                Additionally, provide:
+
+                1. A risk assessment of the current portfolio composition.
+                2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+                3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+                4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+                5. Strategies for tax efficiency in the portfolio management.
+                6. Insights on market trends and current economic news that could impact the portfolio.
+                7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+                8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
+
+                Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+                Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
                 """
+                
+        # task = f"""
+        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
+        #         The portfolio contains several stocks and investments.
+        #         Based on the portfolio data provided:
+
+        #         - The available funds for the client are {funds}.
+        #         - The current value of the portfolio is {portfolio_current_value}.
+        #         - The portfolio's daily change is {portfolio_daily_change}.
+        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
+
+        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable irrespective of their current investmnets or remaining funds or current returns.If the user has a good portfolio mention that as well.
+        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
+        #         Also, provide suggestions for asset allocation, tax efficiency, and market trends.
+        #         """
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(task)
@@ -5762,46 +6073,46 @@ def analyze_portfolio():
 
 
 #         # Task prompt for LLM based on the asset name
-#         task = f"""
-#                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-#                 The portfolio contains several stocks and investments.
-#                 Based on the portfolio data provided:
+        # task = f"""
+        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
+        #         The portfolio contains several stocks and investments.
+        #         Based on the portfolio data provided:
 
-#                 - The available funds for the client are {funds}.
-#                 - The current value of the portfolio is {portfolio_current_value}.
-#                 - The portfolio's daily change is {portfolio_daily_change}.
-#                 - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-#                 - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-#                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-#                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
+        #         - The available funds for the client are {funds}.
+        #         - The current value of the portfolio is {portfolio_current_value}.
+        #         - The portfolio's daily change is {portfolio_daily_change}.
+        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
+        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
+        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
+        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
 
-#                 Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
-#                 Based on the Client's Financial Situation and the Client's Financial Goals,
-#                 Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-#                 and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
-#                 and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
+        #         Based on the Client's Financial Situation and the Client's Financial Goals,
+        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
+        #         and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
+        #         and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
 
-#                 - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
-#                 - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
-#                 - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
-#                 Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+        #         - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
+        #         - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
+        #         - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
+        #         Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
 
-#                 Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+        #         Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
 
-#                 Additionally, provide:
+        #         Additionally, provide:
 
-#                 1. A risk assessment of the current portfolio composition.
-#                 2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-#                 3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-#                 4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-#                 5. Strategies for tax efficiency in the portfolio management.
-#                 6. Insights on market trends and current economic news that could impact the portfolio.
-#                 7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
-#                 8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
+        #         1. A risk assessment of the current portfolio composition.
+        #         2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
+        #         3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
+        #         4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
+        #         5. Strategies for tax efficiency in the portfolio management.
+        #         6. Insights on market trends and current economic news that could impact the portfolio.
+        #         7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
+        #         8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
 
-#                 Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-#                 Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
-#                 """
+        #         Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
+        #         Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
+        #         """
 
 #         # Generate response using LLM
 #         try:
