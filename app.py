@@ -2770,7 +2770,7 @@ def get_all_client_data():
                         data_json = json.loads(file_data)
  
                         # Add isNewClient flag
-                        process_is_new_client(data_json)
+                        # process_is_new_client(data_json)
                         all_data.append(data_json)
                     except Exception as e:
                         print(f"Error reading file {obj['Key']}: {e}")
@@ -2785,7 +2785,7 @@ def get_all_client_data():
                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
                     with open(file_path, 'r') as f:
                         client_data = json.load(f)
-                        process_is_new_client(client_data)
+                        # process_is_new_client(client_data)
                         all_data.append(client_data)
  
             if not all_data:
@@ -4627,9 +4627,10 @@ def fetch_all_assets_by_preference(market_name, preference=None):
             exchange_code = "NASDAQ" if market_name == "nasdaq" else "NYSE"
             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
             response = requests.get(url)
-
+            print(response)
             if response.status_code == 200:
                 stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
+                print(stocks)
                 for row in stocks[1:]:  # Skip header row
                     data = row.split(",")
                     if len(data) > 2 and data[2].strip() == exchange_code:
@@ -4639,6 +4640,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                         # Filter based on preference
                         if preference:  # Assuming preference is handled externally
                             assets.append({"name": name, "symbol": symbol, "type": preference})
+                print(f"Assets in {market_name} :\n{assets}")
                 return assets
             else:
                 print(f"Alpha Vantage API error: {response.status_code}")
@@ -4679,6 +4681,8 @@ def market_assets():
         data = request.get_json()
         market_name = data.get("market_name")
         preference = data.get("preference")
+        print(market_name)
+        print(preference)
         # preference = "stocks"
         
         if not market_name:
@@ -4695,7 +4699,6 @@ def market_assets():
         
         # updated_assets = fetch_all_stocks_for_market_dynamic(market_name)
         updated_assets = fetch_all_assets_by_preference(market_name,preference)
-        
         
         if not updated_assets:
             return jsonify({"message": f"No data found for the market: {market_name}"}), 404
@@ -4961,38 +4964,97 @@ def fetch_bonds():
 
 # API to Fetch commodity data :
 
+# #V2 :
+
+# @app.route('/fetch-commodity-prices', methods=['POST'])
+# def fetch_commodity_prices():
+
 @app.route('/fetch-commodities', methods=['POST'])
 def fetch_commodities():
-    
+    """
+    Fetches the price of specific commodities: WTI Crude, Brent Crude, Gold, Silver, Natural Gas.
+    """
     try:
         data = request.get_json()
-        commodities= data.get("commodities")
-        # commodities = ["WTI", "BRENT", "NATURAL_GAS", "GOLD", "SILVER"]
-        assets = []
-
-        for commodity in commodities:
-            url = f"https://www.alphavantage.co/query?function=COMMODITY_EXCHANGE_RATE&from_symbol={commodity}&apikey={ALPHA_VANTAGE_API_KEY}"
-            response = requests.get(url)
-
-            if response.status_code == 200:
-                data = response.json()
-                if "Realtime Currency Exchange Rate" in data:
-                    price = data["Realtime Currency Exchange Rate"].get("5. Exchange Rate", "N/A")
-                    assets.append({"name": commodity, "price": price})
-            else:
-                print(f"Failed to fetch {commodity}: {response.status_code}")
-                
-        print(f"Commodities :\n{assets}")
+        commodities = data.get("commodities") #, [])
         
-        # return assets
+        # Commodity tickers for Yahoo Finance
+        commodity_tickers = {
+            "WTI Crude": "CL=F",
+            "Brent Crude": "BZ=F",
+            "Gold": "GC=F",
+            "Silver": "SI=F",
+            "Natural Gas": "NG=F"
+        }
+
+        commodity_prices = {}
+
+        for name, ticker in commodity_tickers.items():
+            commodity = yf.Ticker(ticker)
+            info = commodity.info
+
+            # Fetch the price
+            price = info.get("regularMarketPrice")
+            if price:
+                commodity_prices[name] = price
+            else:
+                commodity_prices[name] = "Price not available"
+
         return jsonify({
-                    "message": "Commodities list sent successfully",
-                    "commodities": assets,
-                    "price" : assets['price'],
-                }), 200
+            "message": "Commodity prices fetched successfully",
+            "prices": commodity_prices
+        }), 200
+
     except Exception as e:
-        print(f"Error fetching commodities: {e}")
-        return []
+        print(f"Error fetching commodity prices: {e}")
+        return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+# # V1 : using Alpha-vantage-api :
+
+# @app.route('/fetch-commodities', methods=['POST'])
+# def fetch_commodities():
+#     """
+#     Fetches commodity data based on the provided list of commodities.
+#     """
+#     try:
+        # data = request.get_json()
+        # commodities = data.get("commodities") #, [])
+        
+#         if not commodities:
+#             return jsonify({"message": "No commodities provided"}), 400
+
+#         assets = []
+        
+#         for commodity in commodities:
+#             # Fetch commodity data using Alpha Vantage's DIGITAL_CURRENCY_INTRADAY (if available)
+#             url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={commodity}&interval=5min&apikey={ALPHA_VANTAGE_API_KEY}"
+#             response = requests.get(url)
+
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 time_series = data.get("Time Series (5min)", {})
+                
+#                 if time_series:
+#                     latest_timestamp = sorted(time_series.keys())[-1]
+#                     latest_data = time_series[latest_timestamp]
+#                     price = latest_data.get("1. open", "N/A")  # Get the latest opening price
+                    
+#                     assets.append({"name": commodity, "price": price})
+#                 else:
+#                     print(f"No data found for {commodity}")
+#             else:
+#                 print(f"Failed to fetch {commodity}: {response.status_code}")
+
+#         print(f"Commodities: {assets}")
+        
+#         return jsonify({
+#             "message": "Commodities list fetched successfully",
+#             "commodities": assets
+#         }), 200
+#     except Exception as e:
+#         print(f"Error fetching commodities: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 
@@ -7308,6 +7370,109 @@ def get_top_low_portfolios(insights):
 
 # # Get Top Low Performance API :
 
+# @app.route('/get_top_low_performers', methods=['POST'])
+# def get_top_low_performers_api():
+    # try:
+    #     # Fetch all clients' financial data
+    #     clients = request.json.get("data")
+    #     if not clients:
+    #         return jsonify({"message": "No client data provided"}), 400
+
+    #     client_performance = []
+    #     for client in clients:
+    #         client_id = client.get("uniqueId")
+    #         if not client_id:
+    #             continue
+
+    #         # Load client financial data (from AWS or local based on USE_AWS)
+    #         if USE_AWS:
+    #             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+    #             try:
+    #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+    #                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+    #             except Exception as e:
+    #                 logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+    #                 # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+    #                 continue
+    #         else:
+    #             client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+    #             if not os.path.exists(client_data_file_path):
+    #                 # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+    #                 continue
+    #             with open(client_data_file_path, 'r') as f:
+    #                 client_data = json.load(f)
+
+    #         # Load portfolio data
+    #         if USE_AWS:
+    #             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+    #             try:
+    #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+    #                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+    #             except s3.exceptions.NoSuchKey:
+    #                 continue
+    #                 # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+    #         else:
+    #             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+    #             if not os.path.exists(portfolio_file_path):
+    #                 # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+    #                 continue
+    #             with open(portfolio_file_path, 'r') as file:
+    #                 portfolio_data = json.load(file)
+            
+    #         funds = client_data["investmentAmount"]
+            
+    #         if not funds or funds == '0' :
+    #             continue
+            
+    #         invested_amount = sum(asset["Amount_Invested"] for asset in portfolio_data)
+            
+    #         available_funds = funds - invested_amount
+
+    #         # Calculate portfolio performance
+    #         portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
+    #         portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+
+    #         if portfolio_current_value != 0:
+    #             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+    #         else:
+    #             portfolio_investment_gain_loss_perc = 0
+
+    #         # Append client performance
+    #         # client_performance.append({
+    #         #     "client_id": client_id,
+    #         #     "client_name": client_data["clientDetail"]["clientName"],
+    #         #     "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc
+    #         # })
+            
+    #         client_performance.append({
+    #             "client_id": client_id,
+    #             "client_name": client_data["clientDetail"]["clientName"],
+    #             "funds":funds,
+    #             "available_funds": available_funds,
+    #             "invested_amount": invested_amount,
+    #             "portfolio_current_value": portfolio_current_value,
+    #             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+    #             "portfolio_investment_gain_loss":portfolio_investment_gain_loss
+    #         })
+
+    #     # Sort clients by portfolio investment gain/loss percentage
+    #     client_performance.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+
+    #     # Get top 10 and low 10 performers
+    #     top_performers = client_performance[:10]
+    #     low_performers = client_performance[-10:]
+
+    #     return jsonify({
+    #         "message": "Top and Low Performers Retrieved Successfully",
+    #         "client_performance": client_performance,
+    #         "top_performers": top_performers,
+    #         "low_performers": low_performers
+    #     }), 200
+
+    # except Exception as e:
+    #     print(f"Error in get_top_low_performers_api: {e}")
+    #     return jsonify({"message": f"Error in get_top_low_performers_api: {e}"}), 500
+
 @app.route('/get_top_low_performers', methods=['POST'])
 def get_top_low_performers_api():
     try:
@@ -7330,12 +7495,10 @@ def get_top_low_performers_api():
                     client_data = json.loads(response['Body'].read().decode('utf-8'))
                 except Exception as e:
                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-                    # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
                     continue
             else:
                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
                 if not os.path.exists(client_data_file_path):
-                    # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
                     continue
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
@@ -7348,26 +7511,24 @@ def get_top_low_performers_api():
                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
                 except s3.exceptions.NoSuchKey:
                     continue
-                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
             else:
                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
                 if not os.path.exists(portfolio_file_path):
-                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
                     continue
                 with open(portfolio_file_path, 'r') as file:
                     portfolio_data = json.load(file)
-            
-            funds = client_data["investmentAmount"]
-            
-            if not funds or funds == '0' :
+
+            # Parse numeric values safely
+            funds = float(client_data.get("investmentAmount", 0))  # Convert to float
+            if funds == 0:
                 continue
-            
-            invested_amount = sum(map(float,portfolio_data["Amount_Invested"]))
+
+            invested_amount = sum(float(asset.get("Amount_Invested", 0)) for asset in portfolio_data)
             available_funds = funds - invested_amount
 
             # Calculate portfolio performance
-            portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
-            portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+            portfolio_current_value = sum(float(asset.get("current_value", 0)) for asset in portfolio_data)
+            portfolio_investment_gain_loss = sum(float(asset.get("Investment_Gain_or_Loss", 0)) for asset in portfolio_data)
 
             if portfolio_current_value != 0:
                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
@@ -7375,21 +7536,15 @@ def get_top_low_performers_api():
                 portfolio_investment_gain_loss_perc = 0
 
             # Append client performance
-            # client_performance.append({
-            #     "client_id": client_id,
-            #     "client_name": client_data["clientDetail"]["clientName"],
-            #     "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc
-            # })
-            
             client_performance.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
-                "funds":funds,
+                "funds": funds,
                 "available_funds": available_funds,
                 "invested_amount": invested_amount,
                 "portfolio_current_value": portfolio_current_value,
                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-                "portfolio_investment_gain_loss":portfolio_investment_gain_loss
+                "portfolio_investment_gain_loss": portfolio_investment_gain_loss
             })
 
         # Sort clients by portfolio investment gain/loss percentage
@@ -7479,7 +7634,8 @@ def analyze_dashboard():
             investment_personality = client_data.get("investment_personality", "Unknown")
             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
             
-            invested_amount = sum(map(float,portfolio_data["Amount_Invested"]))
+            invested_amount = sum(asset["Amount_Invested"] for asset in portfolio_data)
+
             available_funds = funds - invested_amount
             
             # Initialize variables to calculate portfolio-level metrics
