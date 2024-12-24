@@ -4774,7 +4774,7 @@ def fetch_treasury_bonds():
                         "name": "10 Year Treasury",
                         "symbol": "10Y",
                         "yield": yield_rate,
-                        "maturity": maturity_date
+                        # "maturity": maturity_date
                     })
                 return bonds
             else:
@@ -7330,11 +7330,13 @@ def get_top_low_performers_api():
                     client_data = json.loads(response['Body'].read().decode('utf-8'))
                 except Exception as e:
                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-                    return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+                    # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+                    continue
             else:
                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
                 if not os.path.exists(client_data_file_path):
-                    return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+                    # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+                    continue
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
 
@@ -7345,17 +7347,19 @@ def get_top_low_performers_api():
                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
                 except s3.exceptions.NoSuchKey:
-                    return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+                    continue
+                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
             else:
                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
                 if not os.path.exists(portfolio_file_path):
-                    return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+                    continue
                 with open(portfolio_file_path, 'r') as file:
                     portfolio_data = json.load(file)
             
             funds = client_data["investmentAmount"]
             
-            if not funds or funds.size() == 0 or funds == '0' :
+            if not funds or funds == '0' :
                 continue
             
             invested_amount = sum(map(float,portfolio_data["Amount_Invested"]))
@@ -7435,16 +7439,22 @@ def analyze_dashboard():
                     client_data = json.loads(response['Body'].read().decode('utf-8'))
                 except Exception as e:
                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-                    return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+                    continue
+                    # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
             else:
                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
                 if not os.path.exists(client_data_file_path):
-                    return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+                    # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+                    continue
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
             
             # Load portfolio data (using local or AWS storage based on USE_AWS)
             # This might be time Consuming as we are checking each clients portfolio individually T.C : O(n):
+            funds = client_data["investmentAmount"]
+            
+            if not funds or funds == '0' :
+                continue
             
             if USE_AWS:
                 portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
@@ -7452,11 +7462,13 @@ def analyze_dashboard():
                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
                 except s3.exceptions.NoSuchKey:
-                    return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+                    continue
+                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
             else:
                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
                 if not os.path.exists(portfolio_file_path):
-                    return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+                    continue
+                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
                 with open(portfolio_file_path, 'r') as file:
                     portfolio_data = json.load(file)
 
@@ -7466,10 +7478,6 @@ def analyze_dashboard():
             net_worth = assets - liabilities
             investment_personality = client_data.get("investment_personality", "Unknown")
             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
-            funds = client_data["investmentAmount"]
-            
-            if not funds or funds.size() == 0 or funds == '0' :
-                continue
             
             invested_amount = sum(map(float,portfolio_data["Amount_Invested"]))
             available_funds = funds - invested_amount
