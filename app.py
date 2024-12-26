@@ -116,7 +116,10 @@ def list_s3_keys(bucket_name, prefix=""):
 
 # Call the function
 # list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
-list_s3_keys(S3_BUCKET_NAME, order_list_folder)
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+
+
 
 
 
@@ -7565,6 +7568,149 @@ def get_top_low_performers_api():
         print(f"Error in get_top_low_performers_api: {e}")
         return jsonify({"message": f"Error in get_top_low_performers_api: {e}"}), 500
 
+#########################################################################################################
+# # Generate Inforgraphics for Dashboard :
+
+# fetch portfolio data quickly :
+
+# # V-2 :
+
+from concurrent.futures import ThreadPoolExecutor
+
+def fetch_consolidated_portfolio(client_ids):
+    """
+    Fetch consolidated portfolio data for multiple clients from AWS S3 bucket.
+    """
+    portfolios = {}
+    try:
+        # List all objects in the portfolio folder
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=portfolio_list_folder)
+
+        if "Contents" in response:
+            # Filter objects for the requested client IDs
+            portfolio_keys = [
+                obj["Key"] for obj in response["Contents"]
+                if obj["Key"].split("/")[-1].replace(".json", "").split("//")[-1] in client_ids
+            ]
+
+            # Function to fetch a single portfolio
+            def fetch_portfolio(key):
+                try:
+                    obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+                    client_id = key.split("/")[-1].replace(".json", "")
+                    return client_id, json.loads(obj["Body"].read().decode("utf-8"))
+                except Exception as e:
+                    print(f"Error fetching portfolio {key}: {e}")
+                    return None, None
+
+            # Use ThreadPoolExecutor for parallel fetching
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(fetch_portfolio, portfolio_keys))
+
+            # Consolidate results
+            portfolios = {client_id: data for client_id, data in results if client_id and data}
+
+        return portfolios
+
+    except Exception as e:
+        print(f"Error fetching portfolios from S3: {e}")
+        return portfolios
+
+
+# # V-1 :
+
+# def fetch_consolidated_portfolio(client_ids):
+#     """
+#     Fetch consolidated portfolio data for multiple clients from AWS S3 bucket.
+#     """
+#     portfolios = {}
+#     try:
+#         # List all objects in the portfolio folder
+#         response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=portfolio_list_folder)
+
+#         if "Contents" in response:
+#             # Filter objects for the requested client IDs
+#             portfolio_keys = [obj["Key"] for obj in response["Contents"] if obj["Key"].split("/")[-1].replace("portfolio_", "").replace(".json", "") in client_ids]
+
+#             for key in portfolio_keys:
+#                 # Fetch portfolio data for each client
+#                 client_id = key.split("/")[-1].replace("portfolio_", "").replace(".json", "")
+#                 obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+#                 portfolios[client_id] = json.loads(obj["Body"].read().decode("utf-8"))
+
+#         return portfolios
+
+#     except Exception as e:
+#         print(f"Error fetching portfolios from S3: {e}")
+#         return portfolios
+
+
+# API to get the asset-class infographics :
+@app.route('/asset_class_infographics', methods=['POST'])
+def asset_class_infographics():
+    try:
+        # Fetch all clients' financial data
+        clients = request.json.get("data")
+        if not clients:
+            return jsonify({"message": "No client data provided"}), 400
+
+        client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+        if not client_ids:
+            return jsonify({"message": "No valid client IDs found"}), 400
+
+        # Fetch consolidated portfolio data
+        portfolios = fetch_consolidated_portfolio(client_ids)
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+        # Initialize asset class data
+        asset_class_data = {}
+        
+        # Process portfolios for asset class aggregation
+        for client_id, portfolio in portfolios.items():
+            for asset in portfolio.get("assets", []):
+                asset_class = asset.get("asset_class", "Other")
+                if asset_class not in asset_class_data:
+                    asset_class_data[asset_class] = {
+                        "clients": [],
+                        "total_invested": 0,
+                        "total_returns": 0
+                    }
+                # Update asset class data
+                asset_class_data[asset_class]["clients"].append({
+                    "client_id": client_id,
+                    "client_name": clients[client_ids.index(client_id)].get("clientName", "Unknown"),
+                    "investment_personality": clients[client_ids.index(client_id)].get("investment_personality", "Unknown"),
+                    "invested_amount": asset.get("invested_amount", 0),
+                    "returns": asset.get("returns", 0)
+                })
+                asset_class_data[asset_class]["total_invested"] += asset.get("invested_amount", 0)
+                asset_class_data[asset_class]["total_returns"] += asset.get("returns", 0)
+
+        # Prepare pie chart data
+        pie_chart_data = {
+            "labels": list(asset_class_data.keys()),
+            "datasets": [{
+                "data": [data["total_invested"] for data in asset_class_data.values()],
+                "label": "Total Invested"
+            }]
+        }
+
+        # Format the response for the frontend
+        response = {
+            "message": "Asset Class Infographics generated successfully",
+            "pie_chart_data": pie_chart_data,
+            "details": asset_class_data
+        }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"Error in asset_class_infographics: {e}")
+        return jsonify({"message": f"Error in asset_class_infographics: {e}"}), 500
+
+
+#########################################################################################################
 
 # Analyze Dashboard :
 
