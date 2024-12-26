@@ -7714,7 +7714,7 @@ def asset_class_infographics():
 
 # Analyze Dashboard :
 
-# V-2 :
+# V-1 :
 
 @app.route('/analyze_dashboard', methods=['POST'])
 def analyze_dashboard():
@@ -7726,7 +7726,7 @@ def analyze_dashboard():
 
         insights = []
         performance_list = []
-        
+
         for client in clients:
             client_id = client.get("uniqueId")
             if not client_id:
@@ -7741,22 +7741,19 @@ def analyze_dashboard():
                 except Exception as e:
                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
                     continue
-                    # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
             else:
                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
                 if not os.path.exists(client_data_file_path):
-                    # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
                     continue
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
-            
-            # Load portfolio data (using local or AWS storage based on USE_AWS)
-            # This might be time Consuming as we are checking each clients portfolio individually T.C : O(n):
-            funds = client_data["investmentAmount"]
-            
-            if not funds or funds == '0' :
+
+            # Ensure funds are numeric
+            funds = float(client_data.get("investmentAmount", 0) or 0)
+            if funds <= 0:
                 continue
-            
+
+            # Load portfolio data
             if USE_AWS:
                 portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
                 try:
@@ -7764,30 +7761,28 @@ def analyze_dashboard():
                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
                 except s3.exceptions.NoSuchKey:
                     continue
-                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
             else:
                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
                 if not os.path.exists(portfolio_file_path):
                     continue
-                    # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
                 with open(portfolio_file_path, 'r') as file:
                     portfolio_data = json.load(file)
 
-            # Extract relevant financial data
-            assets = sum(map(float, client_data["assetsDatasets"]["datasets"][0]["data"]))
-            liabilities = sum(map(float, client_data["liabilityDatasets"]["datasets"][0]["data"]))
+            # Safely parse assets and liabilities
+            assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+            liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
             net_worth = assets - liabilities
+
             investment_personality = client_data.get("investment_personality", "Unknown")
             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
-            
-            invested_amount = sum(asset["Amount_Invested"] for asset in portfolio_data)
 
+            invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
             available_funds = funds - invested_amount
-            
+
             # Initialize variables to calculate portfolio-level metrics
-            portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
-            portfolio_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
-            portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
+            portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+            portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+            portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
 
             if portfolio_current_value != 0:
                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
@@ -7796,18 +7791,18 @@ def analyze_dashboard():
                 portfolio_daily_change_perc = 0
                 portfolio_investment_gain_loss_perc = 0
 
-             # Append to performance list for ranking
+            # Append to performance list
             performance_list.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
-                "funds":funds,
+                "funds": funds,
                 "available_funds": available_funds,
                 "invested_amount": invested_amount,
                 "portfolio_current_value": portfolio_current_value,
                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-                "portfolio_investment_gain_loss":portfolio_investment_gain_loss
+                "portfolio_investment_gain_loss": portfolio_investment_gain_loss
             })
-            
+
             # Generate insights using Gemini LLM
             task = f"""
                 Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
@@ -7817,14 +7812,14 @@ def analyze_dashboard():
                 - Net Worth: ${net_worth}
                 - Investment Personality: {investment_personality}
                 - Retirement Age Goal: {retirement_goal}
-                - Funds : {funds}
-                - Invested Amount : {invested_amount}
-                - Available Funds : {available_funds}
+                - Funds: {funds}
+                - Invested Amount: {invested_amount}
+                - Available Funds: {available_funds}
                 - Current Portfolio Value: {portfolio_current_value}
                 - Portfolio Daily Change: {portfolio_daily_change}
-                - Portfolio Daily Change Percentage : {portfolio_daily_change_perc}
-                - Portfolio Returns : {portfolio_investment_gain_loss}
-                - Portfolio Returns Percentage : {portfolio_investment_gain_loss_perc}
+                - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}
+                - Portfolio Returns: {portfolio_investment_gain_loss}
+                - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}
 
                 Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
                 """
@@ -7839,7 +7834,8 @@ def analyze_dashboard():
                 "insights": insights_text,
                 "net_worth": net_worth,
             })
-
+            print(insights_text)
+        
         # Analyze the Dashboard:
         assets = sum(map(lambda x: x["net_worth"], insights))
         liabilities = sum(map(lambda x: x["net_worth"], insights))
@@ -7866,8 +7862,7 @@ def analyze_dashboard():
             "average_portfolio_investment_gain_loss": sum(client["portfolio_investment_gain_loss"] for client in performance_list) / len(performance_list),
         })
 
-        # Generate top and low performers
-        performance_tables = get_top_low_portfolios(insights)
+        print(insights)
         
         # Dashboard Insights using LLM
         task = f"""
@@ -7881,7 +7876,7 @@ def analyze_dashboard():
                 - Net Worth: ${net_worth}
                 - Most Common Investment Personality among the clients : 
                 - Most Common Retirement Goal among the clients :
-                - Performance of the Dashboard: {performance_tables}
+                - Performance of the Dashboard:{insights}
                 - Top Performers: {top_performers}
                 - Low Performers: {low_performers}
 
@@ -7897,7 +7892,7 @@ def analyze_dashboard():
         return jsonify({
             "message": "Dashboard Analysis generated successfully",
             "dashboard_analysis": dashboard_analysis,
-            "performance": performance_tables,
+            "performance": insights,
             "performance_list":performance_list
         }), 200
 
@@ -7905,116 +7900,6 @@ def analyze_dashboard():
         print(f"Error in analyzing dashboard: {e}")
         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
-
-# V-1 :
-
-# @app.route('/analyze_dashboard', methods=['POST'])
-# def analyze_dashboard():
-#     try:
-#         # Fetch all clients' financial data
-#         clients = request.json.get("clients")
-#         if not clients:
-#             return jsonify({"message": "No client data provided"}), 400
-
-#         insights = []
-#         for client in clients:
-#             client_id = client.get("uniqueId")
-#             if not client_id:
-#                 continue
-
-            
-#             # Load client financial data (from AWS or local based on USE_AWS)
-            
-#             if USE_AWS:
-#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
-#                 try:
-#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
-#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 except Exception as e:
-#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-#                     return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
-#             else:
-#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
-#                 if not os.path.exists(client_data_file_path):
-#                     return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
-#                 with open(client_data_file_path, 'r') as f:
-#                     client_data = json.load(f)
-
-#             # Extract relevant financial data
-#             assets = sum(map(float, client_data["assetsDatasets"]["datasets"][0]["data"]))
-#             liabilities = sum(map(float, client_data["liabilityDatasets"]["datasets"][0]["data"]))
-#             net_worth = assets - liabilities
-#             investment_personality = client_data.get("investment_personality", "Unknown")
-#             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
-
-#             # Generate insights using Gemini LLM
-#             task = f"""
-#                 Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
-                
-#                 - Total Assets: ${assets}
-#                 - Total Liabilities: ${liabilities}
-#                 - Net Worth: ${net_worth}
-#                 - Investment Personality: {investment_personality}
-#                 - Retirement Age Goal: {retirement_goal}
-
-#                 Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
-#                 """
-#             model = genai.GenerativeModel("gemini-1.5-flash")
-#             response = model.generate_content(task)
-#             insights_text = markdown.markdown(response.text)
-
-#             # Append insights
-#             insights.append({
-#                 "client_id": client_id,
-#                 "client_name": client_data["clientDetail"]["clientName"],
-#                 "insights": insights_text,
-#                 "net_worth": net_worth
-#             })
-            
-            
-#         # Analyze the Dashboard :
-        
-#         assets = sum(map(lambda x: x["net_worth"], insights))
-#         liabilities = sum(map(lambda x: x["net_worth"], insights))
-#         net_worth = assets - liabilities
-#         investment_personality = "Unknown"
-#         retirement_goal = 0
-#         for client in clients:
-#             if client["uniqueId"] == top_client_id:
-#                 investment_personality = client.get("investment_personality", "Unknown")
-#                 retirement_goal = client["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
-#                 break
-            
-#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
-#         top_client_id = insights[0]["client_id"]
-#         top_client_name = insights[0]["client_name"]
-            
-#         task = f"""
-#                 Analyze the Dashboard and give me the entire Dashboard Insights and Performance of each Client.
-#                 Refer to the inisghts here : {insights} 
-                
-#                 Also Highlight :
-#                 - Top Client Name: {top_client_name}
-#                 - Top Client Investor Personality: {investment_personality}
-#                 - Most common Client Investor Personality in the database :
-#                 - Total Assets: ${assets}
-#                 - Total Liabilities: ${liabilities}
-#                 - Net Worth: ${net_worth}
-
-#                 Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
-#                 """
-            
-#         model = genai.GenerativeModel("gemini-1.5-flash")
-#         response = model.generate_content(task)
-#         # dashboard_analysis = markdown.markdown(response.text) 
-#         dashboard_analysis = markdown_to_text(response.text)
-        
-#         # Return insights
-#         return jsonify({"message": "Dashboard Analysis generated successfully", "data": dashboard_analysis}), 200
-
-#     except Exception as e:
-#         print(f"Error in analyzing dashboard: {e}")
-#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
 
 
