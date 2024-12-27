@@ -7373,109 +7373,7 @@ def get_top_low_portfolios(insights):
 
 # # Get Top Low Performance API :
 
-# @app.route('/get_top_low_performers', methods=['POST'])
-# def get_top_low_performers_api():
-    # try:
-    #     # Fetch all clients' financial data
-    #     clients = request.json.get("data")
-    #     if not clients:
-    #         return jsonify({"message": "No client data provided"}), 400
-
-    #     client_performance = []
-    #     for client in clients:
-    #         client_id = client.get("uniqueId")
-    #         if not client_id:
-    #             continue
-
-    #         # Load client financial data (from AWS or local based on USE_AWS)
-    #         if USE_AWS:
-    #             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
-    #             try:
-    #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
-    #                 client_data = json.loads(response['Body'].read().decode('utf-8'))
-    #             except Exception as e:
-    #                 logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-    #                 # return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
-    #                 continue
-    #         else:
-    #             client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
-    #             if not os.path.exists(client_data_file_path):
-    #                 # return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
-    #                 continue
-    #             with open(client_data_file_path, 'r') as f:
-    #                 client_data = json.load(f)
-
-    #         # Load portfolio data
-    #         if USE_AWS:
-    #             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
-    #             try:
-    #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
-    #                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
-    #             except s3.exceptions.NoSuchKey:
-    #                 continue
-    #                 # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
-    #         else:
-    #             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-    #             if not os.path.exists(portfolio_file_path):
-    #                 # return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
-    #                 continue
-    #             with open(portfolio_file_path, 'r') as file:
-    #                 portfolio_data = json.load(file)
-            
-    #         funds = client_data["investmentAmount"]
-            
-    #         if not funds or funds == '0' :
-    #             continue
-            
-    #         invested_amount = sum(asset["Amount_Invested"] for asset in portfolio_data)
-            
-    #         available_funds = funds - invested_amount
-
-    #         # Calculate portfolio performance
-    #         portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
-    #         portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
-
-    #         if portfolio_current_value != 0:
-    #             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
-    #         else:
-    #             portfolio_investment_gain_loss_perc = 0
-
-    #         # Append client performance
-    #         # client_performance.append({
-    #         #     "client_id": client_id,
-    #         #     "client_name": client_data["clientDetail"]["clientName"],
-    #         #     "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc
-    #         # })
-            
-    #         client_performance.append({
-    #             "client_id": client_id,
-    #             "client_name": client_data["clientDetail"]["clientName"],
-    #             "funds":funds,
-    #             "available_funds": available_funds,
-    #             "invested_amount": invested_amount,
-    #             "portfolio_current_value": portfolio_current_value,
-    #             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-    #             "portfolio_investment_gain_loss":portfolio_investment_gain_loss
-    #         })
-
-    #     # Sort clients by portfolio investment gain/loss percentage
-    #     client_performance.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
-
-    #     # Get top 10 and low 10 performers
-    #     top_performers = client_performance[:10]
-    #     low_performers = client_performance[-10:]
-
-    #     return jsonify({
-    #         "message": "Top and Low Performers Retrieved Successfully",
-    #         "client_performance": client_performance,
-    #         "top_performers": top_performers,
-    #         "low_performers": low_performers
-    #     }), 200
-
-    # except Exception as e:
-    #     print(f"Error in get_top_low_performers_api: {e}")
-    #     return jsonify({"message": f"Error in get_top_low_performers_api: {e}"}), 500
-
+#  #V-2 :
 @app.route('/get_top_low_performers', methods=['POST'])
 def get_top_low_performers_api():
     try:
@@ -7506,6 +7404,8 @@ def get_top_low_performers_api():
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
 
+            investment_personality = client_data.get("investment_personality", "Unknown")
+            
             # Load portfolio data
             if USE_AWS:
                 portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
@@ -7538,16 +7438,37 @@ def get_top_low_performers_api():
             else:
                 portfolio_investment_gain_loss_perc = 0
 
+            # Calculate high asset class
+            asset_class_returns = {}
+            for asset in portfolio_data:
+                asset_class = asset.get("assetClass", "Unknown")
+                asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+                if asset_class != "Unknown":
+                    asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+                else:
+                    print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+            # Log asset_class_returns for debugging
+            print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+            # Find the asset class with the highest return
+            if asset_class_returns:
+                high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+            else:
+                high_asset_class = "Unknown"
+
             # Append client performance
             client_performance.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
                 "funds": funds,
+                "investment_personality": investment_personality,
                 "available_funds": available_funds,
                 "invested_amount": invested_amount,
                 "portfolio_current_value": portfolio_current_value,
                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-                "portfolio_investment_gain_loss": portfolio_investment_gain_loss
+                "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                "high_asset_class": high_asset_class
             })
 
         # Sort clients by portfolio investment gain/loss percentage
@@ -7555,7 +7476,7 @@ def get_top_low_performers_api():
 
         # Get top 10 and low 10 performers
         top_performers = client_performance[:10]
-        low_performers = client_performance[-10:]
+        low_performers = client_performance[::-1][:10]  # Reverse to get bottom 10
 
         return jsonify({
             "message": "Top and Low Performers Retrieved Successfully",
@@ -7568,47 +7489,161 @@ def get_top_low_performers_api():
         print(f"Error in get_top_low_performers_api: {e}")
         return jsonify({"message": f"Error in get_top_low_performers_api: {e}"}), 500
 
+
+
+# # v-1 :
+
+# @app.route('/get_top_low_performers', methods=['POST'])
+# def get_top_low_performers_api():
+#     try:
+#         # Fetch all clients' financial data
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_performance = []
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id:
+#                 continue
+
+#             # Load client financial data (from AWS or local based on USE_AWS)
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     continue
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     continue
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
+
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+            
+#             # Load portfolio data
+#             if USE_AWS:
+#                 portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except s3.exceptions.NoSuchKey:
+#                     continue
+#             else:
+#                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#                 if not os.path.exists(portfolio_file_path):
+#                     continue
+#                 with open(portfolio_file_path, 'r') as file:
+#                     portfolio_data = json.load(file)
+
+#             # Parse numeric values safely
+#             funds = float(client_data.get("investmentAmount", 0))  # Convert to float
+#             if funds == 0:
+#                 continue
+
+#             invested_amount = sum(float(asset.get("Amount_Invested", 0)) for asset in portfolio_data)
+#             available_funds = funds - invested_amount
+
+#             # Calculate portfolio performance
+#             portfolio_current_value = sum(float(asset.get("current_value", 0)) for asset in portfolio_data)
+#             portfolio_investment_gain_loss = sum(float(asset.get("Investment_Gain_or_Loss", 0)) for asset in portfolio_data)
+
+#             if portfolio_current_value != 0:
+#                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#             else:
+#                 portfolio_investment_gain_loss_perc = 0
+
+#             # Append client performance
+#             client_performance.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "funds": funds,
+#                 "investment_personality": investment_personality,
+#                 "available_funds": available_funds,
+#                 "invested_amount": invested_amount,
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss
+#             })
+
+#         # Sort clients by portfolio investment gain/loss percentage
+#         client_performance.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+
+#         # Get top 10 and low 10 performers
+#         top_performers = client_performance[:10]
+#         # low_performers = client_performance[-10:]
+#         low_performers = client_performance[::-1]
+        
+
+#         return jsonify({
+#             "message": "Top and Low Performers Retrieved Successfully",
+#             "client_performance": client_performance,
+#             "top_performers": top_performers,
+#             "low_performers": low_performers
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in get_top_low_performers_api: {e}")
+#         return jsonify({"message": f"Error in get_top_low_performers_api: {e}"}), 500
+
 #########################################################################################################
 # # Generate Inforgraphics for Dashboard :
 
 # fetch portfolio data quickly :
 
-# # V-2 :
+# # V-1 :
 
 from concurrent.futures import ThreadPoolExecutor
 
 def fetch_consolidated_portfolio(client_ids):
     """
     Fetch consolidated portfolio data for multiple clients from AWS S3 bucket.
+    Returns a dictionary where keys are client IDs and values are portfolio data.
     """
     portfolios = {}
     try:
         # List all objects in the portfolio folder
         response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=portfolio_list_folder)
+        if "Contents" not in response:
+            print("No portfolios found in the specified folder.")
+            return portfolios
 
-        if "Contents" in response:
-            # Filter objects for the requested client IDs
-            portfolio_keys = [
-                obj["Key"] for obj in response["Contents"]
-                if obj["Key"].split("/")[-1].replace(".json", "").split("//")[-1] in client_ids
-            ]
+        # Filter objects for the requested client IDs
+        portfolio_keys = [
+            obj["Key"] for obj in response["Contents"]
+            if obj["Key"].split("/")[-1].replace(".json", "").split("//")[-1] in client_ids
+        ]
 
-            # Function to fetch a single portfolio
-            def fetch_portfolio(key):
-                try:
-                    obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
-                    client_id = key.split("/")[-1].replace(".json", "")
-                    return client_id, json.loads(obj["Body"].read().decode("utf-8"))
-                except Exception as e:
-                    print(f"Error fetching portfolio {key}: {e}")
-                    return None, None
+        if not portfolio_keys:
+            print("No matching portfolios found for the given client IDs.")
+            return portfolios
 
-            # Use ThreadPoolExecutor for parallel fetching
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                results = list(executor.map(fetch_portfolio, portfolio_keys))
+        print(f"Portfolio keys to fetch: {portfolio_keys}")
 
-            # Consolidate results
-            portfolios = {client_id: data for client_id, data in results if client_id and data}
+        # Function to fetch a single portfolio
+        def fetch_portfolio(key):
+            try:
+                obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+                client_id = key.split("/")[-1].replace(".json", "")
+                data = json.loads(obj["Body"].read().decode("utf-8"))
+                print(f"Successfully fetched portfolio for client_id: {client_id}")
+                return client_id, data
+            except Exception as e:
+                print(f"Error fetching portfolio {key}: {e}")
+                return None, None
+
+        # Use ThreadPoolExecutor for parallel fetching
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(fetch_portfolio, portfolio_keys))
+
+        # Consolidate results into a dictionary
+        portfolios = {client_id: data for client_id, data in results if client_id and data}
+
+        print(f"Consolidated Portfolios:\n{portfolios}")
 
         return portfolios
 
@@ -7617,35 +7652,10 @@ def fetch_consolidated_portfolio(client_ids):
         return portfolios
 
 
-# # V-1 :
-
-# def fetch_consolidated_portfolio(client_ids):
-#     """
-#     Fetch consolidated portfolio data for multiple clients from AWS S3 bucket.
-#     """
-#     portfolios = {}
-#     try:
-#         # List all objects in the portfolio folder
-#         response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=portfolio_list_folder)
-
-#         if "Contents" in response:
-#             # Filter objects for the requested client IDs
-#             portfolio_keys = [obj["Key"] for obj in response["Contents"] if obj["Key"].split("/")[-1].replace("portfolio_", "").replace(".json", "") in client_ids]
-
-#             for key in portfolio_keys:
-#                 # Fetch portfolio data for each client
-#                 client_id = key.split("/")[-1].replace("portfolio_", "").replace(".json", "")
-#                 obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
-#                 portfolios[client_id] = json.loads(obj["Body"].read().decode("utf-8"))
-
-#         return portfolios
-
-#     except Exception as e:
-#         print(f"Error fetching portfolios from S3: {e}")
-#         return portfolios
-
 
 # API to get the asset-class infographics :
+
+# V-2 :
 @app.route('/asset_class_infographics', methods=['POST'])
 def asset_class_infographics():
     try:
@@ -7654,7 +7664,9 @@ def asset_class_infographics():
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
 
-        client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+        # Create a dictionary for quick lookup of client data by uniqueId
+        client_map = {client.get("uniqueId"): client for client in clients if client.get("uniqueId")}
+        client_ids = list(client_map.keys())
         if not client_ids:
             return jsonify({"message": "No valid client IDs found"}), 400
 
@@ -7665,27 +7677,55 @@ def asset_class_infographics():
 
         # Initialize asset class data
         asset_class_data = {}
-        
+
         # Process portfolios for asset class aggregation
         for client_id, portfolio in portfolios.items():
-            for asset in portfolio.get("assets", []):
-                asset_class = asset.get("asset_class", "Other")
+            # Handle portfolio as a list of assets (fallback for invalid structure)
+            if isinstance(portfolio, list):
+                print(f"Portfolio for client_id {client_id} is a list. Wrapping it in a dictionary.")
+                portfolio = {"assets": portfolio}
+
+            # Ensure portfolio is a dictionary
+            if not isinstance(portfolio, dict):
+                print(f"Invalid portfolio format for client_id: {client_id}")
+                continue
+
+            # Safely get assets from the portfolio
+            assets = portfolio.get("assets", [])
+            if not isinstance(assets, list):
+                print(f"'assets' is not a list for client_id: {client_id}")
+                continue
+
+            print(f"Processing assets for client_id {client_id}: {assets}")
+
+            for asset in assets:
+                # Debugging: Print each asset being processed
+                print(f"Processing asset for client {client_id}: {asset}")
+
+                asset_class = asset.get("assetClass", "Other")
                 if asset_class not in asset_class_data:
                     asset_class_data[asset_class] = {
                         "clients": [],
                         "total_invested": 0,
                         "total_returns": 0
                     }
+
                 # Update asset class data
+                invested_amount = float(asset.get("Amount_Invested", 0))
+                returns = float(asset.get("Investment_Gain_or_Loss", 0))
+
                 asset_class_data[asset_class]["clients"].append({
                     "client_id": client_id,
-                    "client_name": clients[client_ids.index(client_id)].get("clientName", "Unknown"),
-                    "investment_personality": clients[client_ids.index(client_id)].get("investment_personality", "Unknown"),
-                    "invested_amount": asset.get("invested_amount", 0),
-                    "returns": asset.get("returns", 0)
+                    "client_name": client_map.get(client_id, {}).get("clientName", "Unknown"),
+                    "investment_personality": client_map.get(client_id, {}).get("investment_personality", "Unknown"),
+                    "invested_amount": invested_amount,
+                    "returns": returns
                 })
-                asset_class_data[asset_class]["total_invested"] += asset.get("invested_amount", 0)
-                asset_class_data[asset_class]["total_returns"] += asset.get("returns", 0)
+                asset_class_data[asset_class]["total_invested"] += invested_amount
+                asset_class_data[asset_class]["total_returns"] += returns
+
+        # Debugging: Print the aggregated asset_class_data
+        print(f"Aggregated Asset Class Data: {asset_class_data}")
 
         # Prepare pie chart data
         pie_chart_data = {
@@ -7695,6 +7735,7 @@ def asset_class_infographics():
                 "label": "Total Invested"
             }]
         }
+        print(f"Pie Chart Data: {pie_chart_data}")
 
         # Format the response for the frontend
         response = {
@@ -7710,11 +7751,129 @@ def asset_class_infographics():
         return jsonify({"message": f"Error in asset_class_infographics: {e}"}), 500
 
 
+
+# # V-1 :
+# @app.route('/asset_class_infographics', methods=['POST'])
+# def asset_class_infographics():
+#     try:
+#         # Fetch all clients' financial data
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found"}), 400
+
+#         # Fetch consolidated portfolio data
+#         portfolios = fetch_consolidated_portfolio(client_ids)
+#         if not portfolios:
+#             return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+#         # Initialize asset class data
+#         asset_class_data = {}
+        
+#         # Process portfolios for asset class aggregation
+#         for client_id, portfolio in portfolios.items():
+#             for asset in portfolio.get("assets", []):
+#                 asset_class = asset.get("asset_class", "Other")
+#                 if asset_class not in asset_class_data:
+#                     asset_class_data[asset_class] = {
+#                         "clients": [],
+#                         "total_invested": 0,
+#                         "total_returns": 0
+#                     }
+#                 # Update asset class data
+#                 asset_class_data[asset_class]["clients"].append({
+#                     "client_id": client_id,
+#                     "client_name": clients[client_ids.index(client_id)].get("clientName", "Unknown"),
+#                     "investment_personality": clients[client_ids.index(client_id)].get("investment_personality", "Unknown"),
+#                     "invested_amount": asset.get("invested_amount", 0),
+#                     "returns": asset.get("returns", 0)
+#                 })
+#                 asset_class_data[asset_class]["total_invested"] += asset.get("invested_amount", 0)
+#                 asset_class_data[asset_class]["total_returns"] += asset.get("returns", 0)
+
+#         # Prepare pie chart data
+#         pie_chart_data = {
+#             "labels": list(asset_class_data.keys()),
+#             "datasets": [{
+#                 "data": [data["total_invested"] for data in asset_class_data.values()],
+#                 "label": "Total Invested"
+#             }]
+#         }
+
+#         # Format the response for the frontend
+#         response = {
+#             "message": "Asset Class Infographics generated successfully",
+#             "pie_chart_data": pie_chart_data,
+#             "details": asset_class_data
+#         }
+
+#         return jsonify(response), 200
+
+#     except Exception as e:
+#         print(f"Error in asset_class_infographics: {e}")
+#         return jsonify({"message": f"Error in asset_class_infographics: {e}"}), 500
+
+
 #########################################################################################################
 
 # Analyze Dashboard :
 
-# V-1 :
+def fetch_portfolios(client_ids):
+    """
+    Fetch consolidated portfolio data for multiple clients from AWS S3 bucket.
+    Returns a dictionary where keys are client IDs and values are portfolio data.
+    """
+    portfolios = {}
+    try:
+        # List all objects in the portfolio folder
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=portfolio_list_folder)
+        if "Contents" not in response:
+            print("No portfolios found in the specified folder.")
+            return portfolios
+
+        # Filter objects for the requested client IDs
+        portfolio_keys = [
+            obj["Key"] for obj in response["Contents"]
+            if obj["Key"].split("/")[-1].replace(".json", "").split("//")[-1] in client_ids
+        ]
+
+        if not portfolio_keys:
+            print("No matching portfolios found for the given client IDs.")
+            return portfolios
+
+        print(f"Portfolio keys to fetch: {portfolio_keys}")
+
+        # Function to fetch a single portfolio
+        def fetch_portfolio(key):
+            try:
+                obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+                client_id = key.split("/")[-1].replace(".json", "")
+                data = json.loads(obj["Body"].read().decode("utf-8"))
+                print(f"Successfully fetched portfolio for client_id: {client_id}")
+                return client_id, data
+            except Exception as e:
+                print(f"Error fetching portfolio {key}: {e}")
+                return None, None
+
+        # Use ThreadPoolExecutor for parallel fetching
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(fetch_portfolio, portfolio_keys))
+
+        # Consolidate results into a dictionary
+        portfolios = {client_id: data for client_id, data in results if client_id and data}
+
+        print(f"Portfolios Collected :\n{portfolios}")
+        
+        return portfolios
+
+    except Exception as e:
+        print(f"Error fetching portfolios from S3: {e}")
+        return portfolios
+
+# # V-2 : Using fetch_consolidated_portfolio: currently not working as edxpected
 
 @app.route('/analyze_dashboard', methods=['POST'])
 def analyze_dashboard():
@@ -7724,12 +7883,19 @@ def analyze_dashboard():
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
 
+        client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+        if not client_ids:
+            return jsonify({"message": "No valid client IDs found in the request"}), 400
+
+        # Fetch portfolios for all clients in bulk
+        portfolios = fetch_portfolios(client_ids)
+
         insights = []
         performance_list = []
 
         for client in clients:
             client_id = client.get("uniqueId")
-            if not client_id:
+            if not client_id or client_id not in portfolios:
                 continue
 
             # Load client financial data (from AWS or local based on USE_AWS)
@@ -7753,20 +7919,8 @@ def analyze_dashboard():
             if funds <= 0:
                 continue
 
-            # Load portfolio data
-            if USE_AWS:
-                portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
-                try:
-                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
-                    portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
-                except s3.exceptions.NoSuchKey:
-                    continue
-            else:
-                portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-                if not os.path.exists(portfolio_file_path):
-                    continue
-                with open(portfolio_file_path, 'r') as file:
-                    portfolio_data = json.load(file)
+            # Get portfolio data from the fetched portfolios
+            portfolio_data = portfolios.get(client_id, [])
 
             # Safely parse assets and liabilities
             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
@@ -7774,7 +7928,13 @@ def analyze_dashboard():
             net_worth = assets - liabilities
 
             investment_personality = client_data.get("investment_personality", "Unknown")
-            retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+            retirement_age = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+            retirement_goals = client_data.get("retirementGoal", "Unknown")
+            # print(f"Retirement Goal :\n{retirement_goals}")
+            financial_goals = client_data.get("goalFields","Unknown")
+            # print(f"Financial goals :\n{financial_goals}")
+            client_income = client_data.get("incomeFields","Unknown")
+            # print(f"Client income :\n{client_income}")
 
             invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
             available_funds = funds - invested_amount
@@ -7783,46 +7943,104 @@ def analyze_dashboard():
             portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
             portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
             portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
-
+            
             if portfolio_current_value != 0:
                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
             else:
                 portfolio_daily_change_perc = 0
                 portfolio_investment_gain_loss_perc = 0
+            
+            # Calculate portfolio time held
+            time_held_values = []
+            for asset in portfolio_data:
+                time_held_str = asset.get("Time_Held", "")
+                if time_held_str:
+                    try:
+                        # Adjusted format string for American date format (MM/DD/YYYY)
+                        time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
+                        time_held_values.append(time_held_dt)
+                    except ValueError as ve:
+                        print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
+
+            if time_held_values:
+                oldest_time_held = min(time_held_values)
+                portfolio_time_held = (datetime.now() - oldest_time_held).days
+                # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
+            else:
+                portfolio_time_held = 0
+                print("No valid Time_Held data found in portfolio.")
+
+            # Output the result for debugging
+            # print(f"Portfolio Time Held: {portfolio_time_held} days")
+            
+            # Calculate high asset class
+            asset_class_returns = {}
+            for asset in portfolio_data:
+                asset_class = asset.get("assetClass", "Unknown")
+                asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+                if asset_class != "Unknown":
+                    asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+                else:
+                    print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+            # Log asset_class_returns for debugging
+            print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+            # Find the asset class with the highest return
+            if asset_class_returns:
+                high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+            else:
+                high_asset_class = "Unknown"
 
             # Append to performance list
             performance_list.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
+                "retirement_goals" : retirement_goals,
+                "retirement_age" : retirement_age,
+                "financial_goals" : financial_goals,
+                "client_income" : client_income,
+                "assets": assets,
+                "liabilities": liabilities,
+                "net_worth": net_worth,
                 "funds": funds,
                 "available_funds": available_funds,
                 "invested_amount": invested_amount,
                 "portfolio_current_value": portfolio_current_value,
                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-                "portfolio_investment_gain_loss": portfolio_investment_gain_loss
+                "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+                "high_asset_class":high_asset_class,
+                "portfolio_time_held" : portfolio_time_held 
             })
 
             # Generate insights using Gemini LLM
-            task = f"""
-                Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
-                
-                - Total Assets: ${assets}
-                - Total Liabilities: ${liabilities}
-                - Net Worth: ${net_worth}
-                - Investment Personality: {investment_personality}
-                - Retirement Age Goal: {retirement_goal}
-                - Funds: {funds}
-                - Invested Amount: {invested_amount}
-                - Available Funds: {available_funds}
-                - Current Portfolio Value: {portfolio_current_value}
-                - Portfolio Daily Change: {portfolio_daily_change}
-                - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}
-                - Portfolio Returns: {portfolio_investment_gain_loss}
-                - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}
-
-                Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
-                """
+            task = f"""Your task is to highlight the Client Data,thier Portfolio Data and its Performance.
+            Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+            - Total Assets: ${assets}
+            - Total Liabilities: ${liabilities}
+            - Net Worth: ${net_worth}
+            - Investment Personality: {investment_personality}
+            - Retirement Age Goal: {retirement_age}
+            - Retirement Goal: {retirement_goals}
+            - Client Income: {client_income}
+            - Financial Goals : {financial_goals}
+            - Funds: {funds}
+            - Invested Amount: {invested_amount}
+            - Available Funds: {available_funds}
+            - Current Portfolio Value: {portfolio_current_value}
+            - Portfolio Daily Change: {portfolio_daily_change}
+            - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}
+            - Portfolio Returns: {portfolio_investment_gain_loss}
+            - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}
+            - Longest Time Portfolio Time Held : {portfolio_time_held}
+            - Best Performing Asset Class : {high_asset_class}
+            - Best Performing Asset : {portfolio_data}
+            
+            Provide Asset Class Breakdown of the client and how its daily performance is .
+            Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
+            Highlight the best performing asset class of the client and which asset in it performed the best.
+            """
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(task)
             insights_text = markdown.markdown(response.text)
@@ -7834,8 +8052,7 @@ def analyze_dashboard():
                 "insights": insights_text,
                 "net_worth": net_worth,
             })
-            print(insights_text)
-        
+
         # Analyze the Dashboard:
         assets = sum(map(lambda x: x["net_worth"], insights))
         liabilities = sum(map(lambda x: x["net_worth"], insights))
@@ -7843,62 +8060,261 @@ def analyze_dashboard():
         insights.sort(key=lambda x: x["net_worth"], reverse=True)
         top_client_id = insights[0]["client_id"]
         top_client_name = insights[0]["client_name"]
+
         # Identify top and low performers
         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
         top_performers = performance_list[:10]
         low_performers = performance_list[-10:]
-        insights.append({
-            "total_clients": len(performance_list),
-            "total_funds": sum(client["funds"] for client in performance_list),
-            "total_available_funds": sum(client["available_funds"] for client in performance_list),
-            "total_invested_amount": sum(client["invested_amount"] for client in performance_list),
-            "total_portfolio_investment_gain_loss_perc": sum(client["portfolio_investment_gain_loss_perc"] for client in performance_list),
-            "total_portfolio_investment_gain_loss": sum(client["portfolio_investment_gain_loss"] for client in performance_list),
-            "average_funds": sum(client["funds"] for client in performance_list) / len(performance_list),
-            "average_available_funds": sum(client["available_funds"] for client in performance_list) / len(performance_list),
-            "average_invested_amount": sum(client["invested_amount"] for client in performance_list) / len(performance_list),
-            "average_portfolio_investment": sum(client["invested_amount"] for client in performance_list)/ len(performance_list),
-            "average_portfolio_investment_gain_loss_perc": sum(client["portfolio_investment_gain_loss_perc"] for client in performance_list) / len(performance_list),
-            "average_portfolio_investment_gain_loss": sum(client["portfolio_investment_gain_loss"] for client in performance_list) / len(performance_list),
-        })
 
-        print(insights)
-        
         # Dashboard Insights using LLM
-        task = f"""
-                Analyze the Dashboard and give me the entire Dashboard Insights and Performance of each Client.
-                Refer to the insights here: {insights}
-                
-                Also Highlight:
-                - Top Client Name: {top_client_name}
-                - Total Assets: ${assets}
-                - Total Liabilities: ${liabilities}
-                - Net Worth: ${net_worth}
-                - Most Common Investment Personality among the clients : 
-                - Most Common Retirement Goal among the clients :
-                - Performance of the Dashboard:{insights}
-                - Top Performers: {top_performers}
-                - Low Performers: {low_performers}
-
-                Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
-                """
-                
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        task = f"""You are working for the Wealth Manager and you are best in Asset Analysis and Portfolio Analysis.
+        Analyze the Dashboard and give me the entire Dashboard Insights and Performance of all the Clients to help Assist the Wealth Manager
+        and help him know insights that will help him Manage the Portfolios of clients iin a better way.
+        Find Patterns in each clients and draw out insights why a clients Portfolio is performing Nicely or Badly.
+        Which assets are performing for a client and in that which particular asset is performing the best.
+    
+        Refer to the insights here: {insights}
+        Highlight these points:
+        - Top Client Name: {top_client_name}
+        - Total Assets: ${assets}
+        - Total Liabilities: ${liabilities}
+        - Net Worth: ${net_worth}
+        - Total Funds : $
+        - Performance of the Dashboard: {insights}
+        - Top Performers: {top_performers}
+        - Best Performing Asset class :
+        - Best Performing Asset :
+        - Most Successful Clients investment Personality :
+        - Most Successful Clients Income : 
+        - Most Successful Clients Financial Goals :
+        - Most Successful Clients Retirement Age and their Retiremnet Goals :
+        - Common Patterns between all top Performing Clients :
+        - Most Returning Assets and by how much :
+        - Client having Longest Investment Period :
+        - Low Performers: {low_performers}
+        - Worst Performing Asset Class :
+        - Worst Performing Asset :
+        - Most Unsuccessful Clients investment personality :
+        - Most Unsuccessful Clients investment Personality :
+        - Most Unsuccessful Clients Income : 
+        - Most Unsuccessful Clients Financial Goals :
+        - Most Unsuccessful Clients Retirement Age and their Retiremnet Goals :
+        - Most Unsuccessful Clients Retirement Age Goal :
+        - Most losing Assets and by how much :
+        - Common Patterns between all low Performing Clients :
+        - Client having Shortest Investment Period :
+        
+        No need for inidividual client analysis.
+        Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
+        Explain the factors behind the Top Performing Clients.Explain the factors behind the Low Performing Clients.
+        Give Suggestions and ways to improve the Perfromance of the Low Performing Clients if possible.
+        Provide Patterns and Insights that will help Wealth Manager Manage the Portfolios of clients in a better way.
+        """
         response = model.generate_content(task)
         dashboard_analysis = markdown_to_text(response.text)
-
-
+        # Process the response from LLM
+        html_suggestions = markdown.markdown(dashboard_analysis)
+        print(html_suggestions)
+        dashboard_suggestions = markdown_to_text(html_suggestions)
+        print(dashboard_suggestions)
         # Return the response
         return jsonify({
             "message": "Dashboard Analysis generated successfully",
-            "dashboard_analysis": dashboard_analysis,
+            "dashboard_analysis": dashboard_suggestions,
             "performance": insights,
-            "performance_list":performance_list
+            "performance_list": performance_list
         }), 200
 
     except Exception as e:
         print(f"Error in analyzing dashboard: {e}")
         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
+
+
+# V-1 : slow code
+
+# @app.route('/analyze_dashboard', methods=['POST'])
+# def analyze_dashboard():
+#     try:
+#         # Fetch all clients' financial data
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         insights = []
+#         performance_list = []
+
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id:
+#                 continue
+
+#             # Load client financial data (from AWS or local based on USE_AWS)
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     continue
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     continue
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
+
+#             # Ensure funds are numeric
+#             funds = float(client_data.get("investmentAmount", 0) or 0)
+#             if funds <= 0:
+#                 continue
+
+#             # Load portfolio data
+#             if USE_AWS:
+#                 portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                     portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except s3.exceptions.NoSuchKey:
+#                     continue
+#             else:
+#                 portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#                 if not os.path.exists(portfolio_file_path):
+#                     continue
+#                 with open(portfolio_file_path, 'r') as file:
+#                     portfolio_data = json.load(file)
+
+#             # Safely parse assets and liabilities
+#             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#             net_worth = assets - liabilities
+
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+#             retirement_goal = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+
+#             invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
+#             available_funds = funds - invested_amount
+
+#             # Initialize variables to calculate portfolio-level metrics
+#             portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#             portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#             portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+
+#             if portfolio_current_value != 0:
+#                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+#                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#             else:
+#                 portfolio_daily_change_perc = 0
+#                 portfolio_investment_gain_loss_perc = 0
+
+#             # Append to performance list
+#             performance_list.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "funds": funds,
+#                 "available_funds": available_funds,
+#                 "invested_amount": invested_amount,
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss
+#             })
+
+#             # Generate insights using Gemini LLM
+#             task = f"""
+#                 Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+                
+#                 - Total Assets: ${assets}
+#                 - Total Liabilities: ${liabilities}
+#                 - Net Worth: ${net_worth}
+#                 - Investment Personality: {investment_personality}
+#                 - Retirement Age Goal: {retirement_goal}
+#                 - Funds: {funds}
+#                 - Invested Amount: {invested_amount}
+#                 - Available Funds: {available_funds}
+#                 - Current Portfolio Value: {portfolio_current_value}
+#                 - Portfolio Daily Change: {portfolio_daily_change}
+#                 - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}
+#                 - Portfolio Returns: {portfolio_investment_gain_loss}
+#                 - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}
+
+#                 Provide key insights into the client's financial health, potential risk areas, and investment strategy recommendations.
+#                 """
+#             model = genai.GenerativeModel("gemini-1.5-flash")
+#             response = model.generate_content(task)
+#             insights_text = markdown.markdown(response.text)
+
+#             # Append insights
+#             insights.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "insights": insights_text,
+#                 "net_worth": net_worth,
+#             })
+#             print(insights_text)
+        
+#         # Analyze the Dashboard:
+#         assets = sum(map(lambda x: x["net_worth"], insights))
+#         liabilities = sum(map(lambda x: x["net_worth"], insights))
+#         net_worth = assets - liabilities
+#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
+#         top_client_id = insights[0]["client_id"]
+#         top_client_name = insights[0]["client_name"]
+#         # Identify top and low performers
+#         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+#         top_performers = performance_list[:10]
+#         low_performers = performance_list[-10:]
+#         insights.append({
+#             "total_clients": len(performance_list),
+#             "total_funds": sum(client["funds"] for client in performance_list),
+#             "total_available_funds": sum(client["available_funds"] for client in performance_list),
+#             "total_invested_amount": sum(client["invested_amount"] for client in performance_list),
+#             "total_portfolio_investment_gain_loss_perc": sum(client["portfolio_investment_gain_loss_perc"] for client in performance_list),
+#             "total_portfolio_investment_gain_loss": sum(client["portfolio_investment_gain_loss"] for client in performance_list),
+#             "average_funds": sum(client["funds"] for client in performance_list) / len(performance_list),
+#             "average_available_funds": sum(client["available_funds"] for client in performance_list) / len(performance_list),
+#             "average_invested_amount": sum(client["invested_amount"] for client in performance_list) / len(performance_list),
+#             "average_portfolio_investment": sum(client["invested_amount"] for client in performance_list)/ len(performance_list),
+#             "average_portfolio_investment_gain_loss_perc": sum(client["portfolio_investment_gain_loss_perc"] for client in performance_list) / len(performance_list),
+#             "average_portfolio_investment_gain_loss": sum(client["portfolio_investment_gain_loss"] for client in performance_list) / len(performance_list),
+#         })
+
+#         print(insights)
+        
+#         # Dashboard Insights using LLM
+#         task = f"""
+#                 Analyze the Dashboard and give me the entire Dashboard Insights and Performance of each Client.
+#                 Refer to the insights here: {insights}
+                
+#                 Also Highlight:
+#                 - Top Client Name: {top_client_name}
+#                 - Total Assets: ${assets}
+#                 - Total Liabilities: ${liabilities}
+#                 - Net Worth: ${net_worth}
+#                 - Most Common Investment Personality among the clients : 
+#                 - Most Common Retirement Goal among the clients :
+#                 - Performance of the Dashboard:{insights}
+#                 - Top Performers: {top_performers}
+#                 - Low Performers: {low_performers}
+
+#                 Provide key insights into all the client's financial health, potential risk areas, and investment strategy recommendations.
+#                 """
+                
+#         model = genai.GenerativeModel("gemini-1.5-flash")
+#         response = model.generate_content(task)
+#         dashboard_analysis = markdown_to_text(response.text)
+
+
+#         # Return the response
+#         return jsonify({
+#             "message": "Dashboard Analysis generated successfully",
+#             "dashboard_analysis": dashboard_analysis,
+#             "performance": insights,
+#             "performance_list":performance_list
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in analyzing dashboard: {e}")
+#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
 
 
