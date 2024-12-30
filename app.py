@@ -2756,6 +2756,8 @@ def get_client_data():
 # Local Folder Path
 LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
  
+# new version :
+
 @app.route('/get-all-client-data', methods=['GET'])
 def get_all_client_data():
     try:
@@ -2772,8 +2774,10 @@ def get_all_client_data():
                         file_data = file_response['Body'].read().decode('utf-8')
                         data_json = json.loads(file_data)
  
-                        # Add isNewClient flag
-                        # process_is_new_client(data_json)
+                        # Do not overwrite isNewClient flag if updated elsewhere
+                        if 'isNewClient' not in data_json:
+                            data_json['isNewClient'] = True  # Default to True if missing
+                       
                         all_data.append(data_json)
                     except Exception as e:
                         print(f"Error reading file {obj['Key']}: {e}")
@@ -2788,7 +2792,11 @@ def get_all_client_data():
                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
                     with open(file_path, 'r') as f:
                         client_data = json.load(f)
-                        # process_is_new_client(client_data)
+ 
+                        # Do not overwrite isNewClient flag if updated elsewhere
+                        if 'isNewClient' not in client_data:
+                            client_data['isNewClient'] = True  # Default to True if missing
+                       
                         all_data.append(client_data)
  
             if not all_data:
@@ -2801,9 +2809,59 @@ def get_all_client_data():
         }), 200
  
     except Exception as e:
+        print(f"Error occurred while retrieving data: {e}")
         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+  
+ 
+# prev -version: 
+# @app.route('/get-all-client-data', methods=['GET'])
+# def get_all_client_data():
+#     try:
+#         all_data = []
+ 
+#         if USE_AWS:
+#             # AWS Logic
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
+ 
+#                         # Add isNewClient flag
+#                         # process_is_new_client(data_json)
+#                         all_data.append(data_json)
+#                     except Exception as e:
+#                         print(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#             else:
+#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+ 
+#         else:
+#             # Local Storage Logic
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
+#                         # process_is_new_client(client_data)
+#                         all_data.append(client_data)
+ 
+#             if not all_data:
+#                 return jsonify({'message': 'No client data found in local storage.'}), 404
+ 
+#         # Return combined data
+#         return jsonify({
+#             'message': 'All client data retrieved successfully.',
+#             'data': all_data
+#         }), 200
+ 
+#     except Exception as e:
+#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
     
-    
+    # old version:
 # # get client data by client id :
 # @app.route('/get-client-data-by-id', methods=['GET'])
 # def get_client_data():
@@ -5518,7 +5576,9 @@ def save_data_to_local(client_id, client_transactions, order_file_path, order_da
 
 # Local storage path (if USE_AWS is False)
 LOCAL_STORAGE_PATH = "data/orders/"
- 
+
+# new version :
+
 @app.route('/order_placed', methods=['POST'])
 def order_placed():
     try:
@@ -5533,42 +5593,120 @@ def order_placed():
         if USE_AWS:
             # AWS S3 file key for the order list
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+            # client_summary_key = f"{client_summary_folder}{client_id}_summary.json"
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
            
-            # Load existing data from AWS S3 if available
+           
+            # Load existing transactions
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
                 print(f"Loaded existing transactions for client {client_id} from S3")
             except s3.exceptions.NoSuchKey:
-                # Initialize a new transaction list if the file doesn't exist
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
            
-            # Save data to AWS S3
+            # Save new order
             save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
  
-        else:
-            # Local file path for storing orders
-            order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+            # Update client summary file to set isNewClient to False
+            print(f"summary_file_path keys {client_summary_key}")
+            try:
+                summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+                print(f"summary_file_path {client_summary}")
+                client_summary['isNewClient'] = False  # Set isNewClient to False
+                s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary))
+                print(f"Updated client summary for {client_id} to set isNewClient as False in S3")
+            except s3.exceptions.NoSuchKey:
+                print(f"No summary file found for client {client_id} in S3.")
  
-            # Load existing data from local storage if available
+        else:
+            # Local storage paths
+            order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+            summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+           
+            # Load existing transactions
             if os.path.exists(order_file_path):
                 with open(order_file_path, 'r') as file:
                     client_transactions = json.load(file)
                 print(f"Loaded existing transactions for client {client_id} from local storage")
             else:
-                # Initialize a new transaction list if the file doesn't exist
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
  
-            # Save data to local storage
+            # Save new order
             save_data_to_local(client_id, client_transactions, order_file_path, order_data)
+ 
+            # Update client summary file to set isNewClient to False
+            if os.path.exists(summary_file_path):
+                with open(summary_file_path, 'r+') as summary_file:
+                    client_summary = json.load(summary_file)
+                    client_summary['isNewClient'] = False
+                    summary_file.seek(0)
+                    summary_file.write(json.dumps(client_summary))
+                    summary_file.truncate()
+                print(f"Updated client summary for {client_id} to set isNewClient as False in local storage")
+            else:
+                print(f"No summary file found for client {client_id} in local storage.")
  
         return jsonify({"message": "Order placed successfully", "status": 200})
  
     except Exception as e:
         print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+# # prev - version :
+# @app.route('/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract data from the request
+#         order_data = request.json.get('order_data')
+#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
+#         funds = request.json.get('funds')  # Example extra data if needed
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+ 
+#         # Check whether to use AWS or local storage
+#         if USE_AWS:
+#             # AWS S3 file key for the order list
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+           
+#             # Load existing data from AWS S3 if available
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing transactions for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 # Initialize a new transaction list if the file doesn't exist
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+           
+#             # Save data to AWS S3
+#             save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
+ 
+#         else:
+#             # Local file path for storing orders
+#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+ 
+#             # Load existing data from local storage if available
+#             if os.path.exists(order_file_path):
+#                 with open(order_file_path, 'r') as file:
+#                     client_transactions = json.load(file)
+#                 print(f"Loaded existing transactions for client {client_id} from local storage")
+#             else:
+#                 # Initialize a new transaction list if the file doesn't exist
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+ 
+#             # Save data to local storage
+#             save_data_to_local(client_id, client_transactions, order_file_path, order_data)
+ 
+#         return jsonify({"message": "Order placed successfully", "status": 200})
+ 
+#     except Exception as e:
+#         print(f"Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
  
 
 # ## Using AWS to Show Order :
