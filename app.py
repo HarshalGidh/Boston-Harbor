@@ -7656,6 +7656,7 @@ def fetch_consolidated_portfolio(client_ids):
 # API to get the asset-class infographics :
 
 # V-2 :
+
 @app.route('/asset_class_infographics', methods=['POST'])
 def asset_class_infographics():
     try:
@@ -7705,7 +7706,7 @@ def asset_class_infographics():
                 asset_class = asset.get("assetClass", "Other")
                 if asset_class not in asset_class_data:
                     asset_class_data[asset_class] = {
-                        "clients": [],
+                        "clients": set(),  # Use a set to prevent duplicate client counts
                         "total_invested": 0,
                         "total_returns": 0
                     }
@@ -7714,15 +7715,14 @@ def asset_class_infographics():
                 invested_amount = float(asset.get("Amount_Invested", 0))
                 returns = float(asset.get("Investment_Gain_or_Loss", 0))
 
-                asset_class_data[asset_class]["clients"].append({
-                    "client_id": client_id,
-                    "client_name": client_map.get(client_id, {}).get("clientName", "Unknown"),
-                    "investment_personality": client_map.get(client_id, {}).get("investment_personality", "Unknown"),
-                    "invested_amount": invested_amount,
-                    "returns": returns
-                })
+                asset_class_data[asset_class]["clients"].add(client_id)  # Add client ID to the set
                 asset_class_data[asset_class]["total_invested"] += invested_amount
                 asset_class_data[asset_class]["total_returns"] += returns
+
+        # Convert sets to counts and prepare final asset class data
+        for asset_class, data in asset_class_data.items():
+            data["num_clients"] = len(data["clients"])  # Count the number of unique clients
+            data["clients"] = list(data["clients"])  # Convert back to a list if needed
 
         # Debugging: Print the aggregated asset_class_data
         print(f"Aggregated Asset Class Data: {asset_class_data}")
@@ -7751,7 +7751,6 @@ def asset_class_infographics():
         return jsonify({"message": f"Error in asset_class_infographics: {e}"}), 500
 
 
-
 # # V-1 :
 # @app.route('/asset_class_infographics', methods=['POST'])
 # def asset_class_infographics():
@@ -7761,7 +7760,9 @@ def asset_class_infographics():
 #         if not clients:
 #             return jsonify({"message": "No client data provided"}), 400
 
-#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         # Create a dictionary for quick lookup of client data by uniqueId
+#         client_map = {client.get("uniqueId"): client for client in clients if client.get("uniqueId")}
+#         client_ids = list(client_map.keys())
 #         if not client_ids:
 #             return jsonify({"message": "No valid client IDs found"}), 400
 
@@ -7772,27 +7773,55 @@ def asset_class_infographics():
 
 #         # Initialize asset class data
 #         asset_class_data = {}
-        
+
 #         # Process portfolios for asset class aggregation
 #         for client_id, portfolio in portfolios.items():
-#             for asset in portfolio.get("assets", []):
-#                 asset_class = asset.get("asset_class", "Other")
+#             # Handle portfolio as a list of assets (fallback for invalid structure)
+#             if isinstance(portfolio, list):
+#                 print(f"Portfolio for client_id {client_id} is a list. Wrapping it in a dictionary.")
+#                 portfolio = {"assets": portfolio}
+
+#             # Ensure portfolio is a dictionary
+#             if not isinstance(portfolio, dict):
+#                 print(f"Invalid portfolio format for client_id: {client_id}")
+#                 continue
+
+#             # Safely get assets from the portfolio
+#             assets = portfolio.get("assets", [])
+#             if not isinstance(assets, list):
+#                 print(f"'assets' is not a list for client_id: {client_id}")
+#                 continue
+
+#             print(f"Processing assets for client_id {client_id}: {assets}")
+
+#             for asset in assets:
+#                 # Debugging: Print each asset being processed
+#                 print(f"Processing asset for client {client_id}: {asset}")
+
+#                 asset_class = asset.get("assetClass", "Other")
 #                 if asset_class not in asset_class_data:
 #                     asset_class_data[asset_class] = {
 #                         "clients": [],
 #                         "total_invested": 0,
 #                         "total_returns": 0
 #                     }
+
 #                 # Update asset class data
+#                 invested_amount = float(asset.get("Amount_Invested", 0))
+#                 returns = float(asset.get("Investment_Gain_or_Loss", 0))
+
 #                 asset_class_data[asset_class]["clients"].append({
 #                     "client_id": client_id,
-#                     "client_name": clients[client_ids.index(client_id)].get("clientName", "Unknown"),
-#                     "investment_personality": clients[client_ids.index(client_id)].get("investment_personality", "Unknown"),
-#                     "invested_amount": asset.get("invested_amount", 0),
-#                     "returns": asset.get("returns", 0)
+#                     "client_name": client_map.get(client_id, {}).get("clientName", "Unknown"),
+#                     "investment_personality": client_map.get(client_id, {}).get("investment_personality", "Unknown"),
+#                     "invested_amount": invested_amount,
+#                     "returns": returns
 #                 })
-#                 asset_class_data[asset_class]["total_invested"] += asset.get("invested_amount", 0)
-#                 asset_class_data[asset_class]["total_returns"] += asset.get("returns", 0)
+#                 asset_class_data[asset_class]["total_invested"] += invested_amount
+#                 asset_class_data[asset_class]["total_returns"] += returns
+
+#         # Debugging: Print the aggregated asset_class_data
+#         print(f"Aggregated Asset Class Data: {asset_class_data}")
 
 #         # Prepare pie chart data
 #         pie_chart_data = {
@@ -7802,6 +7831,7 @@ def asset_class_infographics():
 #                 "label": "Total Invested"
 #             }]
 #         }
+#         print(f"Pie Chart Data: {pie_chart_data}")
 
 #         # Format the response for the frontend
 #         response = {
@@ -7817,6 +7847,79 @@ def asset_class_infographics():
 #         return jsonify({"message": f"Error in asset_class_infographics: {e}"}), 500
 
 
+#########################################################################################################
+
+# Asset Class Table :
+
+@app.route('/get_best_performing_assets', methods=['POST'])
+def get_best_performing_assets_api():
+    """
+    API to get the top-performing assets for a selected asset class.
+    """
+    try:
+        # Input validation
+        data = request.json
+        asset_class = data.get("asset_class")
+        clients = data.get("data")
+
+        if not clients:
+            return jsonify({"message": "No client data provided"}), 400
+        if not asset_class:
+            return jsonify({"message": "Asset class is required"}), 400
+
+        client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+        if not client_ids:
+            return jsonify({"message": "No valid client IDs provided"}), 400
+
+        # Fetch consolidated portfolio data
+        portfolios = fetch_consolidated_portfolio(client_ids)
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+        # Collect relevant data
+        asset_performance = []
+        for client in clients:
+            client_id = client.get("uniqueId")
+            portfolio_data = portfolios.get(client_id, {}).get("assets", [])
+
+            for asset in portfolio_data:
+                if asset.get("assetClass", "Unknown") == asset_class:
+                    invested_amount = float(asset.get("Amount_Invested", 0))
+                    returns = float(asset.get("Investment_Gain_or_Loss", 0))
+                    current_value = float(asset.get("current_value", 0))
+
+                    # Calculate percentage of invested amount
+                    invested_amount_perc = (invested_amount / current_value) * 100 if current_value > 0 else 0
+
+                    # Calculate return percentage
+                    return_perc = (returns / invested_amount) * 100 if invested_amount > 0 else 0
+
+                    # Append to performance list
+                    asset_performance.append({
+                        "Client Id": client_id,
+                        "Client Name": client.get("clientName", "Unknown"),
+                        "Funds": float(client.get("investmentAmount", 0)),
+                        "Invested Amount(in %)": invested_amount_perc,
+                        "Asset": asset.get("name", "Unknown"),
+                        "Returns": returns,
+                        "Returns (%)": return_perc
+                    })
+
+        # Sort assets by return percentage in descending order
+        asset_performance.sort(key=lambda x: x["Returns (%)"], reverse=True)
+
+        return jsonify({
+            "message": f"Best performing assets in asset class '{asset_class}' retrieved successfully.",
+            "asset_class": asset_class,
+            "performance_table": asset_performance
+        }), 200
+
+    except Exception as e:
+        print(f"Error in get_best_performing_assets_api: {e}")
+        return jsonify({"message": f"Error in get_best_performing_assets_api: {e}"}), 500
+
+
+##########################################################################################################
 #########################################################################################################
 
 # Analyze Dashboard :
