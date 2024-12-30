@@ -7989,72 +7989,176 @@ def asset_class_infographics():
 
 # Asset Class Table :
 
+# V-2:
+
 @app.route('/get_best_performing_assets', methods=['POST'])
 def get_best_performing_assets_api():
-    """
-    API to get the top-performing assets for a selected asset class.
-    """
     try:
-        # Input validation
-        data = request.json
-        asset_class = data.get("asset_class")
-        clients = data.get("data")
-
+        # Fetch all clients' financial data
+        request_data = request.json
+        clients = request_data.get("data")
+        asset_class = request_data.get("asset_class")
+        
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
         if not asset_class:
-            return jsonify({"message": "Asset class is required"}), 400
+            return jsonify({"message": "No asset class provided"}), 400
 
-        client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+        # Create a map for client data by uniqueId
+        client_map = {client.get("uniqueId"): client for client in clients if client.get("uniqueId")}
+        client_ids = list(client_map.keys())
         if not client_ids:
-            return jsonify({"message": "No valid client IDs provided"}), 400
+            return jsonify({"message": "No valid client IDs found"}), 400
 
         # Fetch consolidated portfolio data
         portfolios = fetch_consolidated_portfolio(client_ids)
         if not portfolios:
             return jsonify({"message": "No portfolio data found for provided clients"}), 404
 
-        # Collect relevant data
-        asset_performance = []
-        for client in clients:
-            client_id = client.get("uniqueId")
-            portfolio_data = portfolios.get(client_id, {}).get("assets", [])
+        # Initialize best-performing assets list
+        best_performing_assets = []
 
-            for asset in portfolio_data:
-                if asset.get("assetClass", "Unknown") == asset_class:
-                    invested_amount = float(asset.get("Amount_Invested", 0))
-                    returns = float(asset.get("Investment_Gain_or_Loss", 0))
-                    current_value = float(asset.get("current_value", 0))
+        for client_id, portfolio in portfolios.items():
+            # Handle portfolio as a list of assets (fallback for invalid structure)
+            if isinstance(portfolio, list):
+                print(f"Portfolio for client_id {client_id} is a list. Wrapping it in a dictionary.")
+                portfolio = {"assets": portfolio}
 
-                    # Calculate percentage of invested amount
-                    invested_amount_perc = (invested_amount / current_value) * 100 if current_value > 0 else 0
+            # Ensure portfolio is a dictionary
+            if not isinstance(portfolio, dict):
+                print(f"Invalid portfolio format for client_id: {client_id}")
+                continue
 
-                    # Calculate return percentage
-                    return_perc = (returns / invested_amount) * 100 if invested_amount > 0 else 0
+            # Safely get assets from the portfolio
+            assets = portfolio.get("assets", [])
+            if not isinstance(assets, list):
+                print(f"'assets' is not a list for client_id: {client_id}")
+                continue
 
-                    # Append to performance list
-                    asset_performance.append({
-                        "Client Id": client_id,
-                        "Client Name": client.get("clientName", "Unknown"),
-                        "Funds": float(client.get("investmentAmount", 0)),
-                        "Invested Amount(in %)": invested_amount_perc,
-                        "Asset": asset.get("name", "Unknown"),
-                        "Returns": returns,
-                        "Returns (%)": return_perc
-                    })
+            for asset in assets:
+                # Check if the asset belongs to the selected asset class
+                if asset.get("assetClass") != asset_class:
+                    continue
 
-        # Sort assets by return percentage in descending order
-        asset_performance.sort(key=lambda x: x["Returns (%)"], reverse=True)
+                # Extract required fields and calculate returns percentage
+                invested_amount = float(asset.get("Amount_Invested", 0))
+                returns = float(asset.get("Investment_Gain_or_Loss", 0))
+                returns_perc = (returns / invested_amount * 100) if invested_amount > 0 else 0
 
-        return jsonify({
-            "message": f"Best performing assets in asset class '{asset_class}' retrieved successfully.",
+                client_data = client_map.get(client_id, {})
+                best_performing_assets.append({
+                    "Client Id": client_id,
+                    "Client Name": client_data.get("clientDetail", {}).get("clientName", "Unknown"),
+                    "Funds": float(client_data.get("investmentAmount", 0)),
+                    "Invested Amount": invested_amount,
+                    "Asset": asset.get("name", "Unknown"),
+                    "Returns ($)": returns,
+                    "Returns (%)": returns_perc
+                })
+
+        # Sort assets by returns percentage in descending order
+        best_performing_assets.sort(key=lambda x: x["Returns (%)"], reverse=True)
+
+        # Format the response
+        response = {
+            "message": f"Top assets for asset class '{asset_class}' retrieved successfully",
             "asset_class": asset_class,
-            "performance_table": asset_performance
-        }), 200
+            "performance_table": best_performing_assets
+        }
+        
+        print(f"Top assets for asset class :{asset_class}\n{best_performing_assets}")
+
+        return jsonify(response), 200
 
     except Exception as e:
         print(f"Error in get_best_performing_assets_api: {e}")
         return jsonify({"message": f"Error in get_best_performing_assets_api: {e}"}), 500
+
+
+# V-1 :
+
+# @app.route('/get_best_performing_assets', methods=['POST'])
+# def get_best_performing_assets_api():
+#     try:
+#         # Fetch all clients' financial data
+#         request_data = request.json
+#         clients = request_data.get("data")
+#         asset_class = request_data.get("asset_class")
+        
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+#         if not asset_class:
+#             return jsonify({"message": "No asset class provided"}), 400
+
+#         # Create a map for client data by uniqueId
+#         client_map = {client.get("uniqueId"): client for client in clients if client.get("uniqueId")}
+#         client_ids = list(client_map.keys())
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found"}), 400
+
+#         # Fetch consolidated portfolio data
+#         portfolios = fetch_consolidated_portfolio(client_ids)
+#         if not portfolios:
+#             return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+#         # Initialize best-performing assets list
+#         best_performing_assets = []
+
+#         for client_id, portfolio in portfolios.items():
+#             # Handle portfolio as a list of assets (fallback for invalid structure)
+#             if isinstance(portfolio, list):
+#                 print(f"Portfolio for client_id {client_id} is a list. Wrapping it in a dictionary.")
+#                 portfolio = {"assets": portfolio}
+
+#             # Ensure portfolio is a dictionary
+#             if not isinstance(portfolio, dict):
+#                 print(f"Invalid portfolio format for client_id: {client_id}")
+#                 continue
+
+#             # Safely get assets from the portfolio
+#             assets = portfolio.get("assets", [])
+#             if not isinstance(assets, list):
+#                 print(f"'assets' is not a list for client_id: {client_id}")
+#                 continue
+
+#             for asset in assets:
+#                 # Check if the asset belongs to the selected asset class
+#                 if asset.get("assetClass") != asset_class:
+#                     continue
+
+#                 # Extract required fields and calculate returns percentage
+#                 invested_amount = float(asset.get("Amount_Invested", 0))
+#                 returns = float(asset.get("Investment_Gain_or_Loss", 0))
+#                 returns_perc = (returns / invested_amount * 100) if invested_amount > 0 else 0
+
+#                 best_performing_assets.append({
+#                     "Client Id": client_id,
+#                     "Client Name": client_map.get(client_id, {}).get("clientName", "Unknown"),
+#                     "Funds": float(client_map.get(client_id, {}).get("investmentAmount", 0)),
+#                     "Invested Amount": invested_amount,
+#                     "Asset": asset.get("name", "Unknown"),
+#                     "Returns ($)": returns,
+#                     "Returns (%)": returns_perc
+#                 })
+       
+
+#         # Sort assets by returns percentage in descending order
+#         best_performing_assets.sort(key=lambda x: x["Returns (%)"], reverse=True)
+
+#         # Format the response
+#         response = {
+#             "message": f"Top assets for asset class '{asset_class}' retrieved successfully",
+#             "asset_class": asset_class,
+#             "performance_table": best_performing_assets
+#         }
+        
+#         print(f"Top assets for asset class :{asset_class}\n{best_performing_assets}")
+
+#         return jsonify(response), 200
+
+#     except Exception as e:
+#         print(f"Error in get_best_performing_assets_api: {e}")
+#         return jsonify({"message": f"Error in get_best_performing_assets_api: {e}"}), 500
 
 
 ##########################################################################################################
