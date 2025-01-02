@@ -7953,7 +7953,8 @@ def analyze_dashboard():
         if not client_ids:
             return jsonify({"message": "No valid client IDs found in the request"}), 400
 
-        # dashboard_infographics(clients)
+        # call infographics for testing purposes :
+        dashboard_infographics(clients)
         
         # Fetch portfolios for all clients in bulk
         portfolios = fetch_portfolios(client_ids)
@@ -8508,193 +8509,38 @@ def markdown_to_text_new(md):
 ################################################################################################
 # Dashboard Infographics :
 
+def rebalancing_strategy(before):
+    """
+    Example rebalancing strategy: Reduce categories above 50% allocation to 50% and 
+    distribute the remainder evenly across other categories.
+    """
+    max_allocation = 50  # Max allocation threshold in %
+    excess_allocation = 0
+    after = {}
+
+    # Cap allocations above the threshold and calculate excess
+    for category, percentage in before.items():
+        if percentage > max_allocation:
+            excess_allocation += percentage - max_allocation
+            after[category] = max_allocation
+        else:
+            after[category] = percentage
+
+    # Redistribute excess allocation proportionally
+    total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
+    redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
+
+    for category in after:
+        if after[category] < max_allocation:
+            after[category] += redistribution
+            after[category] = min(after[category], max_allocation)
+
+    return after
+
+
 # Calculate metrics and prepare data for dashboard infographics:
 
 # # v-2 :
-# prev :
-
-# def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3=s3, s3_bucket_name=S3_BUCKET_NAME):
-#     performance_list = []
-#     stress_test_results = []
-#     client_goal_progress = {}
-#     client_rebalancing_recommendations = {}
-#     comparative_analysis_data = []
-#     portfolio_management_scores = []
-#     risk_and_liquidity_data = []
-    
-#     def get_safe_field(dictionary, keys, default=None):
-#         """Helper function to safely get a nested field from a dictionary."""
-#         try:
-#             for key in keys:
-#                 dictionary = dictionary.get(key, {})
-#             return dictionary or default
-#         except AttributeError:
-#             return default
-
-#     for client in clients:
-#         client_id = client.get("uniqueId")
-#         if not client_id or client_id not in portfolios:
-#             logging.warning(f"Client ID {client_id} is invalid or not in portfolios. Skipping.")
-#             continue
-
-#         # Safely fetch client name
-#         client_name = get_safe_field(client, ["clientDetail", "clientName"], "Unknown")
-#         if client_name == "Unknown":
-#             logging.warning(f"Missing client name for client ID {client_id}. Defaulting to 'Unknown'.")
-
-#         # Fetch client data
-#         client_data = None
-#         if use_aws:
-#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=s3_bucket_name, Key=client_data_key)
-#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
-#             except Exception as e:
-#                 logging.error(f"Error retrieving client data from AWS for {client_id}: {e}")
-#                 continue
-#         else:
-#             client_data_path = os.path.join("client_data", f"{client_id}.json")
-#             if os.path.exists(client_data_path):
-#                 with open(client_data_path, 'r') as file:
-#                     client_data = json.load(file)
-#         if not client_data:
-#             logging.warning(f"No client data found for client ID {client_id}. Skipping.")
-#             continue
-
-#         # Process and calculate metrics
-#         funds = float(client_data.get("investmentAmount", 0) or 0)
-#         assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
-#         liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
-#         net_worth = assets - liabilities
-
-#         # Savings Rate
-#         annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
-#         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
-
-#         # Emergency Fund Coverage
-#         monthly_expenses = sum(
-#             float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
-#         ) + sum(
-#             float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
-#         )
-#         liability_monthly_payments = sum(
-#             float(client_data["assetsDatasets"]["datasets"][0]["data"][i] or 0)
-#             for i, label in enumerate(client_data["assetsDatasets"]["labels"])
-#             if label in ["Cash/bank accounts", "Brokerage/non-qualified accounts"]
-#         )
-#         # Extract assets and liabilities data
-#         assets_labels = client_data["assetsDatasets"]["labels"]
-#         assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
-#         liabilities_data = client_data["liabilityDatasets"]["datasets"][0]["data"]
-
-#         # Map liquid asset categories
-#         liquid_asset_categories = [
-#             "Cash/bank accounts",
-#             "Brokerage/non-qualified accounts",
-#             "529 Plans",
-#             "Roth IRA, Roth 401(k)"
-#         ]
-        
-#         # Calculate liquid assets
-#         liquid_assets = sum(
-#             float(assets_data[i] or 0)
-#             for i, label in enumerate(assets_labels)
-#             if label in liquid_asset_categories
-#         )
-
-#             # Calculate total liabilities
-#         total_liabilities = sum(float(liability or 0) for liability in liabilities_data)
-
-#         # Calculate liquidity ratio
-#         liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
-        
-#         emergency_fund_coverage = (liability_monthly_payments / monthly_expenses) if monthly_expenses > 0 else 0
-
-#         # Asset Allocation
-#         portfolio_data = portfolios.get(client_id, [])
-#         asset_allocation = {}
-#         for asset in portfolio_data:
-#             asset_class = asset.get("assetClass", "Other")
-#             allocation = float(asset.get("Amount_Invested", 0))
-#             asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
-#         total_allocation = sum(asset_allocation.values())
-#         asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
-
-#         # Portfolio Management Scores
-#         diversification_score = len(asset_allocation)
-#         sharpe_ratio = client_data.get("sharpeRatio", 0)
-#         volatility = client_data.get("volatility", 0)
-        
-#         # Progress Towards Financial Goals
-#         financial_goals = client_data.get("goalFields","Unknown")
-#         progress_to_goals_score = {}
-#         if isinstance(financial_goals, list):
-#             for goal in financial_goals:
-#                 try:
-#                     goal_cost = float(goal.get("cost", 0) or 0)  # Convert cost to float
-#                 except ValueError:
-#                     goal_cost = 0  # Fallback if cost is invalid
-
-#                 progress = (net_worth / goal_cost) * 100 if goal_cost > 0 else 0
-#                 progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
-#                 print(f"Progress to goals score :\n{progress_to_goals_score}")    
-#         else:
-#             print("Financial goals are not in the expected format.")
-        
-#         client_goal_progress[client_id] = progress_to_goals_score
-        
-#         portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
-#         portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
-#         portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
-            
-#         if portfolio_current_value != 0:
-#             portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
-#             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
-#         else:
-#             portfolio_daily_change_perc = 0
-#             portfolio_investment_gain_loss_perc = 0
-
-#          # Collect comparative data
-        
-#         comparative_analysis_data.append({
-#             "client_name": client_name,
-#             "assets": assets,
-#             "liabilities": liabilities,
-#             "net_worth": net_worth,
-#             "profit_loss": portfolio_investment_gain_loss, #sum(asset.get("Investment_Gain_or_Loss", 0) for asset in portfolio_data),
-#             "profit_loss_percentage": portfolio_investment_gain_loss_perc, #sum(asset.get("Investment_Gain_or_Loss_percentage", 0) for asset in portfolio_data) / len(portfolio_data) if portfolio_data else 0,
-#         })
-
-#         risk_and_liquidity_data.append({
-#             "liquidity_ratio":liquidity_ratio,
-#             "liquid_assets":liquid_assets,
-#             "emergency_fund_coverage":emergency_fund_coverage,
-#         })
-        
-#         portfolio_management_scores.append({
-#             "client_id": client_id,
-#             "client_name": client_name,
-#             "sharpe_ratio": sharpe_ratio,
-#             "savings_rate": savings_rate,
-#             "volatility": volatility,
-#             "diversification_score": diversification_score,
-#             "progress_to_goals_score": client_goal_progress,
-#         })
-
-#     print(f"Performance List: {performance_list}")
-#     print(f"Stress Test Results: {stress_test_results}")
-#     print(f"Client Goal Progress: {client_goal_progress}")
-#     print(f"Rebalancing: {client_rebalancing_recommendations}")
-
-#     return {
-#         "performance_list": performance_list,
-#         "stress_test_results": stress_test_results,
-#         "client_goal_progress": client_goal_progress,
-#         "client_rebalancing_recommendations": client_rebalancing_recommendations,
-#         "comparative_analysis_data": comparative_analysis_data,
-#         "portfolio_management_scores": portfolio_management_scores,
-#     }
-
 # Updated :
 def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3=s3, s3_bucket_name=S3_BUCKET_NAME):
     performance_list = []
@@ -8713,6 +8559,33 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
             return dictionary or default
         except AttributeError:
             return default
+
+    def rebalancing_strategy(before):
+        """
+        Example rebalancing strategy: Cap allocations above 50% and redistribute excess proportionally.
+        """
+        max_allocation = 50  # Max allocation threshold in %
+        excess_allocation = 0
+        after = {}
+
+        # Cap allocations above the threshold and calculate excess
+        for category, percentage in before.items():
+            if percentage > max_allocation:
+                excess_allocation += percentage - max_allocation
+                after[category] = max_allocation
+            else:
+                after[category] = percentage
+
+        # Redistribute excess allocation proportionally
+        total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
+        redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
+
+        for category in after:
+            if after[category] < max_allocation:
+                after[category] += redistribution
+                after[category] = min(after[category], max_allocation)
+
+        return after
 
     for client in clients:
         client_id = client.get("uniqueId")
@@ -8839,6 +8712,37 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
 
     print(f"Risk and Liquidity Data: {risk_and_liquidity_data}")
 
+        # Existing metric calculations (net worth, savings rate, liquidity ratio, etc.) remain unchanged
+    dashboard_data= []
+    for client_id, portfolio_data in portfolios.items():
+        # Aggregate current asset allocation (calculate 'before')
+        asset_allocation = {}
+        for asset in portfolio_data:
+            asset_class = asset.get("assetClass", "Other")
+            allocation = float(asset.get("Amount_Invested", 0))
+            asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+        # Normalize asset allocation to percentages
+        total_allocation = sum(asset_allocation.values())
+        before_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+
+        # Calculate 'after' allocation using the rebalancing strategy
+        after_allocation = rebalancing_strategy(before_allocation)
+
+        # Generate recommendations
+        recommendations = [
+            f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50
+        ]
+        client_rebalancing_recommendations[client_id] = recommendations
+
+        # Prepare chart data for recommendations impact
+        chart_data = {
+            "categories": list(before_allocation.keys()),
+            "before_values": list(before_allocation.values()),
+            "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()],
+        }
+        dashboard_data["recommendations_impact"][client_id] = chart_data
+
     return {
         "performance_list": performance_list,
         "stress_test_results": stress_test_results,
@@ -8847,7 +8751,165 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
         "comparative_analysis_data": comparative_analysis_data,
         "portfolio_management_scores": portfolio_management_scores,
         "risk_and_liquidity_data": risk_and_liquidity_data,
+        "recommendations_impact": dashboard_data["recommendations_impact"][client_id],
     }
+
+
+
+# prev :
+
+# def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3=s3, s3_bucket_name=S3_BUCKET_NAME):
+#     performance_list = []
+#     stress_test_results = []
+#     client_goal_progress = {}
+#     client_rebalancing_recommendations = {}
+#     comparative_analysis_data = []
+#     portfolio_management_scores = []
+#     risk_and_liquidity_data = []
+
+#     def get_safe_field(dictionary, keys, default=None):
+#         """Helper function to safely get a nested field from a dictionary."""
+#         try:
+#             for key in keys:
+#                 dictionary = dictionary.get(key, {})
+#             return dictionary or default
+#         except AttributeError:
+#             return default
+
+#     for client in clients:
+#         client_id = client.get("uniqueId")
+#         if not client_id or client_id not in portfolios:
+#             logging.warning(f"Client ID {client_id} is invalid or not in portfolios. Skipping.")
+#             continue
+
+#         # Safely fetch client name
+#         client_name = get_safe_field(client, ["clientDetail", "clientName"], "Unknown")
+#         if client_name == "Unknown":
+#             logging.warning(f"Missing client name for client ID {client_id}. Defaulting to 'Unknown'.")
+
+#         # Fetch client data
+#         client_data = None
+#         if use_aws:
+#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=s3_bucket_name, Key=client_data_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 logging.error(f"Error retrieving client data from AWS for {client_id}: {e}")
+#                 continue
+#         else:
+#             client_data_path = os.path.join("client_data", f"{client_id}.json")
+#             if os.path.exists(client_data_path):
+#                 with open(client_data_path, 'r') as file:
+#                     client_data = json.load(file)
+#         if not client_data:
+#             logging.warning(f"No client data found for client ID {client_id}. Skipping.")
+#             continue
+
+#         # Process and calculate metrics
+#         funds = float(client_data.get("investmentAmount", 0) or 0)
+#         assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#         liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#         net_worth = assets - liabilities
+
+#         # Savings Rate
+#         annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+
+#         # Emergency Fund Coverage
+#         monthly_expenses = sum(
+#             float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
+#         ) + sum(
+#             float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
+#         )
+#         assets_labels = client_data["assetsDatasets"]["labels"]
+#         assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+
+#         liquid_asset_categories = [
+#             "Cash/bank accounts",
+#             "Brokerage/non-qualified accounts",
+#             "529 Plans",
+#             "Roth IRA, Roth 401(k)"
+#         ]
+#         liquid_assets = sum(
+#             float(assets_data[i] or 0)
+#             for i, label in enumerate(assets_labels)
+#             if label in liquid_asset_categories
+#         )
+#         total_liabilities = liabilities
+#         liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+#         emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#         # Debt-to-Asset Ratio
+#         debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#         # Asset Allocation
+#         portfolio_data = portfolios.get(client_id, [])
+#         asset_allocation = {}
+#         for asset in portfolio_data:
+#             asset_class = asset.get("assetClass", "Other")
+#             allocation = float(asset.get("Amount_Invested", 0))
+#             asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+#         total_allocation = sum(asset_allocation.values())
+#         asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+
+#         # Portfolio Metrics
+#         diversification_score = len(asset_allocation)
+#         sharpe_ratio = client_data.get("sharpeRatio", 0)
+#         volatility = client_data.get("volatility", 0)
+#         portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#         portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#         portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+#         portfolio_investment_gain_loss_perc = (
+#             (portfolio_investment_gain_loss / portfolio_current_value) * 100 if portfolio_current_value != 0 else 0
+#         )
+
+#         # Progress Towards Financial Goals
+#         financial_goals = client_data.get("goalFields", [])
+#         progress_to_goals_score = {}
+#         for goal in financial_goals:
+#             goal_cost = float(goal.get("cost", 0) or 0)
+#             progress = (net_worth / goal_cost * 100) if goal_cost > 0 else 0
+#             progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 2)
+#         client_goal_progress[client_id] = progress_to_goals_score
+
+#         # Append Data
+#         comparative_analysis_data.append({
+#             "client_name": client_name,
+#             "assets": assets,
+#             "liabilities": liabilities,
+#             "net_worth": net_worth,
+#             "profit_loss": portfolio_investment_gain_loss,
+#             "profit_loss_percentage": portfolio_investment_gain_loss_perc,
+#         })
+#         risk_and_liquidity_data.append({
+#             "client_name": client_name,
+#             "liquidity_ratio": liquidity_ratio,
+#             "debt_to_asset_ratio": debt_to_asset_ratio,
+#             "net_worth": net_worth,
+#             "emergency_fund_coverage": emergency_fund_coverage,
+#         })
+#         portfolio_management_scores.append({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             "sharpe_ratio": sharpe_ratio,
+#             "savings_rate": savings_rate,
+#             "volatility": volatility,
+#             "diversification_score": diversification_score,
+#             "progress_to_goals_score": progress_to_goals_score,
+#         })
+
+#     print(f"Risk and Liquidity Data: {risk_and_liquidity_data}")
+
+#     return {
+#         "performance_list": performance_list,
+#         "stress_test_results": stress_test_results,
+#         "client_goal_progress": client_goal_progress,
+#         "client_rebalancing_recommendations": client_rebalancing_recommendations,
+#         "comparative_analysis_data": comparative_analysis_data,
+#         "portfolio_management_scores": portfolio_management_scores,
+#         "risk_and_liquidity_data": risk_and_liquidity_data,
+#     }
 
 
 
@@ -9118,19 +9180,35 @@ def plot_risk_and_liquidity(data):
 #     }
 #     return chart_data
 
+# updated :
+import matplotlib.pyplot as plt
+import numpy as np
 
 def plot_recommendations_impact(before, after):
     """
-    Create a before-and-after bar chart for recommendations impact.
+    Create a before-and-after bar chart for recommendations impact and prepare chart data for the frontend.
     :param before: Dict of asset allocation percentages before recommendations.
     :param after: Dict of asset allocation percentages after recommendations.
+    :return: Chart data for frontend.
     """
+    # Handle empty input gracefully
+    if not before or not after:
+        print("No data provided for plotting.")
+        return {
+            "categories": [],
+            "before_values": [],
+            "after_values": []
+        }
+
     categories = list(before.keys())
     x = np.arange(len(categories))
 
+    before_values = [before.get(cat, 0) for cat in categories]
+    after_values = [after.get(cat, 0) for cat in categories]
+
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(x - 0.2, [before[cat] for cat in categories], width=0.4, label='Before')
-    ax.bar(x + 0.2, [after[cat] for cat in categories], width=0.4, label='After')
+    ax.bar(x - 0.2, before_values, width=0.4, label='Before', color='skyblue')
+    ax.bar(x + 0.2, after_values, width=0.4, label='After', color='orange')
 
     ax.set_xticks(x)
     ax.set_xticklabels(categories, rotation=45, ha='right')
@@ -9140,6 +9218,98 @@ def plot_recommendations_impact(before, after):
 
     plt.tight_layout()
     plt.show()
+
+    # Prepare data for the frontend
+    chart_data = {
+        "categories": categories,
+        "before_values": before_values,
+        "after_values": after_values
+    }
+    return chart_data
+
+
+# [prev]
+# def plot_recommendations_impact(before, after):
+#     """
+#     Create a before-and-after bar chart for recommendations impact.
+#     :param before: Dict of asset allocation percentages before recommendations.
+#     :param after: Dict of asset allocation percentages after recommendations.
+#     """
+#     categories = list(before.keys())
+#     x = np.arange(len(categories))
+
+#     fig, ax = plt.subplots(figsize=(10, 6))
+#     ax.bar(x - 0.2, [before[cat] for cat in categories], width=0.4, label='Before')
+#     ax.bar(x + 0.2, [after[cat] for cat in categories], width=0.4, label='After')
+
+#     ax.set_xticks(x)
+#     ax.set_xticklabels(categories, rotation=45, ha='right')
+#     ax.set_ylabel('Allocation (%)')
+#     ax.set_title('Impact of Recommendations on Asset Allocation')
+#     ax.legend()
+
+#     plt.tight_layout()
+#     plt.show()
+
+# withput api : for testing :
+
+# @app.route('/dashboard_infographics', methods=['POST'])
+# def dashboard_infographics():
+
+# def dashboard_infographics(clients):
+#     try:
+#         # clients = request.json.get("data")
+#         # analyze_dashboard()
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found in the request"}), 400
+
+#         portfolios = fetch_portfolios(client_ids)
+        
+
+#         dashboard_data = calculate_dashboard_metrics(
+#             clients=clients,
+#             portfolios=portfolios,
+#             client_summary_folder=client_summary_folder
+#         )
+
+#         # Call plotting functions here
+        
+#         comparative_analysis_data = plot_comparative_analysis(dashboard_data["comparative_analysis_data"])
+#         # print(f"comparative_analysis_data: {comparative_analysis_data}")
+#         # plot_portfolio_management_scores(dashboard_data["portfolio_management_scores"])
+        
+#         # print(dashboard_data["client_goal_progress"])
+        
+#         # plot_goal_achievement_progress(dashboard_data["goal_achievement_progress"])
+        
+#         risk_and_liquidity_data = plot_risk_and_liquidity(dashboard_data["risk_and_liquidity_data"])
+#         print(f"risk_and_liquidity_data: {risk_and_liquidity_data}")
+
+#         print(dashboard_data["client_rebalancing_recommendations"])
+#         rebalancing_recommendations_data = []
+#         for client_id, impact in dashboard_data["client_rebalancing_recommendations"].items():
+#             rebalancing_recommendations_data.append(plot_recommendations_impact(impact["before"], impact["after"]))
+            
+#         print(f"rebalancing_recommendations_data: {rebalancing_recommendations_data}")
+
+#         print("\nSuccess\n")
+#         print(dashboard_data)
+#         # return jsonify({"success": True, 
+#         #                 "comparative_analysis_data": comparative_analysis_data,
+#         #                 "risk_and_liquidity_data": risk_and_liquidity_data,
+#         #                 }),200
+        
+#         # return jsonify({"success": True, "data": dashboard_data}),200
+
+#     except Exception as e:
+#         print(f"Error calculating dashboard metrics: {e}")
+#         # return jsonify({"success": False, "error": str(e)}), 500
+
+# with api :
 
 @app.route('/dashboard_infographics', methods=['POST'])
 def dashboard_infographics():
@@ -9165,7 +9335,7 @@ def dashboard_infographics():
         # Call plotting functions here
         
         comparative_analysis_data = plot_comparative_analysis(dashboard_data["comparative_analysis_data"])
-        print(f"comparative_analysis_data: {comparative_analysis_data}")
+        # print(f"comparative_analysis_data: {comparative_analysis_data}")
         # plot_portfolio_management_scores(dashboard_data["portfolio_management_scores"])
         
         # print(dashboard_data["client_goal_progress"])
@@ -9175,18 +9345,27 @@ def dashboard_infographics():
         risk_and_liquidity_data = plot_risk_and_liquidity(dashboard_data["risk_and_liquidity_data"])
         print(f"risk_and_liquidity_data: {risk_and_liquidity_data}")
 
-        for client_id, impact in dashboard_data["client_rebalancing_recommendations"].items():
-            plot_recommendations_impact(impact["before"], impact["after"])
+        print(dashboard_data["recommendations_impact"])
+        rebalancing_recommendations_data = []
+        for client_id, impact in dashboard_data["recommendations_impact"].items():
+            rebalancing_recommendations_data.append(plot_recommendations_impact(impact["before"], impact["after"]))
+            
+        print(f"rebalancing_recommendations_data: {rebalancing_recommendations_data}")
 
-        print("Success\n")
+        print("\nSuccess\n")
         print(dashboard_data)
-        # return jsonify({"success": True, "data": comparative_analysis_data}),200
+        return jsonify({"success": True, 
+                        "comparative_analysis_data": comparative_analysis_data,
+                        "risk_and_liquidity_data": risk_and_liquidity_data,
+                        }),200
         
         # return jsonify({"success": True, "data": dashboard_data}),200
 
     except Exception as e:
         print(f"Error calculating dashboard metrics: {e}")
         # return jsonify({"success": False, "error": str(e)}), 500
+
+
 
 
 # V-1 :
