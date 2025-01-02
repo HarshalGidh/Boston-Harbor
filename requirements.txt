@@ -39,3 +39,5 @@ pyjwt
 statsmodels
 pmdarima
 yahoo_fin
+markdownify
+prettytable
