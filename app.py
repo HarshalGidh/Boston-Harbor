@@ -7954,7 +7954,7 @@ def analyze_dashboard():
             return jsonify({"message": "No valid client IDs found in the request"}), 400
 
         # call infographics for testing purposes :
-        dashboard_infographics(clients)
+        # dashboard_infographics(clients)
         
         # Fetch portfolios for all clients in bulk
         portfolios = fetch_portfolios(client_ids)
@@ -8468,6 +8468,7 @@ def analyze_dashboard():
             Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
             Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
             Use all the provided data to generate meaningful and actionable insights.
+            Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
             """
 
         response = model.generate_content(task)
@@ -8712,36 +8713,35 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
 
     print(f"Risk and Liquidity Data: {risk_and_liquidity_data}")
 
-        # Existing metric calculations (net worth, savings rate, liquidity ratio, etc.) remain unchanged
-    dashboard_data= []
-    for client_id, portfolio_data in portfolios.items():
-        # Aggregate current asset allocation (calculate 'before')
-        asset_allocation = {}
-        for asset in portfolio_data:
-            asset_class = asset.get("assetClass", "Other")
-            allocation = float(asset.get("Amount_Invested", 0))
-            asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+    # dashboard_data= []
+    # for client_id, portfolio_data in portfolios.items():
+    #     # Aggregate current asset allocation (calculate 'before')
+    #     asset_allocation = {}
+    #     for asset in portfolio_data:
+    #         asset_class = asset.get("assetClass", "Other")
+    #         allocation = float(asset.get("Amount_Invested", 0))
+    #         asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
 
-        # Normalize asset allocation to percentages
-        total_allocation = sum(asset_allocation.values())
-        before_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+    #     # Normalize asset allocation to percentages
+    #     total_allocation = sum(asset_allocation.values())
+    #     before_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
 
-        # Calculate 'after' allocation using the rebalancing strategy
-        after_allocation = rebalancing_strategy(before_allocation)
+    #     # Calculate 'after' allocation using the rebalancing strategy
+    #     after_allocation = rebalancing_strategy(before_allocation)
 
-        # Generate recommendations
-        recommendations = [
-            f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50
-        ]
-        client_rebalancing_recommendations[client_id] = recommendations
+    #     # Generate recommendations
+    #     recommendations = [
+    #         f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50
+    #     ]
+    #     client_rebalancing_recommendations[client_id] = recommendations
 
         # Prepare chart data for recommendations impact
-        chart_data = {
-            "categories": list(before_allocation.keys()),
-            "before_values": list(before_allocation.values()),
-            "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()],
-        }
-        dashboard_data["recommendations_impact"][client_id] = chart_data
+        # chart_data = {
+        #     "categories": list(before_allocation.keys()),
+        #     "before_values": list(before_allocation.values()),
+        #     "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()],
+        # }
+        # dashboard_data["recommendations_impact"][client_id] = chart_data
 
     return {
         "performance_list": performance_list,
@@ -8751,7 +8751,7 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
         "comparative_analysis_data": comparative_analysis_data,
         "portfolio_management_scores": portfolio_management_scores,
         "risk_and_liquidity_data": risk_and_liquidity_data,
-        "recommendations_impact": dashboard_data["recommendations_impact"][client_id],
+        # "recommendations_impact": dashboard_data["recommendations_impact"][client_id],
     }
 
 
@@ -8931,22 +8931,22 @@ def plot_comparative_analysis(data):
         for category in categories
     }
 
-    x = np.arange(len(clients))  # Client positions
-    width = 0.2  # Bar width
+    # x = np.arange(len(clients))  # Client positions
+    # width = 0.2  # Bar width
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    # fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Plot bars for each category
-    for i, category in enumerate(categories):
-        ax.bar(x + i * width, values[category], width, label=category.replace('_', ' ').title())
+    # # Plot bars for each category
+    # for i, category in enumerate(categories):
+    #     ax.bar(x + i * width, values[category], width, label=category.replace('_', ' ').title())
 
-    # Adjust tick positions and labels
-    ax.set_xticks(x + (width * (len(categories) - 1)) / 2)  # Center tick labels
-    ax.set_xticklabels(clients, rotation=45, ha='right')
+    # # Adjust tick positions and labels
+    # ax.set_xticks(x + (width * (len(categories) - 1)) / 2)  # Center tick labels
+    # ax.set_xticklabels(clients, rotation=45, ha='right')
 
-    ax.set_ylabel('Values')
-    ax.set_title('Comparative Analysis of Clients')
-    ax.legend()
+    # ax.set_ylabel('Values')
+    # ax.set_title('Comparative Analysis of Clients')
+    # ax.legend()
 
     # plt.tight_layout()
     # plt.show()
@@ -9113,27 +9113,27 @@ def plot_risk_and_liquidity(data):
     labels = [item['client_name'] for item in data]
 
     # Plot bubble chart
-    fig, ax = plt.subplots(figsize=(12, 8))
-    scatter = ax.scatter(
-        x, y, s=sizes, alpha=0.7, c=raw_sizes, cmap='viridis', edgecolors='k', linewidth=0.5
-    )
+    # fig, ax = plt.subplots(figsize=(12, 8))
+    # scatter = ax.scatter(
+    #     x, y, s=sizes, alpha=0.7, c=raw_sizes, cmap='viridis', edgecolors='k', linewidth=0.5
+    # )
 
     # Add labels with dynamic offsets
-    for i, label in enumerate(labels):
-        ax.text(
-            x[i], y[i] * 1.05, label, fontsize=9, ha='center', va='bottom',
-            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1)
-        )
+    # for i, label in enumerate(labels):
+    #     ax.text(
+    #         x[i], y[i] * 1.05, label, fontsize=9, ha='center', va='bottom',
+    #         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1)
+    #     )
 
     # Apply logarithmic scale for wide y-axis range
-    ax.set_yscale('log')
-    ax.set_xlabel('Liquidity Ratio (%)')
-    ax.set_ylabel('Debt-to-Asset Ratio (%) (Log Scale)')
-    ax.set_title('Risk and Liquidity Analysis')
-    plt.colorbar(scatter, ax=ax, label='Net Worth (in $M)')
-    plt.grid(True, which="both", linestyle='--', linewidth=0.5, alpha=0.7)
-    plt.tight_layout()
-    plt.show()
+    # ax.set_yscale('log')
+    # ax.set_xlabel('Liquidity Ratio (%)')
+    # ax.set_ylabel('Debt-to-Asset Ratio (%) (Log Scale)')
+    # ax.set_title('Risk and Liquidity Analysis')
+    # plt.colorbar(scatter, ax=ax, label='Net Worth (in $M)')
+    # plt.grid(True, which="both", linestyle='--', linewidth=0.5, alpha=0.7)
+    # plt.tight_layout()
+    # plt.show()
 
     # Prepare chart data for frontend
     chart_data = {
@@ -9335,22 +9335,18 @@ def dashboard_infographics():
         # Call plotting functions here
         
         comparative_analysis_data = plot_comparative_analysis(dashboard_data["comparative_analysis_data"])
-        # print(f"comparative_analysis_data: {comparative_analysis_data}")
+        print(f"comparative_analysis_data: {comparative_analysis_data}")
         # plot_portfolio_management_scores(dashboard_data["portfolio_management_scores"])
-        
-        # print(dashboard_data["client_goal_progress"])
-        
-        # plot_goal_achievement_progress(dashboard_data["goal_achievement_progress"])
         
         risk_and_liquidity_data = plot_risk_and_liquidity(dashboard_data["risk_and_liquidity_data"])
         print(f"risk_and_liquidity_data: {risk_and_liquidity_data}")
 
-        print(dashboard_data["recommendations_impact"])
-        rebalancing_recommendations_data = []
-        for client_id, impact in dashboard_data["recommendations_impact"].items():
-            rebalancing_recommendations_data.append(plot_recommendations_impact(impact["before"], impact["after"]))
+        # print(dashboard_data["recommendations_impact"])
+        # rebalancing_recommendations_data = []
+        # for client_id, impact in dashboard_data["recommendations_impact"].items():
+        #     rebalancing_recommendations_data.append(plot_recommendations_impact(impact["before"], impact["after"]))
             
-        print(f"rebalancing_recommendations_data: {rebalancing_recommendations_data}")
+        # print(f"rebalancing_recommendations_data: {rebalancing_recommendations_data}")
 
         print("\nSuccess\n")
         print(dashboard_data)
@@ -9363,7 +9359,7 @@ def dashboard_infographics():
 
     except Exception as e:
         print(f"Error calculating dashboard metrics: {e}")
-        # return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 
