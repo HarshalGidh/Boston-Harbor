@@ -4672,6 +4672,9 @@ import requests
 
 # # V-3 :
 
+# prev : working :
+# Updated :
+
 def fetch_all_assets_by_preference(market_name, preference=None):
     """
     Fetch assets for a given market and filter by type if preference is provided.
@@ -4699,8 +4702,20 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                         name = data[1]
 
                         # Filter based on preference
-                        if preference:  # Assuming preference is handled externally
+                        # Determine asset type (heuristics for ETF or stock)
+                        asset_type = "stock"
+                        if "ETF" in name.upper() or "TRUST" in name.upper() or symbol.endswith("O"):
+                            asset_type = "etf"
+                            assets.append({"name": name, "symbol": symbol, "type": "etf"})
+                            
+                        # Filter based on preference
+                        # if not preference or preference == asset_type:
+                        elif preference:
                             assets.append({"name": name, "symbol": symbol, "type": preference})
+                            
+                        # if preference:  # Assuming preference is handled externally
+                        #     assets.append({"name": name, "symbol": symbol, "type": preference})
+                        
                 print(f"Assets in {market_name} :\n{assets}")
                 return assets
             else:
@@ -4733,6 +4748,8 @@ def fetch_all_assets_by_preference(market_name, preference=None):
     except Exception as e:
         print(f"Error fetching assets for {market_name}: {e}")
         return []
+
+
 
 
 
