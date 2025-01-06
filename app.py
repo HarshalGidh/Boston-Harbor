@@ -5077,143 +5077,148 @@ def fetch_money_market_bonds():
 
 ##########################################################################################
 
-def fetch_bonds_from_yahoo(category):
-    """
-    Fetch bonds data from Yahoo Finance for a specific category.
-    Returns a list of bonds for the given category.
-    """
-    try:
-        if category == "money_market":
-            print("Fetching currencies for money market...")
-            # currencies = fetch_global_currencies()
-            # return currencies
+# # Api to fetch bonds :
 
-        url = "https://finance.yahoo.com/markets/bonds/"
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"Failed to fetch bonds page. Status code: {response.status_code}")
-            return []
-
-        soup = BeautifulSoup(response.content, "html.parser")
-
-        bond_categories = {
-            "treasury": "Treasury Bonds",
-            "corporate": "Corporate Bonds",
-            "municipal": "Municipal Bonds",
-            "money_market": "Money Market",
-        }
-
-        if category not in bond_categories:
-            print(f"Invalid category: {category}.")
-            return []
-
-        section_name = bond_categories[category]
-        section = soup.find("section", {"aria-label": section_name})
-        if not section:
-            print(f"No data found for {section_name}.")
-            return []
-
-        table = section.find("table")
-        if not table:
-            print(f"No table found for {section_name}.")
-            return []
-
-        rows = table.find_all("tr")[1:]  # Skip header row
-        bonds = []
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 4:  # Ensure required columns are present
-                continue
-            symbol = cols[0].text.strip()
-            name = cols[1].text.strip()
-            price = cols[2].text.strip()
-            yield_rate = cols[3].text.strip()
-
-            bonds.append({
-                "symbol": symbol,
-                "name": name,
-                "price": price,
-                "yield": yield_rate,
-            })
-
-        return bonds
-
-    except Exception as e:
-        print(f"Error fetching bonds: {e}")
-        return []
-
-
+# #V2 : working properly 
 @app.route('/fetch-bonds', methods=['POST'])
 def fetch_bonds():
     """
-    API endpoint to fetch bonds data by category.
+    Fetches the price of a specific bond using the ticker provided in the request payload.
     """
     try:
         data = request.get_json()
         category = data.get("category", "").lower()
 
         if not category:
-            return jsonify({"message": "Category is required."}), 400
+            return jsonify({
+                "message": "Ticker not provided in the request.",
+                "price": "N/A"
+            }), 400
+            
+        selected_ticker = data.get("ticker")
 
-        print(f"Fetching bonds for category: {category}")
-        bonds = fetch_bonds_from_yahoo(category)
+        # Function to fetch the latest closing price
+        def fetch_price(ticker):
+            try:
+                # Fetch historical data for the bond
+                data = yf.download(ticker, period="1d", interval="1d")
+                if not data.empty:
+                    # Get the latest closing price
+                    return round(data['Close'].iloc[-1], 2)
+                else:
+                    return "Price not available"
+            except Exception as e:
+                print(f"Error fetching data for ticker {ticker}: {e}")
+                return "Price not available"
 
-        if not bonds:
-            return jsonify({"message": f"No bonds found for category '{category}'."}), 404
+        # Fetch price for the selected Bond
+        price = fetch_price(selected_ticker)
+        print(f"Bond price for {selected_ticker}:\n{price}")
 
-        return jsonify({"category": category, "bonds": bonds}), 200
+        return jsonify({
+            "message": f"Price for {selected_ticker} fetched successfully",
+            "ticker": selected_ticker,
+            "price": price
+        }), 200
 
     except Exception as e:
-        print(f"Error in fetch-bonds API: {e}")
+        print(f"Error fetching bond prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
-
 # only treasury is working but it gives 10 Y US Tereasury bonds
-# @app.route('/fetch-bonds', methods=['POST'])
-# def fetch_bonds():
-#     try:
-        # data = request.get_json()
-        # category = data.get("category")
 
-#         # Map category to functions
-#         category_mapping = {
-#             "treasury": fetch_treasury_bonds,
-#             "corporate": fetch_corporate_bonds,
-#             "mortgage": fetch_mortgage_related_bonds,
-#             "municipal": fetch_municipal_bonds,
-#             "money_market": fetch_money_market_bonds
+# def fetch_bonds_from_yahoo(category):
+#     """
+#     Fetch bonds data from Yahoo Finance for a specific category.
+#     Returns a list of bonds for the given category.
+#     """
+#     try:
+#         if category == "money_market":
+#             print("Fetching currencies for money market...")
+#             # currencies = fetch_global_currencies()
+#             # return currencies
+
+#         url = "https://finance.yahoo.com/markets/bonds/"
+#         response = requests.get(url)
+#         if response.status_code != 200:
+#             print(f"Failed to fetch bonds page. Status code: {response.status_code}")
+#             return []
+
+#         soup = BeautifulSoup(response.content, "html.parser")
+
+#         bond_categories = {
+#             "treasury": "Treasury Bonds",
+#             "corporate": "Corporate Bonds",
+#             "municipal": "Municipal Bonds",
+#             "money_market": "Money Market",
 #         }
 
-        # if category in category_mapping:
-        #     bonds = category_mapping[category]()
-        #     return jsonify({"category": category, "bonds": bonds}), 200
-        # else:
-        #     return jsonify({"message": f"Category {category} not recognized."}), 400
+#         if category not in bond_categories:
+#             print(f"Invalid category: {category}.")
+#             return []
 
-    # except Exception as e:
-    #     print(f"Error in fetch-bonds API: {e}")
-    #     return jsonify({"message": f"Internal server error: {e}"}), 500
+#         section_name = bond_categories[category]
+#         section = soup.find("section", {"aria-label": section_name})
+#         if not section:
+#             print(f"No data found for {section_name}.")
+#             return []
 
+#         table = section.find("table")
+#         if not table:
+#             print(f"No table found for {section_name}.")
+#             return []
 
+#         rows = table.find_all("tr")[1:]  # Skip header row
+#         bonds = []
+#         for row in rows:
+#             cols = row.find_all("td")
+#             if len(cols) < 4:  # Ensure required columns are present
+#                 continue
+#             symbol = cols[0].text.strip()
+#             name = cols[1].text.strip()
+#             price = cols[2].text.strip()
+#             yield_rate = cols[3].text.strip()
 
-# API to Fetch Bonds :
+#             bonds.append({
+#                 "symbol": symbol,
+#                 "name": name,
+#                 "price": price,
+#                 "yield": yield_rate,
+#             })
 
-# @app.route('/fetch-bonds',  methods=['POST'])
-# def fetch_bonds():
-#     try:
-#         data = request.get_json()
-#         category= data.get("category")
-#         if category == "treasure":
-#             bonds = fetch_treasure_bonds()
-            
-#             print(f"{category} Bonds :\n{bonds}")
-            
-#             return jsonify({"bonds": bonds}), 200
-    
+#         return bonds
+
 #     except Exception as e:
-        
+#         print(f"Error fetching bonds: {e}")
+#         return []
+
+
+# @app.route('/fetch-bonds', methods=['POST'])
+# def fetch_bonds():
+#     """
+#     API endpoint to fetch bonds data by category.
+#     """
+#     try:
+        # data = request.get_json()
+        # category = data.get("category", "").lower()
+
+#         if not category:
+#             return jsonify({"message": "Category is required."}), 400
+
+#         print(f"Fetching bonds for category: {category}")
+#         bonds = fetch_bonds_from_yahoo(category)
+
+#         if not bonds:
+#             return jsonify({"message": f"No bonds found for category '{category}'."}), 404
+
+#         return jsonify({"category": category, "bonds": bonds}), 200
+
+#     except Exception as e:
 #         print(f"Error in fetch-bonds API: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+
 
 
 ###################################################### Fetch Commodities #######################################################
