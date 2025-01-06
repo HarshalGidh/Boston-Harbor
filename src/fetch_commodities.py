@@ -1,5 +1,4 @@
-
-# #V2 : working properly 
+ 
 @app.route('/fetch-commodities', methods=['POST'])
 def fetch_commodities():
     """
@@ -7,7 +6,7 @@ def fetch_commodities():
     """
     try:
         data = request.get_json()
-        selected_ticker = data.get("ticker")  
+        selected_ticker = data.get("commodities")  
 
         if not selected_ticker:
             return jsonify({
@@ -42,6 +41,8 @@ def fetch_commodities():
     except Exception as e:
         print(f"Error fetching commodity prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
 
 
 # V-1 : working properly for all

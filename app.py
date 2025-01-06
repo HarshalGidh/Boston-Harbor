@@ -5229,7 +5229,7 @@ def fetch_commodities():
     """
     try:
         data = request.get_json()
-        selected_ticker = data.get("ticker")  
+        selected_ticker = data.get("commodities")  
 
         if not selected_ticker:
             return jsonify({
@@ -5362,11 +5362,14 @@ def fetch_cryptos_from_exchange():
             if response.status_code == 200:
                 data = response.json()
                 for coin in data:
-                    if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
-                        symbol = coin["symbol"].upper()
-                        cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
-                    else:
-                        cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
+                    symbol = coin["symbol"].upper()
+                    cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+                    
+                    # if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
+                    #     symbol = coin["symbol"].upper()
+                    #     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+                    # else:
+                    #     cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
             else:
                 return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
 
@@ -5380,9 +5383,15 @@ def fetch_cryptos_from_exchange():
                     base_asset = symbol_info["baseAsset"]
                     quote_asset = symbol_info["quoteAsset"]
                     
-                    if base_asset == 'ETH' or base_asset == 'BTC':
+                    # if base_asset == 'ETH' or base_asset == 'BTC':
+                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
                         cryptos.append({
                             "symbol": f"{base_asset}-USD",
+                            "name": f"{base_asset}"
+                        })
+                    elif base_asset == 'ALGO':
+                        cryptos.append({
+                            "symbol": f"{base_asset}-INR",
                             "name": f"{base_asset}"
                         })
                     else:
@@ -5403,9 +5412,14 @@ def fetch_cryptos_from_exchange():
                     base_asset = symbol_info["baseAsset"]
                     quote_asset = symbol_info["quoteAsset"]
                     
-                    if base_asset == 'ETH' or base_asset == 'BTC':
+                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
                         cryptos.append({
                             "symbol": f"{base_asset}-USD",
+                            "name": f"{base_asset}"
+                        })
+                    elif base_asset == 'ALGO':
+                        cryptos.append({
+                            "symbol": f"{base_asset}-INR",
                             "name": f"{base_asset}"
                         })
                     else:
