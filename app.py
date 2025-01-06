@@ -116,10 +116,41 @@ def list_s3_keys(bucket_name, prefix=""):
 
 # Call the function
 # list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
+####################################################################################
+# delete folders/files from bucket :
+
+
+
+# S3 bucket and file details
+
+# FILE_KEY = "order_list_folder/JM4162_orders.json"
+
+# def delete_file_from_s3(bucket_name, file_key):
+#     """
+#     Deletes a specified file from an S3 bucket.
+
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) of the file in the bucket
+#     """
+#     try:
+#         # Delete the file
+#         response = s3.delete_object(Bucket=bucket_name, Key=file_key)
+        
+#         # Confirm deletion
+#         if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
+#             print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
+#         else:
+#             print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
+    
+#     except Exception as e:
+#         print(f"Error deleting file: {e}")
+
+# # Call the function
+# delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
 
 
@@ -5080,6 +5111,39 @@ def fetch_money_market_bonds():
 # # Api to fetch bonds :
 
 # #V2 : working properly 
+
+@app.route('/get-bonds', methods=['POST'])
+def get_bonds():
+    """
+    Fetches the List of Bonds for various categories
+    """
+    try:
+        data = request.get_json()
+        category = data.get("category", "").lower()
+        treasury_bonds = [
+            {"name":"13 WEEK TREASURY BILL" ,"symbol":"^IRX"},
+            {"name":"Treasury Yield 5 Years" ,"symbol":"^FVX"},
+            {"name":"CBOE Interest Rate 10 Year T No" ,"symbol":"^TNX"},
+            {"name":"Treasury Yield 30 Years" ,"symbol":"^TYX"}
+        ]
+        corporate_bonds = [
+            {"name":"BlackRock High Yield Port Svc","symbol":"BHYSX"},
+            {"name":"American Funds American High-Inc F2","symbol":"AHIFX"},
+            {"name":"PGIM High Yield R6","symbol":"PHYQX"},
+            {"name":"Federated Hermes Instl High Yield Bd IS","symbol":"FIHBX"}
+        ]
+        if category == "treasury":
+            return jsonify({"bonds":treasury_bonds}), 200
+        elif category == "corporate":
+            return jsonify({"bonds":corporate_bonds}), 200
+        else:
+            return jsonify({"message": "Invalid category. Choose between 'treasury' or 'corporate'."}), 400
+            
+    except Exception as e:
+        print(f"Error in get-bonds API: {e}")
+        return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
+
+
 @app.route('/fetch-bonds', methods=['POST'])
 def fetch_bonds():
     """
@@ -5097,6 +5161,9 @@ def fetch_bonds():
             
         selected_ticker = data.get("ticker")
 
+        # testing mutual funds :
+        fetch_MutualFunds()
+        
         # Function to fetch the latest closing price
         def fetch_price(ticker):
             try:
@@ -5262,7 +5329,7 @@ def fetch_commodities():
 
         return jsonify({
             "message": f"Price for {selected_ticker} fetched successfully",
-            "ticker": selected_ticker,
+            "symbol": selected_ticker,
             "price": price
         }), 200
 
@@ -5550,6 +5617,186 @@ def fetch_cryptos_from_exchange():
 #         print(f"Error fetching cryptos for {exchange_name}: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
 
+####################################################################################
+
+# Fetch Mutual Funds :
+# V-2 : best version fetches all the list and prices
+
+# Function to fetch the latest price
+def fetch_price(ticker):
+    """
+    Fetch the latest price of a mutual fund using Yahoo Finance.
+    :param ticker: The symbol of the mutual fund.
+    :return: The latest closing price or "Price not available".
+    """
+    try:
+        # Fetch data for the mutual fund with valid period and interval
+        data = yf.download(ticker, period="1mo", interval="1d")
+        if not data.empty:
+            # Get the latest closing price
+            return round(data['Close'].iloc[-1], 2)
+        else:
+            return "Price not available"
+    except Exception as e:
+        print(f"Error fetching data for ticker {ticker}: {e}")
+        return "Price not available"
+
+def fetch_mutual_funds_from_yahoo():
+    """
+    Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
+    :return: List of mutual funds with symbol, name, and price.
+    """
+    try:
+        url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+            return []
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        table = soup.find("table")  # Locate the main table with mutual fund data
+
+        if not table:
+            print("No table found on the Yahoo Finance page.")
+            return []
+
+        rows = table.find_all("tr")[1:]  # Skip the header row
+        mutual_funds = []
+
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 3:  # Ensure required columns are present
+                continue
+
+            symbol = cols[0].text.strip()
+            name = cols[1].text.strip()
+            price = fetch_price(symbol)  # Fetch the price dynamically
+
+            # Skip mutual funds where the price is not available
+            if price == "Price not available":
+                continue
+
+            mutual_funds.append({
+                "symbol": symbol,
+                "name": name,
+                "price": price
+            })
+
+        return mutual_funds
+
+    except Exception as e:
+        print(f"Error fetching mutual funds from Yahoo Finance: {e}")
+        return []
+
+# Endpoint to fetch mutual funds
+@app.route('/fetch-MutualFunds', methods=['POST'])
+def fetch_MutualFunds():
+    """
+    Fetch and return mutual funds and their details.
+    """
+    try:
+        mutual_funds = fetch_mutual_funds_from_yahoo()
+
+        print(f"Mutual funds: {mutual_funds}")
+        return jsonify({
+            "message": "Mutual funds fetched successfully.",
+            "mutual_funds": mutual_funds
+        }), 200
+
+    except Exception as e:
+        print(f"Failed to fetch mutual funds: {e}")
+        return jsonify({"error": "Failed to fetch mutual funds"}), 500
+
+
+# v-1 : fetched list but not price
+
+# def fetch_mutual_funds_from_yahoo():
+#     """
+#     Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
+#     """
+#     try:
+#         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
+#         response = requests.get(url)
+#         if response.status_code != 200:
+#             print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+#             return []
+
+#         soup = BeautifulSoup(response.content, "html.parser")
+#         table = soup.find("table")  # Locate the main table with mutual fund data
+
+#         if not table:
+#             print("No table found on the Yahoo Finance page.")
+#             return []
+
+#         rows = table.find_all("tr")[1:]  # Skip the header row
+#         mutual_funds = []
+
+#         for row in rows:
+#             cols = row.find_all("td")
+#             if len(cols) < 3:  # Ensure required columns are present
+#                 continue
+
+#             symbol = cols[0].text.strip()
+#             name = cols[1].text.strip()
+#             price = cols[2].text.strip()
+
+#             mutual_funds.append({
+#                 "symbol": symbol,
+#                 "name": name,
+#                 "price": price
+#             })
+
+#         return mutual_funds
+
+#     except Exception as e:
+#         print(f"Error fetching mutual funds from Yahoo Finance: {e}")
+#         return []
+
+# def fetch_mutual_fund_details(symbol):
+#     """
+#     Fetch detailed information about a mutual fund using yfinance.
+#     :param symbol: Mutual fund symbol (e.g., "VASGX").
+#     :return: Detailed mutual fund information.
+#     """
+#     try:
+#         mutual_fund = yf.Ticker(symbol)
+#         info = mutual_fund.info
+#         return {
+#             "symbol": symbol,
+#             "name": info.get("shortName", "N/A"),
+#             "price": info.get("regularMarketPrice", "Price not available"),
+#             "category": info.get("category", "N/A"),
+#             "fundFamily": info.get("fundFamily", "N/A")
+#         }
+#     except Exception as e:
+#         print(f"Error fetching data for ticker {symbol}: {e}")
+#         return {}
+
+# # Endpoint to fetch mutual funds
+# # @app.route('/fetch-MutualFunds', methods=['GET'])
+# def fetch_MutualFunds():
+#     """
+#     Fetch and return mutual funds and their details.
+#     """
+#     try:
+#         mutual_funds = fetch_mutual_funds_from_yahoo()
+#         detailed_mutual_funds = []
+
+#         for fund in mutual_funds:
+#             print(f"Fetching details for {fund['symbol']}...")
+#             details = fetch_mutual_fund_details(fund["symbol"])
+#             if details:
+#                 detailed_mutual_funds.append(details)
+                
+#         print(f"Mutual funds {detailed_mutual_funds}")
+#         # return jsonify({
+#         #     "message": "Mutual funds fetched successfully.",
+#         #     "mutual_funds": detailed_mutual_funds
+#         # }), 200
+
+#     except Exception as e:
+#         print(f"Failed to fetch mutual funds: {e}")
+#         return jsonify({"error": "Failed to fetch mutual funds"}), 500
 
 
 ####################################################################################
