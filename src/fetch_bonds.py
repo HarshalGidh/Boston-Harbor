@@ -176,72 +176,81 @@
 #         print(f"Error in fetch-bonds API: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
     
-    
-from flask import Flask, request, jsonify
+##################################################################################################
+
 import requests
-import logging
+from bs4 import BeautifulSoup
 
-# Flask App Initialization
-# app = Flask(__name__)
-
-# Configuration
-FRED_API_KEY = "your_fred_api_key"  # Replace with your actual FRED API key
-BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
-
-# Define Bond Categories and Their Series IDs
-BOND_CATEGORIES = {
-    "1_month": "DTB1MO",
-    "3_months": "DTB3",
-    "6_months": "DTB6",
-    "1_year": "DGS1",
-    "2_years": "DGS2",
-    "5_years": "DGS5",
-    "10_years": "DGS10",
-    "30_years": "DGS30",
-}
-
-# Fetch Bond Yields from FRED API
-def fetch_treasury_bond_yields():
-    bonds = []
+def fetch_bonds_from_yahoo():
+    """
+    Fetch bonds data from Yahoo Finance.
+    Returns a dictionary with lists of bonds for each category.
+    """
     try:
-        for maturity, series_id in BOND_CATEGORIES.items():
-            url = f"{BASE_URL}?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json"
-            response = requests.get(url)
+        url = "https://finance.yahoo.com/markets/bonds/"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Failed to fetch bonds page. Status code: {response.status_code}")
+            return {}
 
-            if response.status_code == 200:
-                data = response.json()
-                # Get the most recent observation
-                if "observations" in data and data["observations"]:
-                    latest_observation = data["observations"][-1]
-                    yield_value = latest_observation.get("value", "N/A")
-                    observation_date = latest_observation.get("date", "N/A")
-                    bonds.append({
-                        "name": f"{maturity.replace('_', ' ').title()} Treasury Bond",
-                        "maturity": maturity,
-                        "yield": yield_value,
-                        "date": observation_date,
-                    })
-            else:
-                logging.error(f"Failed to fetch data for {maturity}: {response.status_code}")
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        bond_categories = {
+            "treasury": "Treasury Bonds",
+            "corporate": "Corporate Bonds",
+            "municipal": "Municipal Bonds",
+            "money_market": "Money Market",
+        }
+        bond_data = {}
+
+        # Parse bonds for each category
+        for category, section_name in bond_categories.items():
+            section = soup.find("section", {"aria-label": section_name})
+            if not section:
+                print(f"No data found for {section_name}.")
+                bond_data[category] = []
+                continue
+
+            table = section.find("table")
+            if not table:
+                print(f"No table found for {section_name}.")
+                bond_data[category] = []
+                continue
+
+            rows = table.find_all("tr")[1:]  # Skip header row
+            bonds = []
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) < 3:
+                    continue
+                symbol = cols[0].text.strip()
+                name = cols[1].text.strip()
+                price = cols[2].text.strip() if len(cols) > 2 else "N/A"
+                yield_rate = cols[3].text.strip() if len(cols) > 3 else "N/A"
+
+                bonds.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "price": price,
+                    "yield": yield_rate,
+                })
+            bond_data[category] = bonds
+
+        return bond_data
+
     except Exception as e:
-        logging.error(f"Error fetching treasury bond yields: {e}")
+        print(f"Error fetching bonds: {e}")
+        return {}
 
-    return bonds
+# Example usage
+if __name__ == "__main__":
+    bonds = fetch_bonds_from_yahoo()
+    for category, bond_list in bonds.items():
+        print(f"\n{category.capitalize()} Bonds:")
+        for bond in bond_list:
+            print(bond)
+            
+    
 
-# Flask Endpoint to Fetch Bond Data
-@app.route('/fetch-treasury-bonds', methods=['GET'])
-def get_treasury_bonds():
-    try:
-        bond_data = fetch_treasury_bond_yields()
-        if not bond_data:
-            return jsonify({"message": "No bond data available"}), 404
-
-        return jsonify({
-            "message": "Treasury bond yields fetched successfully",
-            "bonds": bond_data
-        }), 200
-    except Exception as e:
-        logging.error(f"Error in /fetch-treasury-bonds API: {e}")
-        return jsonify({"message": f"Internal server error: {e}"}), 500
 
 

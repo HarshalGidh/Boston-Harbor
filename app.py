@@ -4988,32 +4988,211 @@ def fetch_money_market_bonds():
         print(f"Error fetching Money Market bonds: {e}")
         return []
 
-# API to Fetch Bonds :
+##############################################################################
+
+# api to fetch currencies : currently on hold
+
+# # Set API Key and Secret
+# XE_Currency_API_key = os.getenv('XE_Currency_API_key')
+# XE_API_SECRET = ""  
+# XE_BASE_URL = "https://xecdapi.xe.com/v1"
+
+# def fetch_all_currencies():
+#     """
+#     Fetch a list of all currencies using XE API.
+#     """
+#     try:
+#         url = f"{XE_BASE_URL}/currencies"
+#         response = requests.get(url, auth=HTTPBasicAuth(XE_Currency_API_key, XE_API_SECRET))
+
+#         if response.status_code != 200:
+#             print(f"Failed to fetch currencies. Status code: {response.status_code}")
+#             print(f"Response: {response.text}")
+#             return []
+
+#         currency_data = response.json()
+#         currencies = [{"symbol": currency["code"], "name": currency["name"]} for currency in currency_data["currencies"]]
+#         return currencies
+
+#     except Exception as e:
+#         print(f"Error fetching currencies: {e}")
+#         return []
+
+# def fetch_currency_prices(base_currency="USD"):
+#     """
+#     Fetch exchange rates of all currencies relative to a base currency using XE API.
+#     """
+#     try:
+#         url = f"{XE_BASE_URL}/convert_from.json/?from={base_currency}&amount=1"
+#         response = requests.get(url, auth=HTTPBasicAuth(XE_Currency_API_key, XE_API_SECRET))
+
+#         if response.status_code != 200:
+#             print(f"Failed to fetch currency prices. Status code: {response.status_code}")
+#             print(f"Response: {response.text}")
+#             return []
+
+#         price_data = response.json()
+#         prices = [{"symbol": rate["code"], "price": rate["mid"]} for rate in price_data["rates"]]
+#         return prices
+
+#     except Exception as e:
+#         print(f"Error fetching currency prices: {e}")
+#         return []
+
+# # Flask API Route
+# # @app.route('/fetch-global-currencies', methods=['GET'])
+# def fetch_global_currencies():
+#     """
+#     API to fetch all global currencies and their exchange rates.
+#     """
+#     try:
+#         base_currency = request.args.get("base_currency", "USD")
+#         currencies = fetch_all_currencies()
+#         if not currencies:
+#             print("No currencies fetched.")
+#             return jsonify({"message": "Failed to fetch currencies"}), 500
+
+#         prices = fetch_currency_prices(base_currency)
+#         if not prices:
+#             print("No prices fetched.")
+#             return jsonify({"message": "Failed to fetch prices"}), 500
+
+#         # Merge currency names and prices
+#         merged_data = []
+#         for currency in currencies:
+#             price_entry = next((p for p in prices if p["symbol"] == currency["symbol"]), None)
+#             merged_data.append({
+#                 "symbol": currency["symbol"],
+#                 "name": currency["name"],
+#                 "price": price_entry["price"] if price_entry else "N/A"
+#             })
+
+#         print(merged_data)
+#         return jsonify({"currencies": merged_data}), 200
+
+#     except Exception as e:
+#         print(f"Error in fetch-global-currencies API: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+##########################################################################################
+
+def fetch_bonds_from_yahoo(category):
+    """
+    Fetch bonds data from Yahoo Finance for a specific category.
+    Returns a list of bonds for the given category.
+    """
+    try:
+        if category == "money_market":
+            print("Fetching currencies for money market...")
+            # currencies = fetch_global_currencies()
+            # return currencies
+
+        url = "https://finance.yahoo.com/markets/bonds/"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Failed to fetch bonds page. Status code: {response.status_code}")
+            return []
+
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        bond_categories = {
+            "treasury": "Treasury Bonds",
+            "corporate": "Corporate Bonds",
+            "municipal": "Municipal Bonds",
+            "money_market": "Money Market",
+        }
+
+        if category not in bond_categories:
+            print(f"Invalid category: {category}.")
+            return []
+
+        section_name = bond_categories[category]
+        section = soup.find("section", {"aria-label": section_name})
+        if not section:
+            print(f"No data found for {section_name}.")
+            return []
+
+        table = section.find("table")
+        if not table:
+            print(f"No table found for {section_name}.")
+            return []
+
+        rows = table.find_all("tr")[1:]  # Skip header row
+        bonds = []
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 4:  # Ensure required columns are present
+                continue
+            symbol = cols[0].text.strip()
+            name = cols[1].text.strip()
+            price = cols[2].text.strip()
+            yield_rate = cols[3].text.strip()
+
+            bonds.append({
+                "symbol": symbol,
+                "name": name,
+                "price": price,
+                "yield": yield_rate,
+            })
+
+        return bonds
+
+    except Exception as e:
+        print(f"Error fetching bonds: {e}")
+        return []
+
 
 @app.route('/fetch-bonds', methods=['POST'])
 def fetch_bonds():
+    """
+    API endpoint to fetch bonds data by category.
+    """
     try:
         data = request.get_json()
-        category = data.get("category")
+        category = data.get("category", "").lower()
 
-        # Map category to functions
-        category_mapping = {
-            "treasury": fetch_treasury_bonds,
-            "corporate": fetch_corporate_bonds,
-            "mortgage": fetch_mortgage_related_bonds,
-            "municipal": fetch_municipal_bonds,
-            "money_market": fetch_money_market_bonds
-        }
+        if not category:
+            return jsonify({"message": "Category is required."}), 400
 
-        if category in category_mapping:
-            bonds = category_mapping[category]()
-            return jsonify({"category": category, "bonds": bonds}), 200
-        else:
-            return jsonify({"message": f"Category {category} not recognized."}), 400
+        print(f"Fetching bonds for category: {category}")
+        bonds = fetch_bonds_from_yahoo(category)
+
+        if not bonds:
+            return jsonify({"message": f"No bonds found for category '{category}'."}), 404
+
+        return jsonify({"category": category, "bonds": bonds}), 200
 
     except Exception as e:
         print(f"Error in fetch-bonds API: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+# only treasury is working but it gives 10 Y US Tereasury bonds
+# @app.route('/fetch-bonds', methods=['POST'])
+# def fetch_bonds():
+#     try:
+        # data = request.get_json()
+        # category = data.get("category")
+
+#         # Map category to functions
+#         category_mapping = {
+#             "treasury": fetch_treasury_bonds,
+#             "corporate": fetch_corporate_bonds,
+#             "mortgage": fetch_mortgage_related_bonds,
+#             "municipal": fetch_municipal_bonds,
+#             "money_market": fetch_money_market_bonds
+#         }
+
+        # if category in category_mapping:
+        #     bonds = category_mapping[category]()
+        #     return jsonify({"category": category, "bonds": bonds}), 200
+        # else:
+        #     return jsonify({"message": f"Category {category} not recognized."}), 400
+
+    # except Exception as e:
+    #     print(f"Error in fetch-bonds API: {e}")
+    #     return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 
@@ -5042,45 +5221,44 @@ def fetch_bonds():
 
 # API to Fetch commodity data :
 
-# #V2 :
-
-# @app.route('/fetch-commodity-prices', methods=['POST'])
-# def fetch_commodity_prices():
-
+# #V2 : working properly 
 @app.route('/fetch-commodities', methods=['POST'])
 def fetch_commodities():
     """
-    Fetches the price of specific commodities: WTI Crude, Brent Crude, Gold, Silver, Natural Gas.
+    Fetches the price of a specific commodity using the ticker provided in the request payload.
     """
     try:
         data = request.get_json()
-        commodities = data.get("commodities") #, [])
-        
-        # Commodity tickers for Yahoo Finance
-        commodity_tickers = {
-            "WTI Crude": "CL=F",
-            "Brent Crude": "BZ=F",
-            "Gold": "GC=F",
-            "Silver": "SI=F",
-            "Natural Gas": "NG=F"
-        }
+        selected_ticker = data.get("ticker")  
 
-        commodity_prices = {}
+        if not selected_ticker:
+            return jsonify({
+                "message": "Ticker not provided in the request.",
+                "price": "N/A"
+            }), 400
 
-        for name, ticker in commodity_tickers.items():
-            commodity = yf.Ticker(ticker)
-            info = commodity.info
+        # Function to fetch the latest closing price
+        def fetch_price(ticker):
+            try:
+                # Fetch historical data for the commodity
+                data = yf.download(ticker, period="1d", interval="1d")
+                if not data.empty:
+                    # Get the latest closing price
+                    return round(data['Close'].iloc[-1], 2)
+                else:
+                    return "Price not available"
+            except Exception as e:
+                print(f"Error fetching data for ticker {ticker}: {e}")
+                return "Price not available"
 
-            # Fetch the price
-            price = info.get("regularMarketPrice")
-            if price:
-                commodity_prices[name] = price
-            else:
-                commodity_prices[name] = "Price not available"
+        # Fetch price for the selected commodity
+        price = fetch_price(selected_ticker)
+        print(f"Commodity price for {selected_ticker}:\n{price}")
 
         return jsonify({
-            "message": "Commodity prices fetched successfully",
-            "prices": commodity_prices
+            "message": f"Price for {selected_ticker} fetched successfully",
+            "ticker": selected_ticker,
+            "price": price
         }), 200
 
     except Exception as e:
@@ -5088,53 +5266,74 @@ def fetch_commodities():
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
-# # V1 : using Alpha-vantage-api :
+# V-1 : working properly for all
 
 # @app.route('/fetch-commodities', methods=['POST'])
 # def fetch_commodities():
 #     """
-#     Fetches commodity data based on the provided list of commodities.
+#     Fetches the price of specific commodities: WTI Crude, Brent Crude, Gold, Silver, Natural Gas.
 #     """
 #     try:
-        # data = request.get_json()
-        # commodities = data.get("commodities") #, [])
-        
-#         if not commodities:
-#             return jsonify({"message": "No commodities provided"}), 400
+#         data = request.get_json()
+#         selected_commodity = data.get("commodity")  # Single commodity or None
 
-#         assets = []
-        
-#         for commodity in commodities:
-#             # Fetch commodity data using Alpha Vantage's DIGITAL_CURRENCY_INTRADAY (if available)
-#             url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={commodity}&interval=5min&apikey={ALPHA_VANTAGE_API_KEY}"
-#             response = requests.get(url)
+#         # Commodity tickers for Yahoo Finance
+#         commodity_tickers = {
+#             "WTI Crude": "CL=F",
+#             "Brent Crude": "BZ=F",
+#             "Gold": "GC=F",
+#             "Silver": "SI=F",
+#             "Natural Gas": "NG=F"
+#         }
 
-#             if response.status_code == 200:
-#                 data = response.json()
-#                 time_series = data.get("Time Series (5min)", {})
-                
-#                 if time_series:
-#                     latest_timestamp = sorted(time_series.keys())[-1]
-#                     latest_data = time_series[latest_timestamp]
-#                     price = latest_data.get("1. open", "N/A")  # Get the latest opening price
-                    
-#                     assets.append({"name": commodity, "price": price})
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the commodity
+#                 data = yf.download(ticker, period="1d", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price
+#                     return round(data['Close'].iloc[-1], 2)
 #                 else:
-#                     print(f"No data found for {commodity}")
-#             else:
-#                 print(f"Failed to fetch {commodity}: {response.status_code}")
+#                     return "Price not available"
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return "Price not available"
 
-#         print(f"Commodities: {assets}")
-        
+#         # If a specific commodity is requested
+#         if selected_commodity:
+#             ticker = commodity_tickers[selected_commodity] #commodity_tickers.get(selected_commodity)
+#             print(ticker)
+#             if not ticker:
+#                 return jsonify({
+#                     "message": f"Commodity '{selected_commodity}' not found",
+#                     "prices": {}
+#                 }), 404
+
+#             # Fetch price for the selected commodity
+#             price = fetch_price(ticker)
+#             print(f"Commodity price for {selected_commodity} :\n{price}")
+            
+#             return jsonify({
+#                 "message": f"Price for {selected_commodity} fetched successfully",
+#                 "prices": {price}
+#             }), 200
+
+#         # #Fetch prices for all commodities if no specific one is provided
+#         commodity_prices = {}
+#         for name, ticker in commodity_tickers.items():
+#             commodity_prices[name] = fetch_price(ticker)
+
+#         print("Commodity prices :\n", commodity_prices)
+
 #         return jsonify({
-#             "message": "Commodities list fetched successfully",
-#             "commodities": assets
+#             "message": "Commodity prices fetched successfully",
+#             "prices": commodity_prices
 #         }), 200
+
 #     except Exception as e:
-#         print(f"Error fetching commodities: {e}")
+#         print(f"Error fetching commodity prices: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
-
-
 
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
