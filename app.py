@@ -5168,7 +5168,7 @@ def fetch_bonds():
         def fetch_price(ticker):
             try:
                 # Fetch historical data for the bond
-                data = yf.download(ticker, period="1d", interval="1d")
+                data = yf.download(ticker, period="1mo", interval="1d")
                 if not data.empty:
                     # Get the latest closing price
                     return round(data['Close'].iloc[-1], 2)
