@@ -101,12 +101,11 @@ def get_reit_price():
             else:
                 logging.warning(f"Failed to fetch price for symbol: {symbol}")
         print(reit_prices)
-        # return jsonify({"message": "Prices and yields fetched successfully", "data": reit_prices}), 200
+        return jsonify({"message": "Prices and yields fetched successfully", "reit_prices": reit_prices}), 200
 
     except Exception as e:
         logging.error(f"Error fetching REIT prices: {e}")
         return jsonify({"message": "An error occurred while fetching REIT prices", "error": str(e)}), 500
-
 
 
 # # v-3 : time taking bit good code :
