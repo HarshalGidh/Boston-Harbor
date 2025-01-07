@@ -5420,7 +5420,10 @@ def fetch_cryptos_from_exchange():
         data = request.get_json()
         exchange_name = data.get("exchange_name", "").lower()
         cryptos = []
-
+        
+        # test reits :
+        fetch_reits()
+        
         if exchange_name == "coingecko":
             # Fetch data from CoinGecko
             url = "https://api.coingecko.com/api/v3/coins/markets"
@@ -5516,108 +5519,100 @@ def fetch_cryptos_from_exchange():
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
-# V-1 :
+####################################################################################
 
-# @app.route('/crypto-assets', methods=['POST'])
-# def fetch_cryptos_from_exchange():
-#     """
-#     Fetch the list of cryptocurrencies available on a given exchange.
-#     Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
-#     """
+# Fetch REITS :
+
+
+FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
+
+
+# v-3 : time taking bit good code :
+
+# @app.route("/fetch-reits", methods=['POST'])
+# def fetch_reits():
 #     try:
-#         data = request.get_json()
-#         exchange_name = data.get("exchange_name", "").lower()
-        
-#         cryptos = []
+#         # Fetch the list of US stocks from Finnhub
+#         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#         response = requests.get(url)
 
-#         if exchange_name == "coingecko":
-#             # CoinGecko API to fetch all cryptocurrencies
-#             url = "https://api.coingecko.com/api/v3/coins/markets"
-#             params = {
-#                 "vs_currency": "usd",
-#                 "order": "market_cap_desc",
-#                 "per_page": 250,
-#                 "page": 1,
-#             }
-#             response = requests.get(url, params=params)
-#             if response.status_code == 200:
-#                 data = response.json()
-#                 for coin in data:
-#                     symbol = coin["symbol"].upper()
-#                     name = coin["name"]
-#                     cryptos.append({"name": name, "symbol": symbol})
+#         if response.status_code != 200:
+#             print(f"Failed to fetch REITs. Status code: {response.status_code}")
+#             return []
+
+#         data = response.json()
+#         reits = [
+#             {"symbol": item["symbol"], "name": item["description"]}
+#             for item in data
+#             if "REIT" in item["description"] or "Real Estate" in item["description"]
+#         ]
+
+#         # Fetch the current price for each REIT
+#         for reit in reits:
+#             price_url = f"https://finnhub.io/api/v1/quote?symbol={reit['symbol']}&token={FINNHUB_API_KEY}"
+#             price_response = requests.get(price_url)
+
+#             if price_response.status_code == 200:
+#                 price_data = price_response.json()
+#                 reit["price"] = price_data.get("c", "N/A")  # "c" is the current price key
+#                 print(reit)
                 
-#                 print(f"\nCryptos on {exchange_name}:")
-#                 print(cryptos)
-                
-#                 return jsonify({
-#                     "message": "Cryptos list sent successfully",
-#                     "exchange_name": exchange_name,
-#                     "cryptos": cryptos
-#                 }), 200
 #             else:
-#                 print(f"Failed to fetch data from CoinGecko: {response.status_code}")
-#                 return jsonify({
-#                     "message": f"Failed to fetch data from CoinGecko: {response.status_code}"
-#                 }), 500
+#                 reit["price"] = "N/A"
 
-#         elif exchange_name == "binance":
-#             url = "https://api.binance.com/api/v3/exchangeInfo"
-#             response = requests.get(url)
-#             if response.status_code == 200:
-#                 data = response.json()
-#                 for symbol in data["symbols"]:
-#                     base_asset = symbol["baseAsset"]
-#                     if base_asset not in cryptos:
-#                         cryptos.append(base_asset)
-                
-#                 print(f"\nCryptos on {exchange_name}:")
-#                 print(list(set(cryptos)))
-                
-#                 return jsonify({
-#                     "message": "Cryptos list sent successfully",
-#                     "exchange_name": exchange_name,
-#                     "cryptos": list(set(cryptos))
-#                 }), 200
-#             else:
-#                 print(f"Failed to fetch data from Binance: {response.status_code}")
-#                 return jsonify({
-#                     "message": f"Failed to fetch data from Binance: {response.status_code}"
-#                 }), 500
+#         # Print the final REITs data with price
+#         print(reits)
+#         return reits
 
-#         elif exchange_name == "binance.us":
-#             url = "https://api.binance.us/api/v3/exchangeInfo"
-#             response = requests.get(url)
-#             if response.status_code == 200:
-#                 data = response.json()
-#                 for symbol in data["symbols"]:
-#                     base_asset = symbol["baseAsset"]
-#                     if base_asset not in cryptos:
-#                         cryptos.append(base_asset)
-                
-#                 print(f"\nCryptos on {exchange_name}:")
-#                 print(list(set(cryptos)))
-                
-#                 return jsonify({
-#                     "message": "Cryptos list sent successfully",
-#                     "exchange_name": exchange_name,
-#                     "cryptos": list(set(cryptos))
-#                 }), 200
-#             else:
-#                 print(f"Failed to fetch data from Binance.US: {response.status_code}")
-#                 return jsonify({
-#                     "message": f"Failed to fetch data from Binance.US: {response.status_code}"
-#                 }), 500
-
-#         else:
-#             print("Exchange not supported.")
-#             return jsonify({"message": "Exchange not supported."}), 404
-        
 #     except Exception as e:
-#         print(f"Error fetching cryptos for {exchange_name}: {e}")
-#         return jsonify({"message": f"Internal server error: {e}"}), 500
+#         print(f"Error fetching REITs from Finnhub: {e}")
+#         return []
+
+
+# v-2 :best version
+
+@app.route("/fetch-reits", methods=['POST'])
+def fetch_reits():
+    try:
+        # Fetch the list of US stocks from Finnhub
+        url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+        data = response.json()
+        valid_reits = []
+
+        # Filter REITs and fetch prices in a single loop
+        for item in data:
+            if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+                symbol = item["symbol"]
+                name = item["description"]
+
+                # Fetch the price for the current REIT
+                price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+                price_response = requests.get(price_url)
+
+                if price_response.status_code == 200:
+                    price_data = price_response.json()
+                    price = price_data.get("c", 0)  # "c" is the current price key
+
+                    # Only add to the list if the price is greater than 0
+                    if price > 0:
+                        valid_reits.append({"symbol": symbol, "name": name, "price": price})
+
+        # Return the filtered REITs with success message
+        print(valid_reits)
+        return jsonify({"message": "REITs fetched successfully", "data": valid_reits}), 200
+
+    except Exception as e:
+        print(f"Error fetching REITs from Finnhub: {e}")
+        return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
+
 
 ####################################################################################
+
 
 # Fetch Mutual Funds :
 # V-2 : best version fetches all the list and prices
