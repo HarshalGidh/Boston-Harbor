@@ -595,52 +595,189 @@ def reset_password():
  
  
 # ------------------------- With Bearer ------------------------------
+
+# v-2 : update profile photo :
+
+import base64
+from werkzeug.utils import secure_filename
+from flask import send_from_directory
+
+# Directory to store profile photos
+PROFILE_PHOTOS_DIR = "local_data/profile_photos"
+
+from flask import url_for
+
+@app.route('/advisor_profile', methods=['POST', 'GET'])
+def advisor_profile():
+    if request.method == 'GET':
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return jsonify({"message": "Token is missing"}), 401
+
+        try:
+            token = token.split(" ")[1] if token.startswith("Bearer ") else None
+            if not token:
+                return jsonify({"message": "Invalid token format"}), 401
+
+            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            email = decoded_token.get('email')
+
+            user_data = load_user_data(email)
+            if not user_data:
+                return jsonify({"message": "User not found"}), 404
+
+            # Fetch client data count
+            client_data_url = 'http://localhost:5000/get-all-client-data'
+            response = requests.get(client_data_url)
+
+            client_count = 0
+            if response.status_code == 200:
+                client_list = response.json().get('data', [])
+                client_count = len(client_list)
+
+            # Generate URL for profile photo
+            filename = f"{email}_profile.jpeg"
+            profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
+
+            profile_data = {
+                "email": user_data["email"],
+                "first_name": user_data["first_name"],
+                "last_name": user_data["last_name"],
+                "client_count": client_count,
+                "profile_photo_url": profile_photo_url
+            }
+
+            return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token"}), 401
+        except Exception as e:
+            print(f"Error retrieving profile: {e}")
+            return jsonify({"message": "Internal server error"}), 500
+
+    if request.method == 'POST':
+        try:
+            token = request.headers.get('Authorization')
+
+            if not token:
+                return jsonify({"message": "Token is missing"}), 401
+
+            token = token.split(" ")[1] if token.startswith("Bearer ") else None
+            if not token:
+                return jsonify({"message": "Invalid token format"}), 401
+
+            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            email = decoded_token.get('email')
+
+            user_data = load_user_data(email)
+            if not user_data:
+                return jsonify({"message": "User not found"}), 404
+
+            # Check if the request has the 'profile_photo' field
+            data = request.get_json()
+            if not data or 'profile_photo' not in data:
+                return jsonify({"message": "Profile photo is missing"}), 400
+
+            # Decode the base64 image
+            profile_photo = data['profile_photo']
+            file_extension = "jpg"  # Default file extension
+            if profile_photo.startswith("data:image/"):
+                file_extension = profile_photo.split(";")[0].split("/")[-1]
+
+            image_data = profile_photo.split(",")[1]
+            image_bytes = base64.b64decode(image_data)
+
+            # Save the file locally
+            filename = f"{email}_profile.{file_extension}"
+            file_path = os.path.join(PROFILE_PHOTOS_DIR, filename)
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+
+            # Generate the profile photo URL
+            profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
+
+            # Update user's profile with the new image URL
+            user_data["profile_photo_url"] = profile_photo_url
+            save_user_data(email, user_data)  # Save updated user data back to storage
+
+            return jsonify({
+                "message": "Profile photo uploaded successfully",
+                "profile_photo_url": profile_photo_url
+            }), 200
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token"}), 401
+        except Exception as e:
+            print(f"Error uploading profile photo: {e}")
+            return jsonify({"message": "Internal server error"}), 500
+
+
+@app.route('/profile_photos/<filename>', methods=['GET'])
+def serve_profile_photo(filename):
+    """
+    Serve profile photos from the local directory.
+    """
+    try:
+        return send_from_directory(PROFILE_PHOTOS_DIR, filename)
+    except Exception as e:
+        print(f"Error serving profile photo: {e}")
+        return jsonify({"message": "Error retrieving profile photo"}), 500
+
+
+
+
+# v-1 :
 import requests
  
-@app.route('/advisor_profile', methods=['GET'])
-def advisor_profile():
-    token = request.headers.get('Authorization')
+# @app.route('/advisor_profile', methods=['GET'])
+# def advisor_profile():
+#     token = request.headers.get('Authorization')
 
-    if not token:
-        return jsonify({"message": "Token is missing"}), 401
+#     if not token:
+#         return jsonify({"message": "Token is missing"}), 401
 
-    try:
-        token = token.split(" ")[1] if token.startswith("Bearer ") else None
-        if not token:
-            return jsonify({"message": "Invalid token format"}), 401
+#     try:
+#         token = token.split(" ")[1] if token.startswith("Bearer ") else None
+#         if not token:
+#             return jsonify({"message": "Invalid token format"}), 401
 
-        decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-        email = decoded_token.get('email')
+#         decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+#         email = decoded_token.get('email')
 
-        user_data = load_user_data(email)
-        if not user_data:
-            return jsonify({"message": "User not found"}), 404
+#         user_data = load_user_data(email)
+#         if not user_data:
+#             return jsonify({"message": "User not found"}), 404
 
-        # Fetch client data count
-        client_data_url = 'http://localhost:5000/get-all-client-data'
-        response = requests.get(client_data_url)
+#         # Fetch client data count
+#         client_data_url = 'http://localhost:5000/get-all-client-data'
+#         response = requests.get(client_data_url)
 
-        client_count = 0
-        if response.status_code == 200:
-            client_list = response.json().get('data', [])
-            client_count = len(client_list)
+#         client_count = 0
+#         if response.status_code == 200:
+#             client_list = response.json().get('data', [])
+#             client_count = len(client_list)
 
-        profile_data = {
-            "email": user_data["email"],
-            "first_name": user_data["first_name"],
-            "last_name": user_data["last_name"],
-            "client_count": client_count
-        }
+#         profile_data = {
+#             "email": user_data["email"],
+#             "first_name": user_data["first_name"],
+#             "last_name": user_data["last_name"],
+#             "client_count": client_count
+#         }
 
-        return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
+#         return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
 
-    except jwt.ExpiredSignatureError:
-        return jsonify({"message": "Token has expired"}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({"message": "Invalid token"}), 401
-    except Exception as e:
-        print(f"Error retrieving profile: {e}")
-        return jsonify({"message": "Internal server error"}), 500
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({"message": "Token has expired"}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({"message": "Invalid token"}), 401
+#     except Exception as e:
+#         print(f"Error retrieving profile: {e}")
+#         return jsonify({"message": "Internal server error"}), 500
     
      
 # -------------------------------------------
