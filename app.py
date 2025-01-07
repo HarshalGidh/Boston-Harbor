@@ -5421,9 +5421,6 @@ def fetch_cryptos_from_exchange():
         exchange_name = data.get("exchange_name", "").lower()
         cryptos = []
         
-        # test reits :
-        fetch_reits()
-        
         if exchange_name == "coingecko":
             # Fetch data from CoinGecko
             url = "https://api.coingecko.com/api/v3/coins/markets"
