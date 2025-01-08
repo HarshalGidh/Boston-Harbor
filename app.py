@@ -116,8 +116,8 @@ def list_s3_keys(bucket_name, prefix=""):
 
 # Call the function
 # list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
-list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
 ####################################################################################
@@ -128,30 +128,34 @@ list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 # S3 bucket and file details
 
 # FILE_KEY = "order_list_folder/JM4162_orders.json"
+# FILE_KEY = "order_list_folder/JR5059_orders.json"
+# FILE_KEY = "portfolio_list_folder//JM4162.json"
+FILE_KEY = "portfolio_list_folder//JR5059.json"
 
-# def delete_file_from_s3(bucket_name, file_key):
-#     """
-#     Deletes a specified file from an S3 bucket.
+def delete_file_from_s3(bucket_name, file_key):
+    """
+    Deletes a specified file from an S3 bucket.
 
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) of the file in the bucket
-#     """
-#     try:
-#         # Delete the file
-#         response = s3.delete_object(Bucket=bucket_name, Key=file_key)
+    :param bucket_name: Name of the S3 bucket
+    :param file_key: Key (path) of the file in the bucket
+    """
+    try:
+        # Delete the file
+        response = s3.delete_object(Bucket=bucket_name, Key=file_key)
         
-#         # Confirm deletion
-#         if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
-#             print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
-#         else:
-#             print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
+        # Confirm deletion
+        if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
+            print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
+        else:
+            print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
     
-#     except Exception as e:
-#         print(f"Error deleting file: {e}")
+    except Exception as e:
+        print(f"Error deleting file: {e}")
 
-# # Call the function
-# delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
+# Call the function
+delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
+list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
 # =------------------------------------------------------=
@@ -5750,7 +5754,7 @@ def get_reit_price():
 
         if yield_response.status_code == 200:
             yield_data = yield_response.json()
-            dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", "4%-6%")
+            dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
         else:
             dividend_yield = 5 # default value
 
@@ -6144,7 +6148,10 @@ def create_transaction(order_data, asset_class):
                 "Ownership": ownership,
                 "Date": order_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
                 "Name": order_data.get('name'),
-                "TransactionAmount": order_data.get('investmentAmount'),
+                "UnitPrice": order_data.get('price'),
+                "TransactionAmount": order_data.get('TransactionAmount'),  # "TransactionAmount": order_data.get('investmentAmount'),
+                "Action": order_data.get('buy_or_sell'),
+                "Units": order_data.get('units'),
                 "DividendYield": order_data.get('dividendYield')
             }
         else:
@@ -8450,7 +8457,9 @@ def asset_class_infographics():
                 # Debugging: Print each asset being processed
                 print(f"Processing asset for client {client_id}: {asset}")
 
-                asset_class = asset.get("assetClass", "Other")
+                asset_class = asset.get("assetClass", "Other").capitalize()
+                asset_class = "ETF" if asset_class == "Etf" else asset_class
+
                 if asset_class not in asset_class_data:
                     asset_class_data[asset_class] = {
                         "clients": set(),  # Use a set to prevent duplicate client counts
@@ -8511,6 +8520,7 @@ def get_best_performing_assets_api():
         request_data = request.json
         clients = request_data.get("data")
         asset_class = request_data.get("asset_class")
+        asset_class = "etf" if asset_class == "ETF" else asset_class
         
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
