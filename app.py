@@ -7297,18 +7297,16 @@ def actual_vs_predicted():
         portfolio_daily_change = request.json.get('portfolio_daily_change')
         current_date = datetime.now().strftime("%Y-%m-%d")
         
-        # client_name = request.json.get("client_name")
-        # funds = request.json.get("funds")
-        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        client_name = request.json.get("client_name")
+        funds = request.json.get("funds")
+        investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
         
-        current_quarter = "2025_Q1"
+        # current_quarter = "2025_Q1"
+        current_quarter = get_current_quarter()
 
         # Define file paths and S3 keys
         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
         predicted_s3_key = f"predictions/{client_id}_{current_quarter}_line_chart.json"
-
-        # portfolio_file_path = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-        # portfolio_s3_key = f"portfolios/portfolio_{client_id}.json"
 
         # Load previously predicted line chart data
         if USE_AWS:
@@ -7316,9 +7314,9 @@ def actual_vs_predicted():
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
             except s3.exceptions.NoSuchKey:
-                # Create Prediction Line Chart :
-                # predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
-                return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
+                # Create Prediction Line Chart as it wasnt created before:
+                predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
+                # return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
         else:
             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
             if not predicted_line_chart_data:
@@ -7387,10 +7385,10 @@ def actual_vs_predicted():
 def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
     try:
         # Retrieve client and portfolio details
-        # client_id = request.json.get("client_id")
-        # client_name = request.json.get("client_name")
-        # funds = request.json.get("funds")
-        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        client_id = request.json.get("client_id")
+        client_name = request.json.get("client_name")
+        funds = request.json.get("funds")
+        investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
 
         # Load portfolio data (from AWS or local storage)
         if USE_AWS:
@@ -7412,7 +7410,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
         # Prepare date intervals for the current quarter
         current_quarter = get_current_quarter()
-        current_quarter_dates = get_current_quarter_dates()
+        date_intervals = get_current_quarter_dates()
         print(f"Current Quarter: {current_quarter}")
 
         confidence_data = []
@@ -7439,27 +7437,76 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             asset["beta"] = compute_beta(historical_returns, market_returns)
             asset["forecasted_returns"] = arima_forecast(historical_returns).tolist()
             asset["simulated_returns"] = simulate_fluctuations(asset["forecasted_returns"][0], asset["volatility"])
+            
+        # Load client financial data
+        if USE_AWS:
+            # client_summary_key = f"{client_summary_folder}{client_id}.json"
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+                client_financial_data = load_from_file(client_summary_file)
+                if not client_financial_data:
+                    return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+                logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+                # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+        else:
+            client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+            client_financial_data = load_from_file(client_summary_file)
+            if not client_financial_data:
+                return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+        # Initialize economic news to pass to LLM
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+        economic_news = {topic: fetch_news(topic) for topic in topics}
+        portfolio_news = collect_portfolio_news(portfolio_data)
 
         # Generate task for LLM
         task = f"""
-            You are tasked with predicting the **current quarter's (3-month)** returns for a client's portfolio.
-            Client Name: {client_name}
+            You are the world's best financial advisor tasked with predicting the current quarter's (3-month) returns for a client's portfolio containing various assets.
+            You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+            - Random market fluctuations (up and down movements).
+            - Economic volatility.
+            - Natural noise in predictions.
+            The client, {client_name}, has the following portfolio:
+
             Portfolio Details: {portfolio_data}
+            Portfolio Analyis: {asset}
+            Financial Situation: {client_financial_data}
+            Available Funds: ${funds}
             Investor Personality: {investor_personality}
-            Funds: ${funds}
+            Portfolio News: {portfolio_news}
+            Economic News: {economic_news}
+                     
+            Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+            Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+            {date_intervals}
 
-            Predict the portfolio's **daily returns** for the current quarter:
-            - **Best-Case Scenario** (High returns under favorable conditions)
-            - **Worst-Case Scenario** (Low returns under unfavorable conditions)
-            - **Confidence Band** (95% range of returns)
+            Predict the portfolio's **daily returns** in this quarter(3 months). Include:
+            1. **Best-Case Scenario** (High returns under favorable conditions).
+            2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+            3. **Confidence Band** (Range of returns at 95% confidence level).
             
-            Dates to Predict: {current_quarter_dates}
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
 
+            Example of simulated_response = 
             ### Response Format:
             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
             |------------|-----------------------|-----------------------|---------------------|------------------|
             | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
-            | ...        | ...   | ...   | ...                 | ...  |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+            Your Response must be in the above table format no messages is required just table format data.
         """
 
         # Simulate LLM response
@@ -7476,8 +7523,9 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         print(f"Refined Line Chart Data: {refined_line_chart_data}")
 
         # Save predictions
-        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-        save_to_file(prediction_file, refined_line_chart_data)
+        
+        # prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        # save_to_file(prediction_file, refined_line_chart_data)
 
         # Return the response
         return refined_line_chart_data
@@ -7494,17 +7542,37 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
 # from datetime import datetime, timedelta
 
+# def get_current_quarter():
+#     now = datetime.now()
+#     quarter = (now.month - 1) // 3 + 1
+#     return f"Q{quarter}-{now.year}"
+
+# def get_current_quarter_dates():
+#     now = datetime.now()
+#     quarter_start_month = 3 * ((now.month - 1) // 3) + 1
+#     quarter_start = datetime(now.year, quarter_start_month, 1)
+#     next_quarter_start = quarter_start + timedelta(days=90)  # Approximation
+#     dates = [quarter_start + timedelta(days=i) for i in range(0, (next_quarter_start - quarter_start).days, 7)]
+#     return [date.strftime("%Y-%m-%d") for date in dates]
+
+import calendar
+from datetime import datetime, timedelta
+
 def get_current_quarter():
     now = datetime.now()
     quarter = (now.month - 1) // 3 + 1
     return f"Q{quarter}-{now.year}"
 
+
 def get_current_quarter_dates():
     now = datetime.now()
-    quarter_start_month = 3 * ((now.month - 1) // 3) + 1
-    quarter_start = datetime(now.year, quarter_start_month, 1)
-    next_quarter_start = quarter_start + timedelta(days=90)  # Approximation
-    dates = [quarter_start + timedelta(days=i) for i in range(0, (next_quarter_start - quarter_start).days, 7)]
+    quarter = (now.month - 1) // 3 + 1
+    start_month = 3 * (quarter - 1) + 1
+    start_date = datetime(now.year, start_month, 1)
+    _, days_in_month = calendar.monthrange(now.year, start_month + 2)  # End of quarter
+    end_date = datetime(now.year, start_month + 2, days_in_month)
+
+    dates = [start_date + timedelta(days=i) for i in range(0, (end_date - start_date).days + 1, 7)]
     return [date.strftime("%Y-%m-%d") for date in dates]
 
 
