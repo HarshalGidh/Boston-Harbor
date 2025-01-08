@@ -5752,7 +5752,7 @@ def get_reit_price():
             yield_data = yield_response.json()
             dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", "4%-6%")
         else:
-            dividend_yield = "4%-6%"
+            dividend_yield = 5 # default value
 
         # Return the REIT information
         return jsonify({
@@ -6285,58 +6285,6 @@ def order_placed():
     except Exception as e:
         print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
-
-# # prev - version :
-# @app.route('/order_placed', methods=['POST'])
-# def order_placed():
-#     try:
-#         # Extract data from the request
-#         order_data = request.json.get('order_data')
-#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
-#         funds = request.json.get('funds')  # Example extra data if needed
-#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
- 
-#         # Check whether to use AWS or local storage
-#         if USE_AWS:
-#             # AWS S3 file key for the order list
-#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
-           
-#             # Load existing data from AWS S3 if available
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
-#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
-#                 print(f"Loaded existing transactions for client {client_id} from S3")
-#             except s3.exceptions.NoSuchKey:
-#                 # Initialize a new transaction list if the file doesn't exist
-#                 client_transactions = []
-#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-           
-#             # Save data to AWS S3
-#             save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
- 
-#         else:
-#             # Local file path for storing orders
-#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
- 
-#             # Load existing data from local storage if available
-#             if os.path.exists(order_file_path):
-#                 with open(order_file_path, 'r') as file:
-#                     client_transactions = json.load(file)
-#                 print(f"Loaded existing transactions for client {client_id} from local storage")
-#             else:
-#                 # Initialize a new transaction list if the file doesn't exist
-#                 client_transactions = []
-#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
- 
-#             # Save data to local storage
-#             save_data_to_local(client_id, client_transactions, order_file_path, order_data)
- 
-#         return jsonify({"message": "Order placed successfully", "status": 200})
- 
-#     except Exception as e:
-#         print(f"Error occurred while placing order: {e}")
-#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
  
 
 # ## Using AWS to Show Order :
@@ -7341,8 +7289,12 @@ def actual_vs_predicted():
         client_id = request.json.get('client_id')
         portfolio_daily_change = request.json.get('portfolio_daily_change')
         current_date = datetime.now().strftime("%Y-%m-%d")
-
-        current_quarter = "2024_Q4"
+        
+        # client_name = request.json.get("client_name")
+        # funds = request.json.get("funds")
+        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        
+        current_quarter = "2025_Q1"
 
         # Define file paths and S3 keys
         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
@@ -7357,6 +7309,8 @@ def actual_vs_predicted():
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
             except s3.exceptions.NoSuchKey:
+                # Create Prediction Line Chart :
+                # predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
                 return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
         else:
             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
@@ -7421,6 +7375,130 @@ def actual_vs_predicted():
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
+
+
+def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
+    try:
+        # Retrieve client and portfolio details
+        # client_id = request.json.get("client_id")
+        # client_name = request.json.get("client_name")
+        # funds = request.json.get("funds")
+        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+
+        # Load portfolio data (from AWS or local storage)
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response["Body"].read().decode("utf-8"))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, "r") as file:
+                portfolio_data = json.load(file)
+
+        # Load market data for beta calculation
+        market_returns = fetch_historical_returns(MARKET_INDEX)
+
+        # Prepare date intervals for the current quarter
+        current_quarter = get_current_quarter()
+        current_quarter_dates = get_current_quarter_dates()
+        print(f"Current Quarter: {current_quarter}")
+
+        confidence_data = []
+
+        # Process each asset in the portfolio
+        for asset in portfolio_data:
+            ticker = asset.get("symbol")
+            if not ticker or ticker == "N/A":
+                continue
+
+            # Fetch historical returns
+            historical_returns = fetch_historical_returns(ticker)
+            if historical_returns.empty:
+                asset["volatility"] = 0.8
+                asset["sharpe_ratio"] = 0.7
+                asset["beta"] = 0.5
+                asset["forecasted_returns"] = [0] * FORECAST_DAYS
+                asset["simulated_returns"] = [0] * FORECAST_DAYS
+                continue
+
+            # Metrics Calculation
+            asset["volatility"] = compute_volatility(historical_returns)
+            asset["sharpe_ratio"] = compute_sharpe_ratio(historical_returns)
+            asset["beta"] = compute_beta(historical_returns, market_returns)
+            asset["forecasted_returns"] = arima_forecast(historical_returns).tolist()
+            asset["simulated_returns"] = simulate_fluctuations(asset["forecasted_returns"][0], asset["volatility"])
+
+        # Generate task for LLM
+        task = f"""
+            You are tasked with predicting the **current quarter's (3-month)** returns for a client's portfolio.
+            Client Name: {client_name}
+            Portfolio Details: {portfolio_data}
+            Investor Personality: {investor_personality}
+            Funds: ${funds}
+
+            Predict the portfolio's **daily returns** for the current quarter:
+            - **Best-Case Scenario** (High returns under favorable conditions)
+            - **Worst-Case Scenario** (Low returns under unfavorable conditions)
+            - **Confidence Band** (95% range of returns)
+            
+            Dates to Predict: {current_quarter_dates}
+
+            ### Response Format:
+            | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            |------------|-----------------------|-----------------------|---------------------|------------------|
+            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+            | ...        | ...   | ...   | ...                 | ...  |
+        """
+
+        # Simulate LLM response
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(task)
+        simulated_response = markdown_to_text(response.text)
+        print(simulated_response)
+
+        # Extract line chart data
+        line_chart_data = extract_line_chart_data(simulated_response)
+        print(f"Line Chart Data: {line_chart_data}")
+
+        refined_line_chart_data = add_noise(line_chart_data)
+        print(f"Refined Line Chart Data: {refined_line_chart_data}")
+
+        # Save predictions
+        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        save_to_file(prediction_file, refined_line_chart_data)
+
+        # Return the response
+        return refined_line_chart_data
+        # return jsonify({
+        #     "client_id": client_id,
+        #     "client_name": client_name,
+        #     "predicted_returns": simulated_response,
+        #     "line_chart_data": refined_line_chart_data,
+        # }), 200
+
+    except Exception as e:
+        print(f"Error in predicting returns: {e}")
+        return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+# from datetime import datetime, timedelta
+
+def get_current_quarter():
+    now = datetime.now()
+    quarter = (now.month - 1) // 3 + 1
+    return f"Q{quarter}-{now.year}"
+
+def get_current_quarter_dates():
+    now = datetime.now()
+    quarter_start_month = 3 * ((now.month - 1) // 3) + 1
+    quarter_start = datetime(now.year, quarter_start_month, 1)
+    next_quarter_start = quarter_start + timedelta(days=90)  # Approximation
+    dates = [quarter_start + timedelta(days=i) for i in range(0, (next_quarter_start - quarter_start).days, 7)]
+    return [date.strftime("%Y-%m-%d") for date in dates]
 
 
 # Actual vs Predicted Endpoint : Original Code :
