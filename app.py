@@ -6937,6 +6937,9 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 
 
 # Actual vs Predicted Endpoint
+
+# v-1 : correctly working for actual data for the current quarter
+
 @app.route('/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
     try:
@@ -6961,6 +6964,7 @@ def actual_vs_predicted():
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
             except s3.exceptions.NoSuchKey:
                 # Create Prediction Line Chart as it wasnt created before:
                 predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
@@ -7012,9 +7016,12 @@ def actual_vs_predicted():
                 logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
                 return jsonify({"message": "No daily changes data found."}), 404
 
-        # Process daily changes data
+        # Process daily changes data for only current quarter :
         daily_changes_data = []
-
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
         for timestamp, details in raw_daily_changes_data.items():
             try:
                 # Normalize the date
@@ -7023,8 +7030,8 @@ def actual_vs_predicted():
                 # Safely get the correct daily change value
                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
 
-                # Append if the value is not zero
-                if value != 0:
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
                     daily_changes_data.append({"date": date, "value": value})
             except Exception as e:
                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
@@ -7034,24 +7041,58 @@ def actual_vs_predicted():
         for entry in daily_changes_data:
             unique_daily_changes[entry["date"]] = entry["value"]
 
-        # Convert back to a sorted list of values
-        actual_line_chart_data = [unique_daily_changes[date] for date in sorted(unique_daily_changes)]
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
 
         # Debugging output
         print("Processed Daily Changes Data:", daily_changes_data)
         print("Unique Daily Changes:", unique_daily_changes)
         print("Actual Line Chart Data:", actual_line_chart_data)
+        print("Actual Data Dates:", sorted_actual_dates)
 
-        # print(f"Actual Line Chart Data :\n{actual_line_chart_data}")
         
-        # Calculate actual returns
-        # actual_line_chart_data = [602.58, 506.62, 618.96, 606.66, 1570.58, 3955.08, 3982.38, 4068.60]
-
-        # Combine actual and predicted data
         comparison_data = {
-            "actual": actual_line_chart_data,
-            "predicted": predicted_line_chart_data
+            "actual_dates": sorted_actual_dates,
+            "actual_values": actual_line_chart_data,
+            "predicted": predicted_line_chart_data,
         }
+
+        # Process daily changes data : working correctly
+        # daily_changes_data = []
+
+        # for timestamp, details in raw_daily_changes_data.items():
+        #     try:
+        #         # Normalize the date
+        #         date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+        #         # Safely get the correct daily change value
+        #         value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+        #         # Append if the value is not zero
+        #         if value != 0:
+        #             daily_changes_data.append({"date": date, "value": value})
+        #     except Exception as e:
+        #         logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # # Remove duplicates, retaining the latest value for each date
+        # unique_daily_changes = {}
+        # for entry in daily_changes_data:
+        #     unique_daily_changes[entry["date"]] = entry["value"]
+
+        # # Convert back to a sorted list of values
+        # actual_line_chart_data = [unique_daily_changes[date] for date in sorted(unique_daily_changes)]
+
+        # # Debugging output
+        # print("Processed Daily Changes Data:", daily_changes_data)
+        # print("Unique Daily Changes:", unique_daily_changes)
+        # print("Actual Line Chart Data:", actual_line_chart_data)
+
+        # # Combine actual and predicted data
+        # comparison_data = {
+        #     "actual": actual_line_chart_data,
+        #     "predicted": predicted_line_chart_data
+        # }
 
         # Save comparison data
         # Save line chart data locally or to AWS based on storage flag
@@ -7064,6 +7105,9 @@ def actual_vs_predicted():
                     Body=json.dumps(comparison_data),
                     ContentType='application/json'
                 )
+                print("Saved Comparison Prediction Data to AWS")
+                # logging.info(f"Saved Comparison prediction data to AWS")
+                
             except Exception as e:
                 logging.error(f"Error saving prediction data to AWS: {e}")
                 return jsonify({"message": "Error saving prediction data to AWS."}), 500
@@ -7243,20 +7287,6 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
 
-# from datetime import datetime, timedelta
-
-# def get_current_quarter():
-#     now = datetime.now()
-#     quarter = (now.month - 1) // 3 + 1
-#     return f"Q{quarter}-{now.year}"
-
-# def get_current_quarter_dates():
-#     now = datetime.now()
-#     quarter_start_month = 3 * ((now.month - 1) // 3) + 1
-#     quarter_start = datetime(now.year, quarter_start_month, 1)
-#     next_quarter_start = quarter_start + timedelta(days=90)  # Approximation
-#     dates = [quarter_start + timedelta(days=i) for i in range(0, (next_quarter_start - quarter_start).days, 7)]
-#     return [date.strftime("%Y-%m-%d") for date in dates]
 
 import calendar
 from datetime import datetime, timedelta
