@@ -117,10 +117,77 @@ def list_s3_keys(bucket_name, prefix=""):
 # Call the function
 # list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
 # list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
 ####################################################################################
+
+# Download the files :
+
+# def download_json_file(bucket_name, file_key, local_file_path):
+#     """
+#     Downloads a JSON file from an S3 bucket to a local file.
+
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) of the file in the bucket
+#     :param local_file_path: Path to save the file locally
+#     """
+#     try:
+#         # Download the file
+#         s3.download_file(bucket_name, file_key, local_file_path)
+#         print(f"File '{file_key}' successfully downloaded to '{local_file_path}'.")
+        
+#         # Load the JSON content to confirm it's valid
+#         with open(local_file_path, 'r') as file:
+#             data = json.load(file)
+#             print("Downloaded JSON content:", data)
+#         return data
+    
+#     except Exception as e:
+#         print(f"Error downloading file: {e}")
+#         return None
+
+# # Example usage 
+# local_file_path = "local_data\orders\orders_SF3648.json"
+# downloaded_data = download_json_file(S3_BUCKET_NAME,"order_list_folder/SF3648_orders.json", local_file_path)
+
+# downloaded_data = download_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
+
+# print(downloaded_data)
+
+######################################################################################
+
+# Upload File :
+
+# def upload_json_file(bucket_name, file_key, local_file_path):
+#     """
+#     Uploads a JSON file from the local file system to an S3 bucket.
+
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) to upload the file to in the bucket
+#     :param local_file_path: Path of the file locally to be uploaded
+#     """
+#     try:
+#         # Upload the file
+#         s3.upload_file(local_file_path, bucket_name, file_key, ExtraArgs={'ContentType': 'application/json'})
+#         print(f"File '{local_file_path}' successfully uploaded to '{file_key}' in bucket '{bucket_name}'.")
+    
+#     except Exception as e:
+#         print(f"Error uploading file: {e}")
+
+# # Example usage
+# local_file_path = "local_data\portfolios\portfolio_SF3648.json"
+# upload_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
+
+# local_file_path = "local_data\orders\orders_SF3648.json"
+# upload_json_file(S3_BUCKET_NAME, "order_list_folder/SF3648_orders.json", local_file_path)
+
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+
+
+######################################################################################
+
+
 # delete folders/files from bucket :
 
 
@@ -131,6 +198,11 @@ list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder)
 # FILE_KEY = "order_list_folder/JR5059_orders.json"
 # FILE_KEY = "portfolio_list_folder//JM4162.json"
 # FILE_KEY = "portfolio_list_folder//JR5059.json"
+
+# FILE_KEY = "order_list_folder/SF3648_orders.json" 
+
+# FILE_KEY = "order_list_folder/SF3648_orders.json" 
+
 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
@@ -155,7 +227,9 @@ list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder)
 # # Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
-# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+
 
 
 # =------------------------------------------------------=
@@ -7365,6 +7439,55 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
         economic_news = {topic: fetch_news(topic) for topic in topics}
         portfolio_news = collect_portfolio_news(portfolio_data)
+        
+        # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
+            
+        # Process daily changes data for only current quarter :
+        daily_changes_data = []
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
 
         # Generate task for LLM
         task = f"""
@@ -7382,8 +7505,12 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             Investor Personality: {investor_personality}
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
+            Portfolio Daily Dates : {sorted_actual_dates}
+            Portfolio Daily Returns: {actual_line_chart_data}
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+            Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
+            Based on the given provided information :
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
 
