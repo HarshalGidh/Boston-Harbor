@@ -6916,9 +6916,11 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
                     Body=json.dumps(refined_line_chart_data),
                     ContentType='application/json'
                 )
+                print(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} in AWS.")
                 logging.info(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} in AWS.")
             except Exception as e:
                 logging.error(f"Error saving predictions to AWS: {e}")
+                print(f"Error saving predictions to AWS: {e}")
                 return {"message": f"Error saving predictions to AWS: {e}"}, 500
         else:
             # Save predictions locally
@@ -6938,7 +6940,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 
 # Actual vs Predicted Endpoint
 
-# v-1 : correctly working for actual data for the current quarter
+# v-2 : Very Fast and Also checks changes in Portfolio :
 
 @app.route('/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
@@ -6952,12 +6954,13 @@ def actual_vs_predicted():
         funds = request.json.get("funds")
         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
         
-        # current_quarter = "2025_Q1"
+        # Get current quarter
         current_quarter = get_current_quarter()
 
         # Define file paths and S3 keys
         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-        predicted_s3_key = f"predictions/{client_id}_{current_quarter}_line_chart.json"
+        predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+        portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
 
         # Load previously predicted line chart data
         if USE_AWS:
@@ -6966,44 +6969,66 @@ def actual_vs_predicted():
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
                 print("\nFound Prediction Line Chart Data \n")
             except s3.exceptions.NoSuchKey:
-                # Create Prediction Line Chart as it wasnt created before:
-                predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
-                
-                # Save Prediction Line Chart Data :
-                save_predictions(client_id,current_quarter,predicted_line_chart_data)
-                # return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
+                # Create Prediction Line Chart as it wasn't created before
+                predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                print("\nSaving the Predictions Line Chart\n")
+                save_predictions(client_id, current_quarter, predicted_line_chart_data)
         else:
             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
             if not predicted_line_chart_data:
                 return jsonify({"message": f"No previous predictions found for this client."}), 404
 
         # Fetch and process portfolio data
-        # Load portfolio data
         if USE_AWS:
-            # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
-                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+                current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
             except s3.exceptions.NoSuchKey:
                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+            # Load previous portfolio predictions data
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+                previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                previous_portfolio_data = None
         else:
             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-            portfolio_data = load_from_file(portfolio_file)
-            if not portfolio_data:
+            current_portfolio_data = load_from_file(portfolio_file)
+            if not current_portfolio_data:
                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+            portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_portfolio.json")
+            previous_portfolio_data = load_from_file(portfolio_predictions_file)
 
-        # Update daily returns 
-        # daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
-        
-        # Load daily changes data
+        # Check for changes in the portfolio
+        if current_portfolio_data != previous_portfolio_data:
+            print("Portfolio data has changed. Updating predictions.")
+            predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+
+            # Save updated portfolio and predictions
+            if USE_AWS:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=portfolio_predictions_key,
+                    Body=json.dumps(current_portfolio_data),
+                    ContentType='application/json'
+                )
+                save_predictions(client_id, current_quarter, predicted_line_chart_data)
+            else:
+                save_to_file(portfolio_predictions_file, current_portfolio_data)
+                save_to_file(predicted_file_path, predicted_line_chart_data)
+        else:
+            print("No changes in portfolio. Using existing predictions.")
+
+        # Process daily changes data
         daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
         if USE_AWS:
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
                 raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
                 print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
-                
             except s3.exceptions.NoSuchKey:
                 logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
                 return jsonify({"message": "No daily changes data found."}), 404
@@ -7052,80 +7077,211 @@ def actual_vs_predicted():
         print("Actual Data Dates:", sorted_actual_dates)
 
         
-        comparison_data = {
-            "actual_dates": sorted_actual_dates,
-            "actual_values": actual_line_chart_data,
-            "predicted": predicted_line_chart_data,
-        }
-
-        # Process daily changes data : working correctly
-        # daily_changes_data = []
-
-        # for timestamp, details in raw_daily_changes_data.items():
-        #     try:
-        #         # Normalize the date
-        #         date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
-
-        #         # Safely get the correct daily change value
-        #         value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
-
-        #         # Append if the value is not zero
-        #         if value != 0:
-        #             daily_changes_data.append({"date": date, "value": value})
-        #     except Exception as e:
-        #         logging.warning(f"Skipping malformed entry {timestamp}: {e}")
-
-        # # Remove duplicates, retaining the latest value for each date
-        # unique_daily_changes = {}
-        # for entry in daily_changes_data:
-        #     unique_daily_changes[entry["date"]] = entry["value"]
-
-        # # Convert back to a sorted list of values
-        # actual_line_chart_data = [unique_daily_changes[date] for date in sorted(unique_daily_changes)]
-
-        # # Debugging output
-        # print("Processed Daily Changes Data:", daily_changes_data)
-        # print("Unique Daily Changes:", unique_daily_changes)
-        # print("Actual Line Chart Data:", actual_line_chart_data)
-
-        # # Combine actual and predicted data
-        # comparison_data = {
-        #     "actual": actual_line_chart_data,
-        #     "predicted": predicted_line_chart_data
-        # }
-
-        # Save comparison data
-        # Save line chart data locally or to AWS based on storage flag
-        if USE_AWS:
-            comparison_s3_key = f"comparisons/{client_id}_{current_quarter}_comparison_chart.json"
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=comparison_s3_key,
-                    Body=json.dumps(comparison_data),
-                    ContentType='application/json'
-                )
-                print("Saved Comparison Prediction Data to AWS")
-                # logging.info(f"Saved Comparison prediction data to AWS")
-                
-            except Exception as e:
-                logging.error(f"Error saving prediction data to AWS: {e}")
-                return jsonify({"message": "Error saving prediction data to AWS."}), 500
-        else:
-            comparison_file_path = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
-            save_to_file(comparison_file_path, comparison_data)
-            # comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-            # save_to_file(comparison_file, comparison_data)
-
-        # Return the comparison data
         return jsonify({
             "client_id": client_id,
-            "comparison_chart_data": comparison_data
+            "comparison_chart_data": {
+                "actual_dates": sorted_actual_dates,
+                "actual_values": actual_line_chart_data,
+                "predicted": predicted_line_chart_data,
+            }
         }), 200
 
     except Exception as e:
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
+# v-1 : correctly working for actual data for the current quarter
+
+# @app.route('/actual_vs_predicted', methods=['POST'])
+# def actual_vs_predicted():
+#     try:
+#         # Retrieve client ID and current portfolio daily change
+#         client_id = request.json.get('client_id')
+#         portfolio_daily_change = request.json.get('portfolio_daily_change')
+#         current_date = datetime.now().strftime("%Y-%m-%d")
+        
+#         client_name = request.json.get("client_name")
+#         funds = request.json.get("funds")
+#         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        
+#         # current_quarter = "2025_Q1"
+#         current_quarter = get_current_quarter()
+
+#         # Define file paths and S3 keys
+#         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        
+#         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+        
+#         # predicted_s3_key = f"predictions/{client_id}_{current_quarter}_line_chart.json"
+
+#         # Load previously predicted line chart data
+#         if USE_AWS:
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+#                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print("\nFound Prediction Line Chart Data \n")
+#             except s3.exceptions.NoSuchKey:
+#                 # Create Prediction Line Chart as it wasnt created before:
+#                 predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
+                
+#                 # Save Prediction Line Chart Data :
+#                 print("\nSaving the Predictions Line Chart\n")
+#                 save_predictions(client_id,current_quarter,predicted_line_chart_data)
+#                 # return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
+#         else:
+#             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+#             if not predicted_line_chart_data:
+#                 return jsonify({"message": f"No previous predictions found for this client."}), 404
+
+#         # Fetch and process portfolio data
+#         # Load portfolio data
+#         if USE_AWS:
+#             # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#         else:
+#             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#             portfolio_data = load_from_file(portfolio_file)
+#             if not portfolio_data:
+#                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Update daily returns 
+#         # daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        
+#         # Load daily changes data
+#         daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#         if USE_AWS:
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+                
+#             except s3.exceptions.NoSuchKey:
+#                 logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+#         else:
+#             daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     raw_daily_changes_data = json.load(file)
+#             else:
+#                 logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+
+#         # Process daily changes data for only current quarter :
+#         daily_changes_data = []
+#         current_quarter_date = get_current_quarter_dates()
+#         start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+#         print(f"Current Quarter Start Date :{start_date}")
+        
+#         for timestamp, details in raw_daily_changes_data.items():
+#             try:
+#                 # Normalize the date
+#                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+#                 # Safely get the correct daily change value
+#                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+#                 # Append if the value is not zero and is after or on the start date
+#                 if value != 0 and date >= start_date:
+#                     daily_changes_data.append({"date": date, "value": value})
+#             except Exception as e:
+#                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         # Remove duplicates, retaining the latest value for each date
+#         unique_daily_changes = {}
+#         for entry in daily_changes_data:
+#             unique_daily_changes[entry["date"]] = entry["value"]
+
+#         # Convert back to a sorted list of values and dates starting from the current date
+#         sorted_actual_dates = sorted(unique_daily_changes.keys())
+#         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+#         # Debugging output
+#         print("Processed Daily Changes Data:", daily_changes_data)
+#         print("Unique Daily Changes:", unique_daily_changes)
+#         print("Actual Line Chart Data:", actual_line_chart_data)
+#         print("Actual Data Dates:", sorted_actual_dates)
+
+        
+#         comparison_data = {
+#             "actual_dates": sorted_actual_dates,
+#             "actual_values": actual_line_chart_data,
+#             "predicted": predicted_line_chart_data,
+#         }
+
+#         # Process daily changes data : working correctly
+#         # daily_changes_data = []
+
+#         # for timestamp, details in raw_daily_changes_data.items():
+#         #     try:
+#         #         # Normalize the date
+#         #         date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+#         #         # Safely get the correct daily change value
+#         #         value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+#         #         # Append if the value is not zero
+#         #         if value != 0:
+#         #             daily_changes_data.append({"date": date, "value": value})
+#         #     except Exception as e:
+#         #         logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         # # Remove duplicates, retaining the latest value for each date
+#         # unique_daily_changes = {}
+#         # for entry in daily_changes_data:
+#         #     unique_daily_changes[entry["date"]] = entry["value"]
+
+#         # # Convert back to a sorted list of values
+#         # actual_line_chart_data = [unique_daily_changes[date] for date in sorted(unique_daily_changes)]
+
+#         # # Debugging output
+#         # print("Processed Daily Changes Data:", daily_changes_data)
+#         # print("Unique Daily Changes:", unique_daily_changes)
+#         # print("Actual Line Chart Data:", actual_line_chart_data)
+
+#         # # Combine actual and predicted data
+#         # comparison_data = {
+#         #     "actual": actual_line_chart_data,
+#         #     "predicted": predicted_line_chart_data
+#         # }
+
+#         # Save comparison data
+#         # Save line chart data locally or to AWS based on storage flag
+#         if USE_AWS:
+#             comparison_s3_key = f"comparisons/{client_id}_{current_quarter}_comparison_chart.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=comparison_s3_key,
+#                     Body=json.dumps(comparison_data),
+#                     ContentType='application/json'
+#                 )
+#                 print("Saved Comparison Prediction Data to AWS")
+#                 logging.info(f"Saved Comparison prediction data to AWS")
+                
+#             except Exception as e:
+#                 logging.error(f"Error saving prediction data to AWS: {e}")
+#                 return jsonify({"message": "Error saving prediction data to AWS."}), 500
+#         else:
+#             comparison_file_path = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
+#             save_to_file(comparison_file_path, comparison_data)
+#             # comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+#             # save_to_file(comparison_file, comparison_data)
+
+#         # Return the comparison data
+#         return jsonify({
+#             "client_id": client_id,
+#             "comparison_chart_data": comparison_data
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error generating comparison: {e}")
+#         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
 
 
@@ -7786,7 +7942,7 @@ def plot_refined_data(refined_data):
 
 # Final Predict Returns for Next Quarter :
 
-
+# v-2 :
 @app.route('/predict_returns', methods=['POST'])
 def predict_returns():
     try:
@@ -7795,6 +7951,94 @@ def predict_returns():
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+        
+        # current_quarter = get_current_quarter()
+        next_quarter = get_next_quarter()
+        
+        predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+        next_predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{next_quarter}_line_chart.json"
+        portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{next_quarter}_portfolio.json"
+        
+        simulated_response = None  # Initialize simulated_response in case no change in Portfolio
+        
+        # Load previously predicted line chart data
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=next_predicted_s3_key)
+                refined_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
+            except s3.exceptions.NoSuchKey:
+                # Create Next Quarter Prediction Line Chart as it wasn't created before
+                
+                simulated_response,refined_line_chart_data = create_next_quarter_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                
+                print("\nSaving the Next Quarter Returns Predictions Line Chart\n")
+                save_predictions(client_id, next_quarter, refined_line_chart_data)
+        else:
+            refined_line_chart_data = load_from_file(predicted_file_path, next_predicted_s3_key)
+            if not refined_line_chart_data:
+                return jsonify({"message": f"No previous predictions found for this client."}), 404
+
+        # Fetch and process portfolio data
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+            # Load previous portfolio predictions data
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+                previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                previous_portfolio_data = None
+        else:
+            portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+            current_portfolio_data = load_from_file(portfolio_file)
+            if not current_portfolio_data:
+                return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+            portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_portfolio.json")
+            previous_portfolio_data = load_from_file(portfolio_predictions_file)
+
+        # Check for changes in the portfolio
+        if current_portfolio_data != previous_portfolio_data:
+            print("Portfolio data has changed. Updating predictions for next quarter returns.")
+            
+            simulated_response,refined_line_chart_data = create_next_quarter_prediction_line_chart(client_id, client_name, funds, investor_personality)
+
+            # Save updated portfolio and predictions
+            if USE_AWS:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=portfolio_predictions_key,
+                    Body=json.dumps(current_portfolio_data),
+                    ContentType='application/json'
+                )
+                save_predictions(client_id, next_quarter, refined_line_chart_data)
+            else:
+                save_to_file(portfolio_predictions_file, current_portfolio_data)
+                save_to_file(predicted_file_path, refined_line_chart_data)
+        else:
+            print("No changes in portfolio. Using existing predictions.")
+
+
+        # Return the response
+        return jsonify({
+            "client_id": client_id,
+            "client_name": client_name,
+            "predicted_returns": simulated_response,
+            "line_chart_data": refined_line_chart_data
+        }), 200
+
+    except Exception as e:
+        print(f"Error in predicting returns: {e}")
+        return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+def create_next_quarter_prediction_line_chart(client_id,client_name,funds,investor_personality):
+    try:
 
         # Load portfolio data (using local or AWS storage based on USE_AWS)
         if USE_AWS:
@@ -7869,8 +8113,6 @@ def predict_returns():
             asset['forecasted_returns'] = forecasted_returns.tolist()
             asset['simulated_returns'] = simulated_returns
 
-            
-            
         # Load client financial data
         if USE_AWS:
             # client_summary_key = f"{client_summary_folder}{client_id}.json"
@@ -7955,29 +8197,199 @@ def predict_returns():
         
         refined_line_chart_data = add_noise(line_chart_data)
         print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
-        
-        # Plot return predictions :
-        # plot_return_predictions(line_chart_data)
-        # plot_refined_data(refined_line_chart_data)
-        # plot_return_predictions_with_fluctuations(refined_line_chart_data)
 
         # Save predictions
-        save_predictions(client_id,next_quarter,refined_line_chart_data)
-        
-        # prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-        # save_to_file(prediction_file, refined_line_chart_data)
+        # save_predictions(client_id,next_quarter,refined_line_chart_data)
 
-        # Return the response
-        return jsonify({
-            "client_id": client_id,
-            "client_name": client_name,
-            "predicted_returns": simulated_response,
-            "line_chart_data": refined_line_chart_data
-        }), 200
+        return simulated_response,refined_line_chart_data
 
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+# V-1 :
+    
+# @app.route('/predict_returns', methods=['POST'])
+# def predict_returns():
+#     try:
+#         # Retrieve client and portfolio details
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get('client_name')
+#         funds = request.json.get('funds')
+#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+
+#         # Load portfolio data (using local or AWS storage based on USE_AWS)
+#         if USE_AWS:
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#         else:
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             if not os.path.exists(portfolio_file_path):
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#             with open(portfolio_file_path, 'r') as file:
+#                 portfolio_data = json.load(file)
+        
+#         # portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         # portfolio_data = load_from_file(portfolio_file)
+#         # if portfolio_data is None:
+#         #     return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load market data for beta calculation
+#         market_returns = fetch_historical_returns(MARKET_INDEX)
+
+#         # Prepare date intervals
+#         next_quarter = get_next_quarter()
+#         print(f"Next Quarter: {next_quarter}")
+
+#         confidence_data = []
+        
+#         # Iterate over each asset in the portfolio
+        
+#         for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+#             ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+#             if not ticker:
+#                 continue
+#             if ticker == 'N/A':
+#                 continue
+
+#             # Fetch historical returns
+#             historical_returns = fetch_historical_returns(ticker)
+#             if historical_returns.empty:
+#                 print(f"No valid returns for {ticker}. Assigning defaults.")
+#                 asset['volatility'] = 0.8
+#                 asset['sharpe_ratio'] = 0.7
+#                 asset['beta'] = 0.5
+#                 asset['forecasted_returns'] = [0] * FORECAST_DAYS
+#                 asset['simulated_returns'] = [0] * FORECAST_DAYS
+#                 continue
+
+#             # Metrics Calculation
+#             volatility = compute_volatility(historical_returns)
+#             print(volatility)
+#             sharpe_ratio = compute_sharpe_ratio(historical_returns)
+#             print(sharpe_ratio)
+#             beta = compute_beta(historical_returns, market_returns)
+#             print(beta)
+#             stationarity = adf_test(historical_returns)
+#             print(stationarity)
+
+#             # Forecasting
+#             forecasted_returns = arima_forecast(historical_returns)
+#             print(forecasted_returns)
+#             simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+#             print(simulated_returns)
+
+#             # Save metrics back to the portfolio
+#             asset['volatility'] = volatility
+#             asset['sharpe_ratio'] = sharpe_ratio
+#             asset['beta'] = beta
+#             asset['stationarity'] = stationarity
+#             asset['forecasted_returns'] = forecasted_returns.tolist()
+#             asset['simulated_returns'] = simulated_returns
+
+#         # Load client financial data
+#         if USE_AWS:
+#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#                 client_financial_data = load_from_file(client_summary_file)
+#                 if not client_financial_data:
+#                     return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+#                 logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+#                 # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#         else:
+#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#             client_financial_data = load_from_file(client_summary_file)
+#             if not client_financial_data:
+#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         date_intervals = get_next_quarter_dates()
+#         next_quarter = get_next_quarter()
+
+#         task = f"""
+#             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+#             You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+#             - Random market fluctuations (up and down movements).
+#             - Economic volatility.
+#             - Natural noise in predictions.
+#             The client, {client_name}, has the following portfolio:
+
+#             Portfolio Details: {portfolio_data}
+#             Portfolio Analyis: {asset}
+#             Financial Situation: {client_financial_data}
+#             Available Funds: ${funds}
+#             Investor Personality: {investor_personality}
+#             Portfolio News: {portfolio_news}
+#             Economic News: {economic_news}
+                     
+#             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+#             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+#             {date_intervals}
+
+#             Predict the portfolio's **daily returns** over the next 3 months. Include:
+#             1. **Best-Case Scenario** (High returns under favorable conditions).
+#             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+#             3. **Confidence Band** (Range of returns at 95% confidence level).
+            
+#             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+#             Example of simulated_response = 
+#             ### Response Format:
+#             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+#             |------------|-----------------------|-----------------------|---------------------|------------------|
+#             | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+#             | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+#             | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+#             | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+#             | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+#             | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+#             | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+#             | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+#             | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+#             Your Response must be in the above table format no messages is required just table format data.
+#         """
+        
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+#         simulated_response = markdown_to_text(response.text)
+#         print(simulated_response)
+#         line_chart_data = extract_line_chart_data(simulated_response)
+#         print(f"\nLine Chart Data :{line_chart_data}")
+        
+#         refined_line_chart_data = add_noise(line_chart_data)
+#         print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
+
+#         # Save predictions
+#         save_predictions(client_id,next_quarter,refined_line_chart_data)
+
+#         # Return the response
+#         return jsonify({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             "predicted_returns": simulated_response,
+#             "line_chart_data": refined_line_chart_data
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
     
     
 ######################################################################################################################
