@@ -93,7 +93,7 @@ personality_assessment_folder = os.getenv('personality_assessment_folder')
 login_folder = os.getenv('login_folder')
 daily_changes_folder = os.getenv('daily_changes_folder')
 signUp_user_folder = os.getenv('signUp_user_folder')
-
+PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
 # Connecting to Amazon S3
 s3 = boto3.client(
     's3',
@@ -130,32 +130,32 @@ list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder)
 # FILE_KEY = "order_list_folder/JM4162_orders.json"
 # FILE_KEY = "order_list_folder/JR5059_orders.json"
 # FILE_KEY = "portfolio_list_folder//JM4162.json"
-FILE_KEY = "portfolio_list_folder//JR5059.json"
+# FILE_KEY = "portfolio_list_folder//JR5059.json"
 
-def delete_file_from_s3(bucket_name, file_key):
-    """
-    Deletes a specified file from an S3 bucket.
+# def delete_file_from_s3(bucket_name, file_key):
+#     """
+#     Deletes a specified file from an S3 bucket.
 
-    :param bucket_name: Name of the S3 bucket
-    :param file_key: Key (path) of the file in the bucket
-    """
-    try:
-        # Delete the file
-        response = s3.delete_object(Bucket=bucket_name, Key=file_key)
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) of the file in the bucket
+#     """
+#     try:
+#         # Delete the file
+#         response = s3.delete_object(Bucket=bucket_name, Key=file_key)
         
-        # Confirm deletion
-        if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
-            print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
-        else:
-            print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
+#         # Confirm deletion
+#         if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
+#             print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
+#         else:
+#             print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
     
-    except Exception as e:
-        print(f"Error deleting file: {e}")
+#     except Exception as e:
+#         print(f"Error deleting file: {e}")
 
-# Call the function
-delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
+# # Call the function
+# delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
-list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
 # =------------------------------------------------------=
@@ -6752,23 +6752,6 @@ def analyze_portfolio():
                 Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
                 """
                 
-        # task = f"""
-        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-        #         The portfolio contains several stocks and investments.
-        #         Based on the portfolio data provided:
-
-        #         - The available funds for the client are {funds}.
-        #         - The current value of the portfolio is {portfolio_current_value}.
-        #         - The portfolio's daily change is {portfolio_daily_change}.
-        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
-
-        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable irrespective of their current investmnets or remaining funds or current returns.If the user has a good portfolio mention that as well.
-        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
-        #         Also, provide suggestions for asset allocation, tax efficiency, and market trends.
-        #         """
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(task)
@@ -6797,138 +6780,6 @@ def analyze_portfolio():
         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
 
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         # Retrieve the requested asset type
-#         assetName = request.json.get('assetName', 'all')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         client_id = request.json.get('client_id')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-
-#         # Load portfolio data for client (if analyzing the whole portfolio)
-#         portfolio_data = {}
-#         portfolio_news = {}
-
-#         if assetName == 'all':
-#             # Load the complete portfolio
-#             with open(f'portfolio_{client_id}.json', 'r') as f:
-#                 portfolio_data = json.load(f)
-#             portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         else:
-#             # Extract specific asset data from request if assetName is specific
-#             portfolioList = request.json.get('portfolioList', [])
-#             portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
-            
-#             # Fetch news for each asset in the specified list
-#             portfolio_news = collect_portfolio_news(portfolio_data)
-        
-#         # Fetching Client's Financial Data to get Financial 
-#         print(f"Received Client Id : {client_id}")
-#         # client_id = request.args.get('clientId')
-        
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
-
-#         # Define the S3 key for the object
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-
-#         # Retrieve the object from S3
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             # Decode and parse the JSON data
-#             client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
-#         except Exception as e:
-#             logging.error(f"Error occurred while retrieving client data from S3: {e}")
-#             return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
-
-#          # Initialize portfolio-level metrics
-#         portfolio_current_value = request.json.get('portfolio_current_value') 
-#         portfolio_daily_change = request.json.get('porfolio_daily_change')
-#         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
-#         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
-#         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
-
-#         print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
-
-
-#         # Task prompt for LLM based on the asset name
-        # task = f"""
-        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-        #         The portfolio contains several stocks and investments.
-        #         Based on the portfolio data provided:
-
-        #         - The available funds for the client are {funds}.
-        #         - The current value of the portfolio is {portfolio_current_value}.
-        #         - The portfolio's daily change is {portfolio_daily_change}.
-        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
-
-        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
-        #         Based on the Client's Financial Situation and the Client's Financial Goals,
-        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-        #         and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
-        #         and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
-
-        #         - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
-        #         - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
-        #         - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
-        #         Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
-
-        #         Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
-
-        #         Additionally, provide:
-
-        #         1. A risk assessment of the current portfolio composition.
-        #         2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-        #         3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-        #         4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-        #         5. Strategies for tax efficiency in the portfolio management.
-        #         6. Insights on market trends and current economic news that could impact the portfolio.
-        #         7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
-        #         8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
-
-        #         Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-        #         Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
-        #         """
-
-#         # Generate response using LLM
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the response
-#             html_suggestions = markdown.markdown(response.text)
-#             format_suggestions = markdown_to_text(html_suggestions)
-            
-#             # Return response in JSON format
-#             return jsonify({
-#                     "portfolio_current_value": portfolio_current_value,
-#                     "portfolio_daily_change": portfolio_daily_change,
-#                     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-#                     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#                     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-#                     "suggestion": format_suggestions,
-#                      "assetClass": assetName
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error generating suggestions from LLM: {e}")
-#             return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
-#         return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
 
 #########################################################################################################################
 # Analyzing the Portfolio using Local Storage :
@@ -6946,248 +6797,6 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract client ID and current date
-#         client_id = request.json.get('client_id')
-#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
- 
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
- 
-#         # Load orders from the local file
-#         order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
- 
-#         if not os.path.exists(order_file_path):
-#             return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
- 
-#         with open(order_file_path, 'r') as file:
-#             client_orders = json.load(file)
- 
-#         # Initialize portfolio data and metrics
-#         portfolio_data = []
-#         portfolio_current_value = 0
-#         porfolio_daily_change = 0
-#         portfolio_investment_gain_loss = 0
- 
-#         # Load existing daily changes for the quarter
-#         daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
-#         if os.path.exists(daily_changes_file):
-#             with open(daily_changes_file, 'r') as file:
-#                 daily_changes = json.load(file)
-#         else:
-#             daily_changes = {}
- 
-#         # Process client orders
-#         for order in client_orders:
-#             asset_class = order.get('AssetClass', 'N/A')
-#             name = order.get('Name', 'N/A')
-#             symbol = order.get('Symbol', 'N/A')
-#             units = order.get('Units', 0)
-#             bought_price = order.get('UnitPrice', 0)
-#             transaction_amount = order.get('TransactionAmount', 0)
- 
-#             # Fetch current stock price
-#             def fetch_current_stock_price(ticker):
-#                 stock = yf.Ticker(ticker)
-#                 try:
-#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
-#                     return current_price
-#                 except Exception as e:
-#                     print(f"Error fetching stock price for {ticker}: {e}")
-#                     return 0
- 
-#             current_price = fetch_current_stock_price(symbol)
-#             diff_price = current_price - bought_price
-#             daily_price_change = diff_price
-#             daily_value_change = daily_price_change * units
-#             current_value = current_price * units
- 
-#             # Calculate investment gain/loss and other metrics
-#             investment_gain_loss = diff_price * units
-#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
- 
-#             # Append data to portfolio
-#             portfolio_data.append({
-#                 "assetClass": asset_class,
-#                 "name": name,
-#                 "symbol": symbol,
-#                 "Quantity": units,
-#                 "Delayed_Price": current_price,
-#                 "current_value": current_value,
-#                 "Daily_Price_Change": daily_price_change,
-#                 "Daily_Value_Change": daily_value_change,
-#                 "Amount_Invested_per_Unit": bought_price,
-#                 "Amount_Invested": transaction_amount,
-#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-#                 "Investment_Gain_or_Loss": investment_gain_loss,
-#                 "Time_Held": order.get('Date', 'N/A'),
-#             })
- 
-#             # Update portfolio metrics
-#             portfolio_current_value += current_value
-#             porfolio_daily_change += daily_price_change
-#             portfolio_investment_gain_loss += investment_gain_loss
- 
-#         # Calculate daily change percentages
-#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
-#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
- 
-#         # Update daily changes for the current date
-#         daily_changes[curr_date] = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#         }
- 
-#         # Save daily changes to a file
-#         with open(daily_changes_file, 'w') as file:
-#             json.dump(daily_changes, file, indent=4)
- 
-#         # Save portfolio data as JSON
-#         portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-#         with open(portfolio_file_path, 'w') as file:
-#             json.dump(portfolio_data, file, indent=4)
- 
-#         # Response data
-#         portfolio_response = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#             "daily_changes": daily_changes,
-#             "portfolio_data": portfolio_data,
-#         }
- 
-#         return jsonify(portfolio_response), 200
- 
-#     except Exception as e:
-#         print(f"Error occurred in portfolio: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-# New Version :
-from flask import Flask, request, jsonify
-import requests
-import os
-import json
-import markdown
-
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         # Retrieve input data
-#         assetName = request.json.get('assetName', 'all')
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Validate client_id
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Define file path for portfolio data
-#         portfolio_file_path = f"local_data/portfolios/portfolio_{client_id}.json"
-
-#         # Load portfolio data from local file
-#         if os.path.exists(portfolio_file_path):
-#             with open(portfolio_file_path, 'r') as f:
-#                 portfolio_data = json.load(f)
-#         else:
-#             return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
-
-#         # Verify portfolio data is a list
-#         if not isinstance(portfolio_data, list):
-#             return jsonify({"message": "Portfolio data is not in the expected format"}), 500
-
-#         # Initialize variables to calculate portfolio-level metrics
-#         portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
-#         portfolio_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
-#         portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
-
-#         if portfolio_current_value != 0:
-#             portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
-#             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
-#         else:
-#             portfolio_daily_change_perc = 0
-#             portfolio_investment_gain_loss_perc = 0
-
-#         # Filter portfolio data if a specific asset type is requested
-#         if assetName != 'all':
-#             filtered_portfolio_data = [
-#                 asset for asset in portfolio_data if asset["assetClass"].lower() == assetName.lower()
-#             ]
-#         else:
-#             filtered_portfolio_data = portfolio_data
-
-#         # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-        
-#         # Load client financial data from local storage
-#         client_data_file_path = f"client_data/client_data/{client_id}.json"
-#         if os.path.exists(client_data_file_path):
-#             with open(client_data_file_path, 'r') as f:
-#                 client_data = json.load(f)
-#         else:
-#             return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
-
-#         portfolio_news = collect_portfolio_news(filtered_portfolio_data)
-
-#         # Task prompt for LLM based on the asset name
-#         task = f"""
-#                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-#                 The portfolio contains several stocks and investments.
-#                 Based on the portfolio data provided:
-
-#                 - The available funds for the client are {funds}.
-#                 - The current value of the portfolio is {portfolio_current_value}.
-#                 - The portfolio's daily change is {portfolio_daily_change}.
-#                 - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-#                 - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-#                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-#                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
-#                 - These are the relevant news for all the stocks in the portfolio : {portfolio_news}
-#                 - These are the relevant economic news : {economic_news}
-
-#                 Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable, or Unstable.
-#                 Based on the Client's Financial Situation and the Client's Financial Goals, provide an in-depth analysis of the portfolio, 
-#                 including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager 
-#                 for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
-#                 Ensure your analysis includes detailed recommendations, risk assessments, and strategies tailored to the client's financial goals based on the recent news regarding the assets in the portfolio : {portfolio_news} and the economic news : {economic_news} .
-#                 """
-
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the response
-#             html_suggestions = markdown.markdown(response.text)
-#             format_suggestions = markdown_to_text(html_suggestions)
-
-#             # Return the analysis response
-#             return jsonify({
-#                 "portfolio_current_value": portfolio_current_value,
-#                 "portfolio_daily_change": portfolio_daily_change,
-#                 "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#                 "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-#                 "suggestion": format_suggestions,
-#                 "assetClass": assetName
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error in generating analysis: {e}")
-#             return jsonify({"message": f"Error generating analysis: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in analyzing portfolio: {e}")
-#         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
 
 #####################################################################################################################
@@ -7278,13 +6887,52 @@ def calculate_actual_returns(client_id):
 
 
 # Define directories for local storage
-# PORTFOLIO_DIR = "local_data/portfolios"
-# PREDICTIONS_DIR = "local_data/predictions"
-# COMPARISONS_DIR = "local_data/comparisons"
+PORTFOLIO_DIR = "local_data/portfolios"
+PREDICTIONS_DIR = "local_data/predictions"
+COMPARISONS_DIR = "local_data/comparisons"
 
-# os.makedirs(PORTFOLIO_DIR, exist_ok=True)
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-# os.makedirs(COMPARISONS_DIR, exist_ok=True)
+os.makedirs(PORTFOLIO_DIR, exist_ok=True)
+os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+os.makedirs(COMPARISONS_DIR, exist_ok=True)
+
+
+def save_predictions(client_id, current_quarter, refined_line_chart_data):
+    """
+    Save predictions line chart data to AWS S3 or locally.
+    
+    Args:
+        client_id (str): Unique client identifier.
+        current_quarter (str): Current quarter for prediction data.
+        refined_line_chart_data (dict): Refined line chart data to save.
+    """
+    try:
+        if USE_AWS:
+            # Save predictions to AWS S3
+            predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=predictions_key,
+                    Body=json.dumps(refined_line_chart_data),
+                    ContentType='application/json'
+                )
+                logging.info(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving predictions to AWS: {e}")
+                return {"message": f"Error saving predictions to AWS: {e}"}, 500
+        else:
+            # Save predictions locally
+            prediction_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+            try:
+                with open(prediction_file_path, 'w') as file:
+                    json.dump(refined_line_chart_data, file, indent=4)
+                logging.info(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} locally.")
+            except Exception as e:
+                logging.error(f"Error saving predictions locally: {e}")
+                return {"message": f"Error saving predictions locally: {e}"}, 500
+    except Exception as e:
+        logging.error(f"Unexpected error in saving predictions: {e}")
+        return {"message": f"Internal server error: {e}"}, 500
 
 
 
@@ -7316,6 +6964,9 @@ def actual_vs_predicted():
             except s3.exceptions.NoSuchKey:
                 # Create Prediction Line Chart as it wasnt created before:
                 predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
+                
+                # Save Prediction Line Chart Data :
+                save_predictions(client_id,current_quarter,predicted_line_chart_data)
                 # return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
         else:
             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
@@ -7338,11 +6989,63 @@ def actual_vs_predicted():
             if not portfolio_data:
                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
 
-        # Update daily returns if there's a change (dummy function call, implement if needed)
-        # update_daily_returns(client_id, portfolio_daily_change, current_date)
+        # Update daily returns 
+        # daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        
+        # Load daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+                
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
 
+        # Process daily changes data
+        daily_changes_data = []
+
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero
+                if value != 0:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted(unique_daily_changes)]
+
+        # Debugging output
+        print("Processed Daily Changes Data:", daily_changes_data)
+        print("Unique Daily Changes:", unique_daily_changes)
+        print("Actual Line Chart Data:", actual_line_chart_data)
+
+        # print(f"Actual Line Chart Data :\n{actual_line_chart_data}")
+        
         # Calculate actual returns
-        actual_line_chart_data = [602.58, 506.62, 618.96, 606.66, 1570.58, 3955.08, 3982.38, 4068.60]
+        # actual_line_chart_data = [602.58, 506.62, 618.96, 606.66, 1570.58, 3955.08, 3982.38, 4068.60]
 
         # Combine actual and predicted data
         comparison_data = {
@@ -8229,8 +7932,10 @@ def predict_returns():
         # plot_return_predictions_with_fluctuations(refined_line_chart_data)
 
         # Save predictions
-        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-        save_to_file(prediction_file, refined_line_chart_data)
+        save_predictions(client_id,next_quarter,refined_line_chart_data)
+        
+        # prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+        # save_to_file(prediction_file, refined_line_chart_data)
 
         # Return the response
         return jsonify({
