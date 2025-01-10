@@ -4675,189 +4675,265 @@ def format_chat_history_for_llm(chat_history, new_query):
 
 from flask import jsonify, send_file, make_response
 
+
+
 @app.route('/analyze_stock', methods=['POST'])
 def analyze_stock():
+    """
+    Generate thorough stock analysis using LLM based on company details, market news, and performance.
+    """
     try:
+        # Fetch input data
         ticker = request.json.get('ticker')
-        company = request.json.get('company',None)
-        query = request.json.get('query')
-        chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
-        # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
+        company = request.json.get('company', None)
         
-        # Load chat history
-        chat_history = load_chat_history(chat_id)
+        if not ticker:
+            print("error : Ticker is required")
+            ticker = "AMGN"
+            # return jsonify({"error": "Ticker is required"}), 400
+        
+        # Fetch stock data
+        data, formatted_data, avg_close, file_path = get_stock_data(ticker)
+        
+        # Create analysis task prompt for LLM
+        task_prompt = f"""
+        You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
+        Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
+        Company news : {data.get('Top_News')}
 
-        # If no ticker provided in the request, try to extract it from the query
-        if not ticker and query:
-            # ticker = extract_ticker(query)
-            
-            ticker,company = extract_ticker(query)
-        
-        # If a valid ticker is found, fetch stock data
-        if ticker:
-            try:
-                data, formatted_data, avg_close,file_path = get_stock_data(ticker)
-                user_query = ticker  # Save the ticker as the user query
-            except Exception as e:
-                print("Error getting the stock data")
-                return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-        else:
-            # No valid ticker found, generate generic suggestions
-            print("No valid ticker found in the query, generating general stock suggestions.")
-            data = {}  # No specific stock data need to check for news
-            formatted_data = ""  # No financial data
-            avg_close = 0
-            user_query = query  # Save the original user query if no ticker is found
+        **Company Name:** 
+        **PE Ratio:** {data.get('PE_Ratio')}
+        **EPS:** {data.get('EPS')}
+        **Book Value:** {data.get('Book_Value')}
+        **ROE:** {data.get('ROE')}
+        **ROCE:** {data.get('ROCE')}
+        **Order Booking:** Not Provided
+        **Revenue Growth:** {data.get('Revenue_Growth')}
+        **Earnings Growth:** {data.get('Earnings_Growth')}
+        **Today's Market Performance:** Closing Price - {data.get('Todays_Closing_Price')}, High Price - {data.get('Today_High_Price')}
 
-        # If query is empty, set a default query for stock analysis
-        # if not query:
-        #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
+        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
+        - Whether the stock is overvalued or undervalued.
+        - Predictions for its performance in the upcoming quarter.
+        - Recommendations for buying, holding, or selling the stock.
+        """
         
-        
-
-        
-         # Save the user's query (ticker or original query) to chat history
-        if user_query:
-            chat_history.append({"user_query": user_query, "message": query})
-        
-        # Detect if this is a follow-up query based on previous history
-        if chat_history:
-            print("This is a follow-up query. Checking previous chat history.")
-            # The logic here could vary; you might compare the current query with past responses or check patterns
-            query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
-
-        # Save the user's query (ticker or original query) to chat history
-        chat_history.append({"user_query": user_query, "message": query})
-        
-      
-            
-        # Format the chat history for the LLM
-        try :
-            formatted_history = format_chat_history_for_llm(chat_history, query)
-        except Exception as e:
-            logging.error(f"Error while formatting chat history for LLM: {e}")
-            return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
-        
-        
-    except Exception as e :
-        logging.error(f"Error while fetching stock data: {e}")
-        return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
-    
-    try:
-        if ticker:
-            # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
-            #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-            #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
-            #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
-            #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
-            #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
-            #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
-            #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
-            #             Do not answer any questions unrelated to the stocks."""
-                        
-            task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
-                    Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-                    Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
-                    Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
-                    Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
-                    Advise whether to buy this stock now or not, with reasons for your advice."""
-        
-
-            query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
-        
-        else:
-            task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
-                        You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
-                        with any queries they might have.
-                        If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                        If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                        Do not answer any questions unrelated to the stocks."""
-            
-            query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
-            print(f"The formatted chat history passed to llm is : {formatted_history}")
-            print(f"The query passed to llm is : {query}")
-         # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
-        #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-        #             Predict the stock price range for the next week and provide reasons for your prediction.
-        #             Advise whether to buy this stock now or not, with reasons for your advice."""
-        
-        
-        # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+        # Generate content using LLM model
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(query)
-        print(response.text)
-        print(data)
-    
-    except Exception as e:
-        logging.error(f"Error performing analysis with generative AI: {e}")
-        return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
-    
-    # Extract response from the model
-    try:
-        html_suggestions = markdown.markdown(response.text)
+        llm_response = model.generate_content(task_prompt)
+        analysis_response = markdown_to_text(llm_response.text)
         
-        print(f"Html Suggestions : {html_suggestions}")
+        # Extract insights and suggestions from the response
+        formatted_suggestions = markdown.markdown(analysis_response)
+        print(f"\nOutput:\n{formatted_suggestions}")
         
-        logging.info(f"Suggestions for stock: \n{response.text}")
-        
-        # format_suggestions = markdown_to_text(response)
-        print(f"Html Suggestions : {html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
-        
-    except Exception as e:
-        logging.error(f"Error extracting text from response: {e}")
-        print(f"Error extracting text from response : {e}")
-        return jsonify({"error": "Failed to analyze stock data"}), 500
+        # Construct response object
+        response_data = {
+            "ticker": ticker,
+            "company": company,
+            "average_closing_price": f"${avg_close:.2f}",
+            "analysis": formatted_suggestions,
+            "news": data.get("Top_News", "No news available"),
+            "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+        }
 
-    # Save the assistant's response to chat history
-    chat_history.append({"user_query": user_query, "message": format_suggestions})
-    save_chat_history(chat_id, chat_history)
+        # Attach the Excel file if available
+        # if os.path.exists(file_path):
+        #     file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+        #     file_response.headers['X-Stock-Metadata'] = jsonify(response_data)
+        #     return file_response
 
-    # Increment chat_id for the next follow-up question
-    new_chat_id = get_next_chat_id()
-    
-    if data == {}:
-        data['Top_News'] = None
+        return jsonify(response_data)
+
+    except Exception as e:
+        logging.error(f"Error generating stock analysis: {e}")
+        return jsonify({"error": f"Failed to generate stock analysis: {str(e)}"}), 500
+
+
+
+# @app.route('/analyze_stock', methods=['POST'])
+# def analyze_stock():
+#     try:
+#         ticker = request.json.get('ticker')
+#         company = request.json.get('company',None)
+#         query = request.json.get('query')
+#         chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
+#         # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
         
-    data['Company'] = company if company else None
+#         # Load chat history
+#         chat_history = load_chat_history(chat_id)
+
+#         # If no ticker provided in the request, try to extract it from the query
+#         if not ticker and query:
+#             # ticker = extract_ticker(query)
+            
+#             ticker,company = extract_ticker(query)
+        
+#         # If a valid ticker is found, fetch stock data
+#         if ticker:
+#             try:
+#                 data, formatted_data, avg_close,file_path = get_stock_data(ticker)
+#                 user_query = ticker  # Save the ticker as the user query
+#             except Exception as e:
+#                 print("Error getting the stock data")
+#                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+#         else:
+#             # No valid ticker found, generate generic suggestions
+#             print("No valid ticker found in the query, generating general stock suggestions.")
+#             data = {}  # No specific stock data need to check for news
+#             formatted_data = ""  # No financial data
+#             avg_close = 0
+#             user_query = query  # Save the original user query if no ticker is found
+
+#         # If query is empty, set a default query for stock analysis
+#         # if not query:
+#         #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
+        
+        
+
+        
+#          # Save the user's query (ticker or original query) to chat history
+#         if user_query:
+#             chat_history.append({"user_query": user_query, "message": query})
+        
+#         # Detect if this is a follow-up query based on previous history
+#         if chat_history:
+#             print("This is a follow-up query. Checking previous chat history.")
+#             # The logic here could vary; you might compare the current query with past responses or check patterns
+#             query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
+
+#         # Save the user's query (ticker or original query) to chat history
+#         chat_history.append({"user_query": user_query, "message": query})
+        
       
-    # Return all collected and analyzed data
-      # Create a response dictionary # gave responses in headers :
-    # response_dict = {
-    #     "data": data,
-    #     "average_closing_price": f"${avg_close:.2f}",
-    #     "analysis": format_suggestions,  # Use the response text here
-    #     "news": data.get('Top_News'),
-    #     "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-    # }
-    # # If the Excel file exists, send it as an attachment along with the response
-    # if os.path.exists(file_path):
-    #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
-    #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
-    #         file_response.headers['X-Stock-Metadata'] = json.dumps(response_dict)  # Add metadata as a custom header
-    #         return file_response
-    # else:
-    #     return jsonify(response_dict)
+            
+#         # Format the chat history for the LLM
+#         try :
+#             formatted_history = format_chat_history_for_llm(chat_history, query)
+#         except Exception as e:
+#             logging.error(f"Error while formatting chat history for LLM: {e}")
+#             return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
+        
+        
+#     except Exception as e :
+#         logging.error(f"Error while fetching stock data: {e}")
+#         return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
     
-    # if os.path.exists(file_path): # works for either file or response
-    #         # Combine the file response and JSON response
-    #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
-    #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
-    #         print("File is passed as attachment")
-    #         return file_response
-    # else:
-    #     print("Data is passed")
-    #     return jsonify(response_dict)
+#     try:
+#         if ticker:
+#             # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+#             #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#             #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+#             #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+#             #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+#             #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
+#             #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
+#             #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#             #             Do not answer any questions unrelated to the stocks."""
+                        
+#             task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+#                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#                     Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+#                     Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+#                     Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+#                     Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+
+#             query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
+        
+#         else:
+#             task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
+#                         You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
+#                         with any queries they might have.
+#                         If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                         If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                         Do not answer any questions unrelated to the stocks."""
+            
+#             query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
+#             print(f"The formatted chat history passed to llm is : {formatted_history}")
+#             print(f"The query passed to llm is : {query}")
+#          # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+#         #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#         #             Predict the stock price range for the next week and provide reasons for your prediction.
+#         #             Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+        
+#         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(query)
+#         print(response.text)
+#         print(data)
     
-    return jsonify({
-        # "Company": company,
-        "data": data,
-        "average_closing_price": f"${avg_close:.2f}",
-        "analysis": format_suggestions,
-        "news": data['Top_News'],
-        "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-    }) # "chat_history" : chat_history
-    # # "new_chat_id" : new_chat_id
+#     except Exception as e:
+#         logging.error(f"Error performing analysis with generative AI: {e}")
+#         return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
+    
+#     # Extract response from the model
+#     try:
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"Html Suggestions : {html_suggestions}")
+        
+#         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+#         # format_suggestions = markdown_to_text(response)
+#         print(f"Html Suggestions : {html_suggestions}")
+#         format_suggestions = markdown_to_text(html_suggestions)
+        
+#     except Exception as e:
+#         logging.error(f"Error extracting text from response: {e}")
+#         print(f"Error extracting text from response : {e}")
+#         return jsonify({"error": "Failed to analyze stock data"}), 500
+
+#     # Save the assistant's response to chat history
+#     chat_history.append({"user_query": user_query, "message": format_suggestions})
+#     save_chat_history(chat_id, chat_history)
+
+#     # Increment chat_id for the next follow-up question
+#     new_chat_id = get_next_chat_id()
+    
+#     if data == {}:
+#         data['Top_News'] = None
+        
+#     data['Company'] = company if company else None
+      
+#     # Return all collected and analyzed data
+#       # Create a response dictionary # gave responses in headers :
+#     # response_dict = {
+#     #     "data": data,
+#     #     "average_closing_price": f"${avg_close:.2f}",
+#     #     "analysis": format_suggestions,  # Use the response text here
+#     #     "news": data.get('Top_News'),
+#     #     "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+#     # }
+#     # # If the Excel file exists, send it as an attachment along with the response
+#     # if os.path.exists(file_path):
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         file_response.headers['X-Stock-Metadata'] = json.dumps(response_dict)  # Add metadata as a custom header
+#     #         return file_response
+#     # else:
+#     #     return jsonify(response_dict)
+    
+#     # if os.path.exists(file_path): # works for either file or response
+#     #         # Combine the file response and JSON response
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         print("File is passed as attachment")
+#     #         return file_response
+#     # else:
+#     #     print("Data is passed")
+#     #     return jsonify(response_dict)
+    
+#     return jsonify({
+#         # "Company": company,
+#         "data": data,
+#         "average_closing_price": f"${avg_close:.2f}",
+#         "analysis": format_suggestions,
+#         "news": data['Top_News'],
+#         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+#     }) # "chat_history" : chat_history
+#     # # "new_chat_id" : new_chat_id
 
 def extract_excel_data(file_path):
     financial_data = ""
@@ -7014,6 +7090,160 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 
 # Actual vs Predicted Endpoint
 
+# test version :
+
+# @app.route('/actual_vs_predicted', methods=['POST'])
+# def actual_vs_predicted():
+#     try:
+#         # Retrieve client ID and current portfolio daily change
+#         client_id = request.json.get('client_id')
+#         portfolio_daily_change = request.json.get('portfolio_daily_change')
+#         current_date = datetime.now().strftime("%Y-%m-%d")
+        
+#         client_name = request.json.get("client_name")
+#         funds = request.json.get("funds")
+#         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        
+#         # Get current quarter
+#         current_quarter = get_current_quarter()
+
+#         # Define file paths and S3 keys
+#         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+#         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+#         portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
+
+#         # Load previously predicted line chart data
+#         # if USE_AWS:
+#         #     try:
+#         #         response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+#         #         predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+#         #         print("\nFound Prediction Line Chart Data \n")
+#         #     except s3.exceptions.NoSuchKey:
+#         #         # Create Prediction Line Chart as it wasn't created before
+#                 # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#                 # print("\nSaving the Predictions Line Chart\n")
+#                 # save_predictions(client_id, current_quarter, predicted_line_chart_data)
+#         # else:
+#         #     predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+#         #     if not predicted_line_chart_data:
+#         #         return jsonify({"message": f"No previous predictions found for this client."}), 404
+        
+#         predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#         print("\nSaving the Predictions Line Chart\n")
+#         save_predictions(client_id, current_quarter, predicted_line_chart_data)
+
+#         # Fetch and process portfolio data
+#         if USE_AWS:
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+#             # Load previous portfolio predictions data
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+#                 previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 previous_portfolio_data = None
+#         else:
+#             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#             current_portfolio_data = load_from_file(portfolio_file)
+#             if not current_portfolio_data:
+#                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+#             portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_portfolio.json")
+#             previous_portfolio_data = load_from_file(portfolio_predictions_file)
+
+#         # Check for changes in the portfolio
+#         # if current_portfolio_data != previous_portfolio_data:
+#         #     print("Portfolio data has changed. Updating predictions.")
+#         #     predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+
+#         #     # Save updated portfolio and predictions
+#         #     if USE_AWS:
+#         #         s3.put_object(
+#         #             Bucket=S3_BUCKET_NAME,
+#         #             Key=portfolio_predictions_key,
+#         #             Body=json.dumps(current_portfolio_data),
+#         #             ContentType='application/json'
+#         #         )
+#         #         save_predictions(client_id, current_quarter, predicted_line_chart_data)
+#         #     else:
+#         #         save_to_file(portfolio_predictions_file, current_portfolio_data)
+#         #         save_to_file(predicted_file_path, predicted_line_chart_data)
+#         # else:
+#         #     print("No changes in portfolio. Using existing predictions.")
+
+#         # Process daily changes data
+#         daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#         if USE_AWS:
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+#             except s3.exceptions.NoSuchKey:
+#                 logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+#         else:
+#             daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     raw_daily_changes_data = json.load(file)
+#             else:
+#                 logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+
+#         # Process daily changes data for only current quarter :
+#         daily_changes_data = []
+#         current_quarter_date = get_current_quarter_dates()
+#         start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+#         print(f"Current Quarter Start Date :{start_date}")
+        
+#         for timestamp, details in raw_daily_changes_data.items():
+#             try:
+#                 # Normalize the date
+#                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+#                 # Safely get the correct daily change value
+#                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+#                 # Append if the value is not zero and is after or on the start date
+#                 if value != 0 and date >= start_date:
+#                     daily_changes_data.append({"date": date, "value": value})
+#             except Exception as e:
+#                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         # Remove duplicates, retaining the latest value for each date
+#         unique_daily_changes = {}
+#         for entry in daily_changes_data:
+#             unique_daily_changes[entry["date"]] = entry["value"]
+
+#         # Convert back to a sorted list of values and dates starting from the current date
+#         sorted_actual_dates = sorted(unique_daily_changes.keys())
+#         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+#         # Debugging output
+#         print("Processed Daily Changes Data:", daily_changes_data)
+#         print("Unique Daily Changes:", unique_daily_changes)
+#         print("Actual Line Chart Data:", actual_line_chart_data)
+#         print("Actual Data Dates:", sorted_actual_dates)
+
+        
+#         return jsonify({
+#             "client_id": client_id,
+#             "comparison_chart_data": {
+#                 "actual_dates": sorted_actual_dates,
+#                 "actual_values": actual_line_chart_data,
+#                 "predicted": predicted_line_chart_data,
+#             }
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error generating comparison: {e}")
+#         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
 # v-2 : Very Fast and Also checks changes in Portfolio :
 
 @app.route('/actual_vs_predicted', methods=['POST'])
@@ -7163,6 +7393,8 @@ def actual_vs_predicted():
     except Exception as e:
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
+############################################################################################
 
 # v-1 : correctly working for actual data for the current quarter
 
@@ -7357,7 +7589,7 @@ def actual_vs_predicted():
 #         print(f"Error generating comparison: {e}")
 #         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
-
+#####################################################################################################################
 
 def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
     try:
@@ -7487,6 +7719,11 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         # Convert back to a sorted list of values and dates starting from the current date
         sorted_actual_dates = sorted(unique_daily_changes.keys())
         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+        
+        # Generate task for LLM with refined prediction ranges
+        min_actual_return = min(actual_line_chart_data)
+        max_actual_return = max(actual_line_chart_data)
+        buffer = 0.05 * (max_actual_return - min_actual_return)
 
 
         # Generate task for LLM
@@ -7521,7 +7758,23 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
             3. **Confidence Band** (Range of returns at 95% confidence level).
             
+            1. Ensure predicted returns reflect realistic market conditions by keeping.
+
+            2. Avoid predicting sudden, unrealistic spikes or crashes unless explicitly indicated by the actual returns.
+
+            3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
+
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+
+            
             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+            The client, {client_name}, has a portfolio characterized by the following constraints:
+
+            - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
+            - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
+            - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
 
             Example of simulated_response = 
             ### Response Format:
@@ -7553,6 +7806,12 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
         refined_line_chart_data = add_noise(line_chart_data)
         print(f"Refined Line Chart Data: {refined_line_chart_data}")
+        
+        # Adjust refined predictions to align with actual returns
+        refined_line_chart_data = adjust_predictions_to_actual_range(actual_line_chart_data, refined_line_chart_data)
+        
+        refined_line_chart_data = add_dynamic_fluctuations(refined_line_chart_data, actual_line_chart_data)
+        print(f"Adjusted Refined Line Chart Data: {refined_line_chart_data}")
 
         # Save predictions
         
@@ -7571,7 +7830,80 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+    
 
+
+def adjust_predictions_to_actual_range(actual_data, predicted_data):
+    """
+    Adjust predicted returns to match the range and variability of actual returns,
+    while managing extreme losses and unrealistic predictions.
+    
+    :param actual_data: List of actual portfolio daily returns
+    :param predicted_data: Dict containing predicted returns and confidence band data
+    :return: Updated predicted_data with adjusted values
+    """
+    if not actual_data:
+        print("No actual data available to adjust predictions.")
+        return predicted_data
+
+    # Calculate key statistics from actual data
+    actual_mean = np.mean(actual_data)
+    actual_std_dev = np.std(actual_data)
+    min_actual = min(actual_data)
+    max_actual = max(actual_data)
+
+    # Set thresholds to clamp predictions within realistic ranges
+    lower_bound = min_actual * 1.2  # 20% buffer for losses
+    upper_bound = max_actual * 1.2  # 20% buffer for gains
+
+    def clamp(value):
+        return max(lower_bound, min(value, upper_bound))
+
+    # Adjust predicted values using scaling, bias correction, and clamping
+    scale_factor = actual_std_dev / np.std(predicted_data["best_case"]) if np.std(predicted_data["best_case"]) > 0 else 1
+    bias_adjustment = actual_mean - np.mean(predicted_data["best_case"])
+
+    predicted_data["best_case"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["best_case"]]
+    predicted_data["worst_case"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["worst_case"]]
+    predicted_data["total_returns"]["percentages"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["total_returns"]["percentages"]]
+
+    # Adjust confidence bands similarly
+    predicted_data["confidence_band"] = [
+        (clamp((lower * scale_factor) + bias_adjustment), clamp((upper * scale_factor) + bias_adjustment))
+        for lower, upper in predicted_data["confidence_band"]
+    ]
+
+    print("Predictions adjusted and clamped to manage large losses.")
+    return predicted_data
+
+import numpy as np
+
+def add_dynamic_fluctuations(predicted_data, actual_data, fluctuation_factor=0.05):
+    """
+    Adjusts predicted values by introducing dynamic fluctuations to prevent flat-line behavior.
+    
+    :param predicted_data: Dict containing predicted best_case, worst_case, and total_returns
+    :param actual_data: List of actual daily returns
+    :param fluctuation_factor: Factor to control the degree of random fluctuations (default 5%)
+    :return: Updated predicted_data with dynamic fluctuations
+    """
+    def introduce_fluctuation(value):
+        noise = np.random.uniform(-fluctuation_factor, fluctuation_factor) * abs(value)
+        return value + noise
+
+    # Apply fluctuation to avoid flat-line predictions
+    predicted_data["best_case"] = [introduce_fluctuation(x) for x in predicted_data["best_case"]]
+    predicted_data["worst_case"] = [introduce_fluctuation(x) for x in predicted_data["worst_case"]]
+    predicted_data["total_returns"]["percentages"] = [introduce_fluctuation(x) for x in predicted_data["total_returns"]["percentages"]]
+
+    # Apply fluctuation to confidence bands while maintaining order
+    predicted_data["confidence_band"] = [
+        (min(introduce_fluctuation(lower), introduce_fluctuation(upper)), 
+         max(introduce_fluctuation(lower), introduce_fluctuation(upper)))
+        for lower, upper in predicted_data["confidence_band"]
+    ]
+
+    return predicted_data
 
 import calendar
 from datetime import datetime, timedelta
@@ -7824,9 +8156,52 @@ def compute_beta(asset_returns, market_returns):
 # 3. Add ARIMA Forecasting for Returns
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
-from statsmodels.tsa.arima.model import ARIMA
-import pandas as pd
-import numpy as np
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+import warnings
+
+# def check_stationarity(data):
+#     """Placeholder function to check if the series is stationary."""
+#     from statsmodels.tsa.stattools import adfuller
+#     result = adfuller(data)
+#     return result[1] <= 0.05  # p-value <= 0.05 implies stationarity
+
+# def arima_forecast(returns, forecast_days=92):
+#     """
+#     Use ARIMA to forecast future returns with robust error handling.
+#     """
+#     if not isinstance(returns, pd.Series):
+#         returns = pd.Series(returns)
+
+#     # Clean data
+#     returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+#     # Ensure enough data points
+#     if len(returns) < 10:
+#         print("Insufficient data for ARIMA, using mean-based forecast.")
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
+#     # Ensure the index has a frequency for time series modeling
+#     if returns.index.inferred_freq is None:
+#         returns.index = pd.date_range(start=returns.index[0], periods=len(returns), freq='B')
+
+#     # Check stationarity and apply differencing if needed
+#     if not check_stationarity(returns):
+#         returns = returns.diff().dropna()
+
+#     # Suppress convergence warnings
+#     warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+#     # ARIMA model with error handling
+#     try:
+#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+#         model_fit = model.fit()
+#         forecast = model_fit.forecast(steps=forecast_days)
+#         return forecast
+#     except Exception as e:
+#         print(f"ARIMA failed: {e}")
+#         # Fallback: Return constant mean forecast
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
 
 def check_stationarity(series):
     """Perform ADF test to check stationarity."""
@@ -7834,9 +8209,8 @@ def check_stationarity(series):
     return result[1] < 0.05  # Stationary if p-value < 0.05
 
 
-from statsmodels.tsa.arima.model import ARIMA
 
-def arima_forecast(returns, forecast_days=30):
+def arima_forecast(returns, forecast_days=92):
     """Use ARIMA to forecast future returns with error handling."""
     if not isinstance(returns, pd.Series):
         returns = pd.Series(returns)
