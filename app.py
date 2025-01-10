@@ -4737,16 +4737,25 @@ def analyze_stock():
         - Whether the stock is overvalued or undervalued.
         - Predictions for its performance in the upcoming quarter.
         - Recommendations for buying, holding, or selling the stock.
+        - Give your views on the KPIs in a table format for the Stock:
+        PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
         """
         
         # Generate content using LLM model
         model = genai.GenerativeModel('gemini-1.5-flash')
         llm_response = model.generate_content(task_prompt)
-        analysis_response = markdown_to_text(llm_response.text)
+        # analysis_response = markdown_to_text(llm_response.text)
         
-        # Extract insights and suggestions from the response
-        formatted_suggestions = markdown.markdown(analysis_response)
-        print(f"\nOutput:\n{formatted_suggestions}")
+        # # Extract insights and suggestions from the response
+        # formatted_suggestions = markdown.markdown(analysis_response)
+        # print(f"\nOutput:\n{formatted_suggestions}")
+        
+        htmlSuggestions = markdown.markdown(llm_response.text)
+        logging.info(f"Suggestions for investor: \n{htmlSuggestions}")
+        
+        formatSuggestions = markdown_to_text(htmlSuggestions)
+        answer = markdown_table_to_html(formatSuggestions)
+        print(answer)
         
         stock_price_predictions_data = stock_price_predictions(ticker)
         # Construct response object
@@ -4754,7 +4763,7 @@ def analyze_stock():
             "ticker": ticker,
             "company": company,
             "average_closing_price": f"${avg_close:.2f}",
-            "analysis": formatted_suggestions,
+            "analysis": answer, # formatted_suggestions,
             "news": data.get("Top_News", "No news available"),
             "graph_url": f"https://finance.yahoo.com/chart/{ticker}",
             "predictions":stock_price_predictions_data
@@ -4875,32 +4884,71 @@ def collect_market_conditions():
         # market_news_url = "https://api.example.com/market-news"
 
         # Fetch economic indicators
-        economic_response = requests.get(economic_data_url)
-        if economic_response.status_code == 200:
-            economic_data = economic_response.json()
-            market_conditions['interest_rates'] = economic_data.get('interest_rates', 'Data unavailable')
-            market_conditions['inflation_rate'] = economic_data.get('inflation_rate', 'Data unavailable')
-        else:
-            market_conditions['interest_rates'] = 'Failed to fetch interest rates'
-            market_conditions['inflation_rate'] = 'Failed to fetch inflation rate'
+        # economic_response = requests.get(economic_data_url)
+        # if economic_response.status_code == 200:
+        #     economic_data = economic_response.json()
+        #     market_conditions['interest_rates'] = economic_data.get('interest_rates', 'Data unavailable')
+        #     market_conditions['inflation_rate'] = economic_data.get('inflation_rate', 'Data unavailable')
+        # else:
+        #     market_conditions['interest_rates'] = 'Failed to fetch interest rates'
+        #     market_conditions['inflation_rate'] = 'Failed to fetch inflation rate'
 
-        # Fetch market news
-        news_response = requests.get(market_news_url)
-        if news_response.status_code == 200:
-            news_data = news_response.json()
-            market_conditions['market_news'] = [article['title'] for article in news_data.get('articles', [])][:5]
-        else:
-            market_conditions['market_news'] = 'Failed to fetch market news'
+        # # Fetch market news
+        # news_response = requests.get(market_news_url)
+        # if news_response.status_code == 200:
+        #     news_data = news_response.json()
+        #     market_conditions['market_news'] = [article['title'] for article in news_data.get('articles', [])][:5]
+        # else:
+        #     market_conditions['market_news'] = 'Failed to fetch market news'
 
-        # Add other relevant conditions
-        market_conditions['geopolitical_tensions'] = "Moderate tensions observed globally."
-        market_conditions['us_elections'] = "Upcoming elections may influence market trends."
+        # # Add other relevant conditions
+        # market_conditions['geopolitical_tensions'] = "Moderate tensions observed globally."
+        # market_conditions['us_elections'] = "Upcoming elections may influence market trends."
+        
+        try:
+            # Fetch market data from API
+            economic_response = requests.get(economic_data_url)
+            market_response = requests.get(market_news_url)
+
+            # Check for successful API responses
+            if economic_response.status_code == 200 and market_response.status_code == 200:
+                market_conditions = {
+                    "interest_rates": economic_response.json().get("interest_rates", "Data unavailable"),
+                    "inflation_rate": economic_response.json().get("inflation_rate", "Data unavailable"),
+                    "market_news": market_response.json().get("news", []),
+                    "geopolitical_tensions": "Moderate tensions observed globally.",
+                    "us_elections": "Upcoming elections may influence market trends."
+                }
+            else:
+                raise ValueError("API data fetch failed.")
+
+        except Exception as e:
+            print(f"Error fetching market conditions: {e}")
+            market_conditions = get_default_market_conditions()
+
 
     except Exception as e:
         logging.error(f"Error fetching market conditions: {e}")
         market_conditions['error'] = f"Error fetching market conditions: {e}"
 
     return market_conditions
+
+def get_default_market_conditions():
+    default_conditions = {
+        "interest_rates": "Stable interest rates at 4.5%.",
+        "inflation_rate": "Moderate inflation at 3.1%.",
+        "market_news": [
+            "Global markets show mixed trends amid economic recovery.",
+            "Tech stocks rally as demand for AI-driven solutions increases.",
+            "Oil prices stabilize after months of volatility."
+        ],
+        "geopolitical_tensions": "Moderate tensions observed globally.",
+        "us_elections": "After the elections result of Donald Trump winning the electeions may influence market trends in positive way.",
+        "global_trade": "Trade agreements show positive progress with new MAGA (Make America Great Again) Policies.",
+        "consumer_confidence": "Consumer confidence index steadily increasing."
+    }
+    return default_conditions
+
 
 ################################################################################
 # v-1 :
