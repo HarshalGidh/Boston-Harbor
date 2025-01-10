@@ -4580,18 +4580,38 @@ def get_stock_data(ticker):
         cashflow = stock.cashflow
 
         # Step 2: Get News Related to Stock
-        news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
-        news_response = requests.get(news_url)
-        if news_response.status_code == 200:
-            news_data = news_response.json()
-            articles = news_data.get('articles', [])
-            if articles:
-                top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
-                data['Top_News'] = top_news
+        try:
+            # Fetch Stock News
+            news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+            news_response = requests.get(news_url, timeout=10)
+
+            if news_response.status_code == 200:
+                news_data = news_response.json()
+                articles = news_data.get('articles', [])
+                if articles:
+                    top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+                    data['Top_News'] = top_news
+                else:
+                    data['Top_News'] = "No news articles found."
             else:
-                data['Top_News'] = "No news articles found."
-        else:
-            data['Top_News'] = "Failed to fetch news articles."
+                error_msg = news_response.json().get("message", "Unknown error occurred.")
+                data['Top_News'] = f"Failed to fetch news articles. Error: {error_msg}"
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error fetching news: {e}")
+            data['Top_News'] = "Network error occurred while fetching news."
+
+        # news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+        # news_response = requests.get(news_url)
+        # if news_response.status_code == 200:
+        #     news_data = news_response.json()
+        #     articles = news_data.get('articles', [])
+        #     if articles:
+        #         top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+        #         data['Top_News'] = top_news
+        #     else:
+        #         data['Top_News'] = "No news articles found."
+        # else:
+        #     data['Top_News'] = "Failed to fetch news articles."
     except Exception as e:
         logging.info(f"Error occurred while collecting stock data: {e}")
         print(f"Error occurred while collecting stock data: :\n{e}")
@@ -4700,6 +4720,7 @@ def analyze_stock():
         You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
         Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
         Company news : {data.get('Top_News')}
+        You have enough data available to analyze the stock and no need to say lack of data or context.
 
         **Company Name:** 
         **PE Ratio:** {data.get('PE_Ratio')}
@@ -4727,6 +4748,7 @@ def analyze_stock():
         formatted_suggestions = markdown.markdown(analysis_response)
         print(f"\nOutput:\n{formatted_suggestions}")
         
+        stock_price_predictions_data = stock_price_predictions(ticker)
         # Construct response object
         response_data = {
             "ticker": ticker,
@@ -4734,7 +4756,8 @@ def analyze_stock():
             "average_closing_price": f"${avg_close:.2f}",
             "analysis": formatted_suggestions,
             "news": data.get("Top_News", "No news available"),
-            "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+            "graph_url": f"https://finance.yahoo.com/chart/{ticker}",
+            "predictions":stock_price_predictions_data
         }
 
         # Attach the Excel file if available
@@ -4749,7 +4772,138 @@ def analyze_stock():
         logging.error(f"Error generating stock analysis: {e}")
         return jsonify({"error": f"Failed to generate stock analysis: {str(e)}"}), 500
 
+def stock_price_predictions(ticker):
+    try:
+        # Step 1: Fetch historical stock data
+        stock = yf.Ticker(ticker)
+        historical_data = stock.history(period="6mo")
+        if historical_data.empty:
+            return jsonify({"message": f"No historical data found for ticker: {ticker}"}), 404
 
+        # Step 2: Calculate key statistics from historical data
+        volatility = compute_volatility(historical_data['Close'])
+        sharpe_ratio = compute_sharpe_ratio(historical_data['Close'])
+        recent_trend = historical_data['Close'].pct_change().tail(5).mean() * 100  # Last 5-day trend
+
+        # Step 3: Fetch related market and economic news
+        news = fetch_news(ticker)
+        market_conditions = collect_market_conditions()
+        
+        if market_conditions == None:
+            print("Market Conditions couldnt be determined")
+            market_conditions = ""
+        
+        print(market_conditions)
+
+        # Generate prompt for LLM model
+        task = f"""
+            You are a top financial analyst tasked with predicting stock price trends for {ticker}.
+            Analyze the following:
+            - Recent stock price volatility: {volatility:.2f}%
+            - Sharpe Ratio: {sharpe_ratio:.2f}
+            - Recent price trends (5-day): {recent_trend:.2f}%
+            - Market and economic conditions: {market_conditions}
+            - Relevant news: {news}
+
+            Predict the expected stock prices for the next month (30 days) under these conditions:
+            1. **Best-Case Scenario** (Optimistic market conditions).
+            2. **Worst-Case Scenario** (Pessimistic market conditions).
+            3. **Confidence Band** (Range of expected prices with 95% confidence).
+            
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+            Example of simulated_response = 
+            ### Response Format:
+            | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            |------------|-----------------------|-----------------------|---------------------|------------------|
+            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+            Your Response must be in the above table format no messages is required just table format data.
+            """
+
+        # Step 4: Simulate LLM prediction
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(task)
+
+        simulated_response = markdown_to_text(response.text)
+        print(simulated_response)
+
+        # Step 5: Extract and refine predictions
+        line_chart_data = extract_line_chart_data(simulated_response)
+        refined_predictions = add_noise(line_chart_data)
+
+        # Return refined prediction results
+        return refined_predictions
+    
+        # return jsonify({
+        #     "ticker": ticker,
+        #     "predictions": refined_predictions,
+        #     "analysis": simulated_response
+        # })
+
+    except Exception as e:
+        print(f"Error in predicting stock prices: {e}")
+        return jsonify({"message": f"Error predicting stock prices: {e}"}), 500
+
+
+def collect_market_conditions():
+    """
+    Fetch and process current market conditions data, including economic indicators,
+    news, and trends to assist in stock analysis and prediction.
+    
+    Returns:
+        dict: A dictionary containing market conditions such as interest rates, inflation,
+              geopolitical news, and general market sentiment.
+    """
+    market_conditions = {}
+
+    try:
+        # economic_data_url = "https://api.example.com/economic-indicators"
+        economic_data_url = f"https://www.alphavantage.co/query?function=REAL_GDP&apikey={ALPHA_VANTAGE_API_KEY}"
+        
+        market_news_url = f"https://www.alphavantage.co/query?function=SECTOR&apikey={ALPHA_VANTAGE_API_KEY}"
+
+        # market_news_url = "https://api.example.com/market-news"
+
+        # Fetch economic indicators
+        economic_response = requests.get(economic_data_url)
+        if economic_response.status_code == 200:
+            economic_data = economic_response.json()
+            market_conditions['interest_rates'] = economic_data.get('interest_rates', 'Data unavailable')
+            market_conditions['inflation_rate'] = economic_data.get('inflation_rate', 'Data unavailable')
+        else:
+            market_conditions['interest_rates'] = 'Failed to fetch interest rates'
+            market_conditions['inflation_rate'] = 'Failed to fetch inflation rate'
+
+        # Fetch market news
+        news_response = requests.get(market_news_url)
+        if news_response.status_code == 200:
+            news_data = news_response.json()
+            market_conditions['market_news'] = [article['title'] for article in news_data.get('articles', [])][:5]
+        else:
+            market_conditions['market_news'] = 'Failed to fetch market news'
+
+        # Add other relevant conditions
+        market_conditions['geopolitical_tensions'] = "Moderate tensions observed globally."
+        market_conditions['us_elections'] = "Upcoming elections may influence market trends."
+
+    except Exception as e:
+        logging.error(f"Error fetching market conditions: {e}")
+        market_conditions['error'] = f"Error fetching market conditions: {e}"
+
+    return market_conditions
+
+################################################################################
+# v-1 :
 
 # @app.route('/analyze_stock', methods=['POST'])
 # def analyze_stock():
