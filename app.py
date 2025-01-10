@@ -7510,6 +7510,8 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
+            If Provided try to align the returns with what the current daily returns are dont give unrealistic returns.If returns are in negative showcase that and give the predictions in that negative range if their returns dont seem to go positive only after you analyze all the information.
+            If the Provided Daily Returns are very high then see if they can sustain these returns and try to predict as per the current daily returns after you analyze all the information.
             Based on the given provided information :
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
