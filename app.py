@@ -4498,52 +4498,53 @@ def get_chart_data_from_llm(text):
         text (str): The investment text input.
 
     Returns:
-        dict: A dictionary containing pie chart data and bar chart data.
+        dict: A dictionary containing pie chart data and bar chart data, or an error message.
     """
     # LLM prompt to extract relevant data
     prompt = f"""
-            You are a data analyst. Extract the following data from the provided investment text:
+        You are a data analyst. Extract the following data from the provided investment text:
 
-            1. A list for pie chart visualization, where each entry contains:
-            - Label: The name of the asset (e.g., "Stocks", "Growth ETFs").
-            - Value: The average percentage allocation for the asset.
+        1. A list for pie chart visualization, where each entry contains:
+        - Label: The name of the asset (e.g., "Stocks", "Growth ETFs").
+        - Value: The average percentage allocation for the asset.
 
-            2. A list for bar chart visualization, where each entry contains:
-            - Label: "Minimum Returns" and "Maximum Returns".
-            - Value: The percentage return for the respective category.
-            - Dollar Value: The growth in dollars for the respective category.
+        2. A list for bar chart visualization, where each entry contains:
+        - Label: "Minimum Returns" and "Maximum Returns".
+        - Value: The percentage return for the respective category.
+        - Dollar Value: The growth in dollars for the respective category.
 
-            Return the output as a JSON object with two keys:
-            - "pie_chart_data": [list of pie chart entries].
-            - "bar_chart_data": [list of bar chart entries].
+        Return the output as a JSON object with two keys:
+        - "pie_chart_data": [list of pie chart entries].
+        - "bar_chart_data": [list of bar chart entries].
 
-            Here is the investment text:
-            {text}
-            """
+        Here is the investment text:
+        {text}
+    """
 
     try:
         # Send the prompt to Gemini LLM
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
 
-        # Process the response from LLM
-        html_suggestions = markdown.markdown(response.text)
-        format_suggestions = markdown_to_text(html_suggestions)
-        
-        # response = gemini.generate_response(
-        #     prompt=prompt,
-        #     max_tokens=1000,  # Adjust token limit as per requirements
-        # )
+        # Check if the response text is empty
+        if not response.text.strip():
+            raise ValueError("Empty response from LLM")
 
-        # Parse and return the LLM response
-        chart_data = json.loads(response.text)
+        # Attempt to parse the response text as JSON
+        try:
+            chart_data = json.loads(response.text)
+        except json.JSONDecodeError:
+            # Attempt to clean or transform the response if JSON decoding fails
+            print("Invalid JSON format in LLM response, attempting fallback...")
+            html_suggestions = markdown.markdown(response.text)
+            plain_text = markdown_to_text(html_suggestions)
+            chart_data = json.loads(plain_text)
+
         return chart_data
 
     except Exception as e:
         print(f"Error fetching data from Gemini LLM: {e}")
         return {"error": str(e)}
-
-
 
 
 
@@ -4598,7 +4599,7 @@ def personality_selected():
                 formatSuggestions = markdown_to_text(htmlSuggestions)
                 answer = markdown_table_to_html(formatSuggestions)
                 
-                print(answer)
+                # print(answer)
                  
                 # Return the Results :
                 
@@ -7291,7 +7292,7 @@ def portfolio():
             "daily_changes": daily_changes,
             "portfolio_data": portfolio_data,
         }
-
+        
         return jsonify(portfolio_response), 200
 
     except Exception as e:
@@ -7509,6 +7510,161 @@ def analyze_portfolio():
         logging.error(f"Error in analyzing portfolio: {e}")
         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
+
+#######################################################################################################################
+
+# generate riskometer data :
+    
+@app.route('/client_riskometer_data',methods =['POST'])
+def generate_client_riskometer_data():
+   
+    try:
+        client_id = request.json.get('client_id')
+        
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+        
+         # Load client financial data (from AWS or local based on USE_AWS)
+        
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+                return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        
+        
+        client_name = client_data.get("clientDetail", {}).get("clientName", "Unknown Client")
+
+        # Calculate essential metrics
+        funds = float(client_data.get("investmentAmount", 0) or 0)
+        assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+        liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+        net_worth = assets - liabilities
+
+        # Calculate savings rate
+        annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+        savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+
+        # Calculate emergency fund coverage and liquidity metrics
+        monthly_expenses = sum(
+            float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
+        ) + sum(
+            float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
+        )
+        assets_labels = client_data["assetsDatasets"]["labels"]
+        assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+
+        # Liquid assets for emergency funds
+        liquid_asset_categories = [
+            "Cash/bank accounts",
+            "Brokerage/non-qualified accounts",
+            "529 Plans",
+            "Roth IRA, Roth 401(k)"
+        ]
+        liquid_assets = sum(
+            float(assets_data[i] or 0)
+            for i, label in enumerate(assets_labels)
+            if label in liquid_asset_categories
+        )
+        
+        liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
+        emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+        # Debt-to-Asset Ratio
+        debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+        # Determine risk level (example categorization logic)
+        risk_level = "High Risk" if debt_to_asset_ratio > 75 else "Moderate Risk" if debt_to_asset_ratio > 50 else "Low Risk"
+
+        # Prepare data for frontend visualization
+        riskometer_data = {
+            "client_name": client_name,
+            "net_worth": net_worth,
+            "savings_rate": savings_rate,
+            "liquidity_ratio": liquidity_ratio,
+            "emergency_fund_coverage": emergency_fund_coverage,
+            "debt_to_asset_ratio": debt_to_asset_ratio,
+            "risk_level": risk_level,
+        }
+
+        return jsonify({"message": f"generated riskometer data",
+                        "riskometer_data":riskometer_data}), 200
+        
+        
+    except Exception as e:
+        print(f"Error generating riskometer data: {e}")
+        return {"error": f"Error generating riskometer data: {e}"}
+
+##################################################################################################################
+
+
+def calculate_portfolio_risk_ratio(client_portfolio):
+    """
+    Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
+    
+    Risk Levels:
+    - High Risk: High allocation in Stocks and Cryptos.
+    - Moderate Risk: Balanced allocation between safe and risky investments.
+    - Low Risk: High allocation in Bonds, ETFs, and Commodities.
+
+    :param client_portfolio: Dictionary containing asset classes and investment amounts.
+    :return: Dictionary with risk ratio and risk category.
+    """
+    # Risk weight mapping for each asset class
+    risk_weights = {
+        "Stocks": 0.9,
+        "Cryptocurrency": 1.0,
+        "Bonds": 0.2,
+        "ETF": 0.3,
+        "Mutual Funds": 0.5,
+        "Commodities": 0.4,
+        "Cash/bank accounts": 0.1,
+        "Real Estate": 0.3,
+        "Other": 0.6
+    }
+
+    # Aggregate total investments and weighted risk score
+    total_investment = 0
+    weighted_risk_score = 0
+
+    for asset in client_portfolio.get("assetsDatasets", {}).get("datasets", [])[0].get("data", []):
+        asset_class = asset.get("assetClass", "Other").capitalize()
+        invested_amount = float(asset.get("Amount_Invested", 0))
+
+        # Accumulate total investment and calculate risk score
+        total_investment += invested_amount
+        weighted_risk_score += invested_amount * risk_weights.get(asset_class, 0.5)  # Default risk weight is moderate
+
+    # Calculate risk ratio
+    risk_ratio = (weighted_risk_score / total_investment * 100) if total_investment > 0 else 0
+
+    # Categorize portfolio risk
+    if risk_ratio > 75:
+        risk_category = "High Risk"
+    elif 50 < risk_ratio <= 75:
+        risk_category = "Moderate Risk"
+    else:
+        risk_category = "Low Risk"
+
+    # Prepare risk analysis data
+    risk_analysis = {
+        "total_investment": total_investment,
+        "weighted_risk_score": weighted_risk_score,
+        "risk_ratio": risk_ratio,
+        "risk_category": risk_category
+    }
+
+    return risk_analysis
 
 
 #########################################################################################################################
