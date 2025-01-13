@@ -3740,6 +3740,99 @@ def generate_chart_data(data):
 
     return pie_chart_data, bar_chart_data
 
+def generate_chart_data_for_assets():
+    # Investment Categories and Allocations
+    investment_data = {
+        "Growth-Oriented Investments": {
+            "Stocks": {"min": 30, "max": 40},
+            "ETFs": {"min": 15, "max": 20},
+            "Growth Stock Mutual Funds": {"min": 10, "max": 15},
+            "Real Estate Investment Trusts (REITs)": {"min": 10, "max": 15},
+            "Emerging Markets Stocks": {"min": 5, "max": 10},
+        },
+        "Conservative Investments": {
+            "High-Yield Savings Account": {"min": 5, "max": 10},
+            "Treasury Bonds": {"min": 5, "max": 10},
+        }
+    }
+
+    # Generate Pie Chart Data
+    labels = list(investment_data['Growth-Oriented Investments'].keys()) + \
+             list(investment_data['Conservative Investments'].keys())
+    max_allocations = [
+        investment_data['Growth-Oriented Investments'][label]['max'] for label in investment_data['Growth-Oriented Investments']
+    ] + [
+        investment_data['Conservative Investments'][label]['max'] for label in investment_data['Conservative Investments']
+    ]
+    min_allocations = [
+        investment_data['Growth-Oriented Investments'][label]['min'] for label in investment_data['Growth-Oriented Investments']
+    ] + [
+        investment_data['Conservative Investments'][label]['min'] for label in investment_data['Conservative Investments']
+    ]
+
+    num_labels = len(labels)
+    dynamic_colors = generate_colors(num_labels)
+    dynamic_pie_chart_colors = generate_colors(len(labels))
+
+    # Pie Chart Data
+    pie_chart_data = {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': max_allocations,
+            'backgroundColor': dynamic_pie_chart_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+    # Bar Chart Data
+    bar_chart_data = {
+        'labels': labels,
+        'datasets': [
+            {
+                'label': 'Allocation for Min Returns (%)',
+                'data': min_allocations,
+                'backgroundColor': 'skyblue'
+            },
+            {
+                'label': 'Allocation for Max Returns (%)',
+                'data': max_allocations,
+                'backgroundColor': 'lightgreen'
+            }
+        ]
+    }
+
+    return pie_chart_data, bar_chart_data
+
+
+def generate_colors(num_colors):
+    # Generate distinct, vibrant colors in hex format
+    return ["#" + ''.join(random.choices('0123456789ABCDEF', k=6)) for _ in range(num_colors)]
+
+
+def generate_pie_chart_data(data):
+    labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
+    max_allocations = [
+        data['Growth-Oriented Investments'][label]['max'] for label in data['Growth-Oriented Investments']
+    ] + [
+        data['Conservative Investments'][label]['max'] for label in data['Conservative Investments']
+    ]
+
+    # Generate dynamic colors for the pie chart
+    dynamic_colors = generate_colors(len(labels))
+    
+    pie_chart_data = {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': max_allocations,
+            'backgroundColor': dynamic_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+    return pie_chart_data
+
 
 #new retrieval_chain code :
 # async def generate_prompt_template(retriever,investmentPersonality,clientName,client_data):
@@ -3968,124 +4061,79 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         )
         clientName = clientName
         # Define the prompt
-        prompt_template = """ 
-                                You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
-                                Use the following instructions to ensure consistent output:
-                                ---
+        
+        prompt_template = """
+                            You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
+                            so that the client can reach their financial goals while considering their financial conditions and market trends. 
+                            Use the following instructions to ensure consistent and comprehensive output:
+                            ---
 
-                                ### Required Output Format:
-                                
-                                #### Client Financial Details:
-                                - **Client Name**: """ + clientName + """
-                                - **Assets**:
-                                - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
-                                - **Liabilities**:
-                                - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
-                                - **Other Details**:
-                                - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
-                                - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
-                                - **Investment Period** `Z years`
-                                
-                                #### Investment Allocation:
-                                Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
-                                - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
-                                - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
-                                - **Target**: Describe the purpose of the investment.
-                                - **How to Invest**: Provide instructions on how to invest in this asset.
-                                - **Where to Invest**: Specify platforms or tools for making the investment.
+                            ### Required Output Format:
 
-                                **Example**:
-                                **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
-                                - **Stocks**: `20% - 30%`
-                                - **ETFs**: `10% - 15%`
-                                - **Mutual Funds**: `10% - 20%`
-                                - **Cryptocurrency**: ` 5% - 10%`
-                                - **Real Estates or REITS**: `10% - 20%`
-                                - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
-                                - *How to Invest*: Provide information on how to invest in which market 
-                                - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
-                                
-                                **Conservative Investments (Minimum X% - Maximum Y%) **:
-                                - **High-Yield Savings Account**: `30% - 40%`
-                                - **Bonds**: `10% - 20%`
-                                - **Commodities**: `5% - 10%`
-                                - **Cash**: `5% - 10%`
-                                - *Target*: Maintain liquidity for emergencies.
-                                - *How to Invest*: Provide information on how to invest.
-                                - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+                            #### **Investment Allocation:**
+                            Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+                            - **Investment Type:** Specify the type of investment (e.g., "Index Funds", "US Treasury Bonds").
+                            - **Allocation Range:** Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+                            - **Target:** Describe the purpose and goal of the investment.
+                            - **How to Invest:** Provide practical instructions for investing in this asset.
+                            - **Where to Invest:** List platforms or tools for making the investment, and provide **6-7 specific recommendations per asset class** for diversity and balance.
 
-                                #### Returns Overview:
-                                - **Minimum Expected Annual Return**: `X% - Y%`
-                                - **Maximum Expected Annual Return**: `X% - Y%`
-                                - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
-                                - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
-                                - **Time Horizon**: `Z years`
+                            #### Example Output:
+                            **Growth-Oriented Investments (Minimum X% - Maximum Y%)**:
+                            - **Stocks:** `20% - 30%`
+                            - *Target:* High growth potential with sector diversification.
+                            - *How to Invest:* Direct purchases via a brokerage account; consider market trends.
+                            - *Where to Invest:* Examples include large-cap stocks like Apple (AAPL), Tesla (TSLA), emerging market stocks, and small-cap stocks.
+                            - **ETFs:** `10% - 15%`
+                            - *Target:* Diversified exposure to specific sectors.
+                            - *How to Invest:* Invest in sector-specific or international ETFs through platforms like Fidelity or Vanguard.
+                            - *Where to Invest:* SPDR S&P 500 ETF (SPY), iShares Core MSCI Emerging Markets ETF (IEMG).
 
-                                ---
-
-                                ### Example Output:
-                                
-                                #### Client Financial Details:
-                                | Asset Type          | Current Value ($) | Annual Contribution ($) |
-                                |----------------------|-------------------|--------------------------|
-                                | 401(k), 403(b), 457  | 300               | 15                       |
-                                | Traditional IRA      | 200               | 15                       |
-                                | Roth IRA             | 500               | 28                       |
-                                | Cash/Bank Accounts   | 500,000           | 30,000                   |
-                                | Real Estate          | 1,000,000         | -                        |
-                                | Total Assets Value   | 1,501,000         | -                        |
-
-                                | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
-                                |---------------------|-------------|--------------------|----------------------|
-                                | Mortgage            | 1,000       | 10                | 100                  |
-                                | Credit Card         | 400         | 8                 | 400                  |
-                                | Other Loans         | 500         | 6                 | 100                  |
-                                | Total Liabilities   | 1,900       | -                 | -                    |
-                                
-                                | Investrment Period | 3 years |
-                                
-                                **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
-                                - **Stocks**: `20% - 30%`
-                                - **ETFs**: `5% - 10%`
-                                - **Mutual Funds**: `5% - 20%`
-                                - **Cryptocurrency**: ` 5% - 10%`
-                                - **Real Estates or REITS**: `5% - 10%`
-                                - *Target*: Long-term growth potential aligned with the market.
-                                - *How to Invest*: Purchase low-cost index funds.
-                                - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
-
-                                **Conservative Investments (Minimum 40% - Maximum 70%)**:
-                                - **High-Yield Savings Account**: `20% - 30%`
-                                - **Bonds**: `10% - 20%`
-                                - **Commodities**: `5% - 10%`
-                                - **Cash**: `5% - 10%`
-                                - *Target*: Maintain liquidity for emergencies.
-                                - *How to Invest*: Deposit funds into an FDIC-insured account.
-                                - *Where to Invest*: Ally Bank, Capital One 360.
-
-                                #### Returns Overview:
-                                - **Minimum Expected Annual Return**: `4% - 6%`
-                                - **Maximum Expected Annual Return**: `8% - 15%`
-                                - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
-                                - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
-                                - **Time Horizon**: `3 years`
-
-                                ---
-
-                                Ensure the output strictly follows this structure.
-
-
-                            ### Rationale for Investment Suggestions:
-                            Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+                            #### Returns Overview:
+                            - **Minimum Expected Annual Return:** `X% - Y%`
+                            - **Maximum Expected Annual Return:** `X% - Y%`
+                            - **Minimum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+                            - **Maximum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+                            - **Time Horizon:** `Z years`
 
                             ---
+
+                            ### Example Output Format:
+                            **Investment Allocation:**
+
+                            **Growth-Oriented Investments (Minimum 70% - Maximum 90%)**:
+                            - **Stocks:** `20% - 30%`
+                            - *Target:* Capital appreciation from high-growth stocks.
+                            - *How to Invest:* Purchase through brokerage accounts like Fidelity.
+                            - *Where to Invest:* Tesla (TSLA), NVIDIA (NVDA), Apple (AAPL).
+
+                            **Conservative Investments (Minimum 10% - Maximum 30%)**:
+                            - **High-Yield Savings Account:** `5% - 10%`
+                            - *Target:* Maintain liquidity for emergencies.
+                            - *How to Invest:* Deposit funds into FDIC-insured accounts.
+                            - *Where to Invest:* Ally Bank, Marcus by Goldman Sachs.
+
+                            #### Returns Overview:
+                            - **Minimum Expected Annual Return:** `6% - 8%`
+                            - **Maximum Expected Annual Return:** `12% - 18%`
+                            - **Minimum Expected Growth in Dollars:** `$5,000 - $8,000`
+                            - **Maximum Expected Growth in Dollars:** `$15,000 - $25,000`
+                            - **Time Horizon:** `5 years`
+
+                            ---
+
+                            Ensure the output strictly follows this structure.
+
+                            ### **Rationale for Investment Suggestions:**
+                            Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and market trends.
+
+                            ---
+
                             <context>
                             {context}
                             </context>
                             Question: {input}
-
-        """
-                
+                            """
         
         print("Prompt Created Successfully")
                 
@@ -4109,7 +4157,177 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         print(f"Error in generating prompt or retrieval chain: {e}")
         return None
 
+# V -1 : with client table 
+
+# async def generate_prompt_with_retriever(retriever, investmentPersonality, clientName):
+#     try:
+#         llm = ChatGoogleGenerativeAI(
+#             model="gemini-1.5-flash",
+#             temperature=0.45,
+#             top_p=0.85,
+#             google_api_key=GOOGLE_API_KEY
+#         )
+#         clientName = clientName
+#         # Define the prompt
+#         prompt_template = """ 
+#                                 You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
+#                                 Use the following instructions to ensure consistent output:
+#                                 ---
+
+#                                 ### Required Output Format:
+                                
+#                                 #### Client Financial Details:
+#                                 - **Client Name**: """ + clientName + """
+#                                 - **Assets**:
+#                                 - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+#                                 - **Liabilities**:
+#                                 - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+#                                 - **Other Details**:
+#                                 - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
+#                                 - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
+#                                 - **Investment Period** `Z years`
+                                
+#                                 #### Investment Allocation:
+#                                 Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+#                                 - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+#                                 - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+#                                 - **Target**: Describe the purpose of the investment.
+#                                 - **How to Invest**: Provide instructions on how to invest in this asset.
+#                                 - **Where to Invest**: Specify platforms or tools for making the investment.
+
+#                                 **Example**:
+#                                 **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `10% - 15%`
+#                                 - **Mutual Funds**: `10% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `10% - 20%`
+#                                 - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
+#                                 - *How to Invest*: Provide information on how to invest in which market 
+#                                 - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
+                                
+#                                 **Conservative Investments (Minimum X% - Maximum Y%) **:
+#                                 - **High-Yield Savings Account**: `30% - 40%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Provide information on how to invest.
+#                                 - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `X% - Y%`
+#                                 - **Maximum Expected Annual Return**: `X% - Y%`
+#                                 - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Time Horizon**: `Z years`
+
+#                                 ---
+
+#                                 ### Example Output:
+                                
+#                                 #### Client Financial Details:
+#                                 | Asset Type          | Current Value ($) | Annual Contribution ($) |
+#                                 |----------------------|-------------------|--------------------------|
+#                                 | 401(k), 403(b), 457  | 300               | 15                       |
+#                                 | Traditional IRA      | 200               | 15                       |
+#                                 | Roth IRA             | 500               | 28                       |
+#                                 | Cash/Bank Accounts   | 500,000           | 30,000                   |
+#                                 | Real Estate          | 1,000,000         | -                        |
+#                                 | Total Assets Value   | 1,501,000         | -                        |
+
+#                                 | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+#                                 |---------------------|-------------|--------------------|----------------------|
+#                                 | Mortgage            | 1,000       | 10                | 100                  |
+#                                 | Credit Card         | 400         | 8                 | 400                  |
+#                                 | Other Loans         | 500         | 6                 | 100                  |
+#                                 | Total Liabilities   | 1,900       | -                 | -                    |
+                                
+#                                 | Investrment Period | 3 years |
+                                
+#                                 **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `5% - 10%`
+#                                 - **Mutual Funds**: `5% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `5% - 10%`
+#                                 - *Target*: Long-term growth potential aligned with the market.
+#                                 - *How to Invest*: Purchase low-cost index funds.
+#                                 - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+
+#                                 **Conservative Investments (Minimum 40% - Maximum 70%)**:
+#                                 - **High-Yield Savings Account**: `20% - 30%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Deposit funds into an FDIC-insured account.
+#                                 - *Where to Invest*: Ally Bank, Capital One 360.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `4% - 6%`
+#                                 - **Maximum Expected Annual Return**: `8% - 15%`
+#                                 - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+#                                 - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
+#                                 - **Time Horizon**: `3 years`
+
+#                                 ---
+
+#                                 Ensure the output strictly follows this structure.
+
+
+#                             ### Rationale for Investment Suggestions:
+#                             Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+
+#                             ---
+#                             <context>
+#                             {context}
+#                             </context>
+#                             Question: {input}
+
+#         """
+                
+        
+#         print("Prompt Created Successfully")
+                
+
+#         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
+
+#         document_chain = create_stuff_documents_chain(llm, llm_prompt)
+        
+#         combine_docs_chain = None  
+
+#         if retriever is not None :  
+#             retriever_chain = create_retrieval_chain(retriever,document_chain) 
+#             print("\nRetrieval chain created successfully\n")
+#             print(retriever_chain)
+#             return retriever_chain
+#         else:
+#             print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
+#             return None
+
+#     except Exception as e:
+#         print(f"Error in generating prompt or retrieval chain: {e}")
+#         return None
+
 # # using aws :
+
+def generate_pie_chart_data(labels, data_values):
+    num_labels = len(labels)
+    dynamic_colors = generate_colors(num_labels)
+
+    return {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': data_values,
+            'backgroundColor': dynamic_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+
+
 
 async def make_suggestions_using_clientid(investmentPersonality, clientName, client_data):
     try:
@@ -4127,9 +4345,20 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
             raise Exception("Failed to create retrieval chain.")
 
         # Use the chain to generate a response
-        query = f"""Generate financial suggestions for the client {clientName} based on their investment personality: {investmentPersonality} 
-                tailored to their Financial Goals and Considering their Financial Situations. Suggest 6-7 assets per category with 6-7 examples per asset."""
+        # query = f"""Generate financial suggestions for the client {clientName} based on their investment personality: {investmentPersonality} 
+        #         tailored to their Financial Goals and Considering their Financial Situations. Suggest 6-7 assets per category with 6-7 examples per asset."""
         
+        query = f"""
+                Generate personalized and responsible financial investment suggestions for the client {clientName} based on their investment personality: {investmentPersonality}.
+                With the given Client Data : {client_data} Ensure suggestions align with the client's financial goals, current market trends, and financial conditions.
+                Provide a **diverse range of 6-7 assets per category** for each investment class (Growth-Oriented and Conservative) and give **6-7 specific examples per asset** with actionable guidance.
+                Include:
+                1. Allocation ranges, target purpose, and how-to-invest instructions for each asset.
+                2. Market insights and rationale for asset selection based on current trends.
+                3. A return overview for a realistic time horizon.
+                4. Suggestions for rebalancing strategies if market conditions change significantly.
+                """
+
         
         # response = retrieval_chain.invoke(query)
         response = retrieval_chain.invoke({"input": query})
@@ -4149,9 +4378,33 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         min_allocations = normalize_allocations(min_allocations)
         max_allocations = normalize_allocations(max_allocations)
 
-        bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
+        # bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
+        bar_chart_data,_ = generate_chart_data_for_assets()
+        
+        # Get data for charts
+        chart_data = get_chart_data_from_llm(answer)
+
+        # Output the result
+        print("CHART DATA FROM LLM :\n")
+        print(json.dumps(chart_data, indent=4))
     
         print(f"Bar chart data: {bar_chart_data}")
+        
+        # pie_chart_data = generate_pie_chart_data(data_extracted)
+        
+        # Example data usage
+        labels = [
+            "Stocks", "ETFs", "Growth Stock Mutual Funds",
+            "Real Estate Investment Trusts (REITs)", "Emerging Markets Stocks",
+            "High-Yield Savings Account", "Treasury Bonds"
+        ]
+        data_values = [40, 20, 15, 15, 10, 10, 10]
+
+        # Generate Pie Chart Data
+        pie_chart_data = generate_pie_chart_data(labels, data_values)
+        print("Pie Chart Data:", pie_chart_data)
+        print(pie_chart_data)
+
         print(f"Pie chart data: {pie_chart_data}")
 
         
@@ -4170,8 +4423,63 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 500
 
 
+def get_chart_data_from_llm(text):
+    """
+    Use an LLM to extract data for pie charts and bar graphs from the investment text.
 
+    Args:
+        text (str): The investment text input.
+
+    Returns:
+        dict: A dictionary containing pie chart data and bar chart data.
+    """
+    # LLM prompt to extract relevant data
+    prompt = f"""
+            You are a data analyst. Extract the following data from the provided investment text:
+
+            1. A list for pie chart visualization, where each entry contains:
+            - Label: The name of the asset (e.g., "Stocks", "Growth ETFs").
+            - Value: The average percentage allocation for the asset.
+
+            2. A list for bar chart visualization, where each entry contains:
+            - Label: "Minimum Returns" and "Maximum Returns".
+            - Value: The percentage return for the respective category.
+            - Dollar Value: The growth in dollars for the respective category.
+
+            Return the output as a JSON object with two keys:
+            - "pie_chart_data": [list of pie chart entries].
+            - "bar_chart_data": [list of bar chart entries].
+
+            Here is the investment text:
+            {text}
+            """
+
+    try:
+        # Send the prompt to Gemini LLM
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+
+        # Process the response from LLM
+        html_suggestions = markdown.markdown(response.text)
+        format_suggestions = markdown_to_text(html_suggestions)
         
+        # response = gemini.generate_response(
+        #     prompt=prompt,
+        #     max_tokens=1000,  # Adjust token limit as per requirements
+        # )
+
+        # Parse and return the LLM response
+        chart_data = json.loads(response.text)
+        return chart_data
+
+    except Exception as e:
+        print(f"Error fetching data from Gemini LLM: {e}")
+        return {"error": str(e)}
+
+
+
+
+
 # # api for generating suggestions with client id :
 
 @app.route('/personality-assessment', methods=['POST'])
@@ -4238,6 +4546,7 @@ def personality_selected():
                 return jsonify({
                     "status": 200,
                     "message": "Success",
+                    "clientdata":client_data,
                     "investmentSuggestions": formatSuggestions,
                     "pieChartData": pie_chart_data,
                     "barChartData": bar_chart_data,
@@ -8509,7 +8818,6 @@ import re
 # Line Chart V-3 :
 import re
 
-import re
 
 def extract_line_chart_data(response_text):
     """Parses table text into structured line chart data."""
@@ -8548,6 +8856,45 @@ def extract_line_chart_data(response_text):
         "confidence_band": confidence_band,
         "total_returns": {"percentages": total_returns}
     }
+ 
+def extract_next_quarter_line_chart_data(response_text):
+    """
+    Parses table text into structured data for monetary-based predictions.
+    Ensures the correct handling of best-case, worst-case, and confidence band values.
+    """
+    dates, best_case, worst_case, confidence_band, total_returns_amounts = [], [], [], [], []
+
+    # Split the response text into lines and process rows after headers
+    lines = response_text.strip().split("\n")
+
+    for line in lines[2:]:  # Skip headers
+        columns = [col.strip() for col in line.split("|")[1:-1]]  # Remove outer '|'
+
+        if len(columns) == 6:  # Ensure row has required columns
+            try:
+                dates.append(columns[1])
+                best_case.append(float(columns[2].replace("$", "").strip()))
+                worst_case.append(float(columns[3].replace("$", "").strip()))
+                
+                # Extract confidence band values
+                confidence_low = float(columns[4].replace("$", "").strip())
+                confidence_high = float(columns[5].replace("$", "").strip())
+                confidence_band.append((confidence_low, confidence_high))
+                
+                total_returns_amounts.append(float(columns[5].replace("$", "").strip()))
+            except ValueError as e:
+                print(f"Skipping row due to value error: {e}")
+
+    # Ensure compatibility with expected output format
+    return {
+        "dates": dates,
+        "best_case": best_case,
+        "worst_case": worst_case,
+        "confidence_band": confidence_band,
+        "total_returns": {"percentages": [], "amounts": total_returns_amounts}
+    }
+
+
 
 def plot_return_predictions(line_chart_data):
     dates = line_chart_data["dates"]
@@ -8709,7 +9056,9 @@ def predict_returns():
             previous_portfolio_data = load_from_file(portfolio_predictions_file)
 
         # Check for changes in the portfolio
+        # if current_portfolio_data == previous_portfolio_data:
         if current_portfolio_data != previous_portfolio_data:
+        
             print("Portfolio data has changed. Updating predictions for next quarter returns.")
             
             simulated_response,refined_line_chart_data = create_next_quarter_prediction_line_chart(client_id, client_name, funds, investor_personality)
@@ -8741,6 +9090,10 @@ def predict_returns():
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+    
+
+
+# V-2 :
 
 def create_next_quarter_prediction_line_chart(client_id,client_name,funds,investor_personality):
     try:
@@ -8817,6 +9170,60 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             asset['stationarity'] = stationarity
             asset['forecasted_returns'] = forecasted_returns.tolist()
             asset['simulated_returns'] = simulated_returns
+            
+         # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
+            
+        # Process daily changes data for only current quarter :
+        daily_changes_data = []
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+        
+        # Generate task for LLM with refined prediction ranges
+        min_actual_return = min(actual_line_chart_data)
+        max_actual_return = max(actual_line_chart_data)
+        buffer = 0.05 * (max_actual_return - min_actual_return)
+
 
         # Load client financial data
         if USE_AWS:
@@ -8862,42 +9269,80 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             Investor Personality: {investor_personality}
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
+            Overall Daily Changes Data : {raw_daily_changes_data}
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
 
-            Predict the portfolio's **daily returns** over the next 3 months. Include:
+           Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
             3. **Confidence Band** (Range of returns at 95% confidence level).
             
+            1. Ensure predicted returns reflect realistic market conditions by keeping.
+
+            2. Avoid predicting sudden, unrealistic spikes or crashes unless explicitly indicated by the actual returns.
+
+            3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
+
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+
+            
             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+            Refer to the daily portfolio changes {raw_daily_changes_data} to get estimations of the Projected Portfolios Returns in the Next Quarter.Try to match the Current Daily Returns Range so that the Projections become more accurate and realistic.
+
+            The client, {client_name}, has a portfolio characterized by the following constraints:
+
+            - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
+            - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
+            - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
 
             Example of simulated_response = 
             ### Response Format:
             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
             |------------|-----------------------|-----------------------|---------------------|------------------|
-            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
-            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
-            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
-            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
-            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
-            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
-            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
-            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
-            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+            | 2025-01-01 | 22.5                  | -1.0                  | 6.0% - 20.0%        | 14.0             |
+            | 2025-01-15 | 30.0                  | 5.0                   | 7.5% - 24.0%        | 18.5             |
+            | 2025-01-31 | 35.0                  | 11.0                  | 14.0% - 28.0%       | 20.0             |
+            | 2025-02-01 | 25.0                  | 3.0                   | -1.8% - 20.0%       | 16.5             |
+            | 2025-02-15 | 33.5                  | 6.0                   | 10.0% - 26.0%       | 27.5             |
+            | 2025-02-28 | 45.0                  | 11.0                  | 14.0% - 28.0%       | 20.0             |
+            | 2025-03-01 | 50.5                  | 12.0                  | 20.0% - 34.0%       | 33.75            |
+            | 2025-03-15 | 46.0                  | 8.5                   | 26.5% - 39.0%       | 34.25            |
+            | 2025-03-31 | 50.5                  | 11.0                  | 30.0% - 44.0%       | 36.75            |
 
             
             Your Response must be in the above table format no messages is required just table format data.
+
+            Make Sure all the table contents have values and no null/none/blank value is passed.
         """
-        
+            # | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            # |------------|-----------------------|-----------------------|---------------------|------------------|
+            # | 2025-01-01 | 22.5                  | -1.0                  | 20.0% - 6.0%        | 14.0             |
+            # | 2025-01-15 | 30.0                  | 5.0                   | 24.0% - 7.5%        | 18.5             |
+            # | 2025-01-31 | 35.0                  | 11.0                  | 28.0% - 14.0%       | 20.0             |
+            # | 2025-02-01 | 25.0                  | 3.0                   | 20.0% - -1.8%       | 16.5             |
+            # | 2025-02-15 | 33.5                  | 6.0                   | 26.0% - 10.0%       | 27.5             |
+            # | 2025-02-28 | 45.0                  | 11.0                  | 28.0% - 14.0%       | 20.0             |
+            # | 2025-03-01 | 50.5                  | 12.0                  | 34.0% - 20.0%       | 33.75            |
+            # | 2025-03-15 | 46.0                  | 8.5                   | 39.0% - 26.5%       | 34.25            |
+            # | 2025-03-31 | 50.5                  | 11.0                  | 44.0% - 30.0%       | 36.75            |
+
+            # Example of simulated_response = 
+            # ### Response Format:
+            
+
+            
         # Simulate LLM prediction
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(task)
         simulated_response = markdown_to_text(response.text)
         print(simulated_response)
+        
         line_chart_data = extract_line_chart_data(simulated_response)
+        # line_chart_data = extract_next_quarter_line_chart_data(simulated_response)
         print(f"\nLine Chart Data :{line_chart_data}")
         
         refined_line_chart_data = add_noise(line_chart_data)
@@ -8911,6 +9356,178 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+        
+    
+# Gives Percentages : V-1 :
+# def create_next_quarter_prediction_line_chart(client_id,client_name,funds,investor_personality):
+#     try:
+
+#         # Load portfolio data (using local or AWS storage based on USE_AWS)
+#         if USE_AWS:
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#         else:
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             if not os.path.exists(portfolio_file_path):
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#             with open(portfolio_file_path, 'r') as file:
+#                 portfolio_data = json.load(file)
+        
+#         # portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         # portfolio_data = load_from_file(portfolio_file)
+#         # if portfolio_data is None:
+#         #     return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load market data for beta calculation
+#         market_returns = fetch_historical_returns(MARKET_INDEX)
+
+#         # Prepare date intervals
+#         next_quarter = get_next_quarter()
+#         print(f"Next Quarter: {next_quarter}")
+
+#         confidence_data = []
+        
+#         # Iterate over each asset in the portfolio
+        
+#         for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+#             ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+#             if not ticker:
+#                 continue
+#             if ticker == 'N/A':
+#                 continue
+
+#             # Fetch historical returns
+#             historical_returns = fetch_historical_returns(ticker)
+#             if historical_returns.empty:
+#                 print(f"No valid returns for {ticker}. Assigning defaults.")
+#                 asset['volatility'] = 0.8
+#                 asset['sharpe_ratio'] = 0.7
+#                 asset['beta'] = 0.5
+#                 asset['forecasted_returns'] = [0] * FORECAST_DAYS
+#                 asset['simulated_returns'] = [0] * FORECAST_DAYS
+#                 continue
+
+#             # Metrics Calculation
+#             volatility = compute_volatility(historical_returns)
+#             print(volatility)
+#             sharpe_ratio = compute_sharpe_ratio(historical_returns)
+#             print(sharpe_ratio)
+#             beta = compute_beta(historical_returns, market_returns)
+#             print(beta)
+#             stationarity = adf_test(historical_returns)
+#             print(stationarity)
+
+#             # Forecasting
+#             forecasted_returns = arima_forecast(historical_returns)
+#             print(forecasted_returns)
+#             simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+#             print(simulated_returns)
+
+#             # Save metrics back to the portfolio
+#             asset['volatility'] = volatility
+#             asset['sharpe_ratio'] = sharpe_ratio
+#             asset['beta'] = beta
+#             asset['stationarity'] = stationarity
+#             asset['forecasted_returns'] = forecasted_returns.tolist()
+#             asset['simulated_returns'] = simulated_returns
+
+#         # Load client financial data
+#         if USE_AWS:
+#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#                 client_financial_data = load_from_file(client_summary_file)
+#                 if not client_financial_data:
+#                     return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+#                 logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+#                 # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#         else:
+#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#             client_financial_data = load_from_file(client_summary_file)
+#             if not client_financial_data:
+#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         date_intervals = get_next_quarter_dates()
+#         next_quarter = get_next_quarter()
+
+#         task = f"""
+#             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+#             You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+#             - Random market fluctuations (up and down movements).
+#             - Economic volatility.
+#             - Natural noise in predictions.
+#             The client, {client_name}, has the following portfolio:
+
+#             Portfolio Details: {portfolio_data}
+#             Portfolio Analyis: {asset}
+#             Financial Situation: {client_financial_data}
+#             Available Funds: ${funds}
+#             Investor Personality: {investor_personality}
+#             Portfolio News: {portfolio_news}
+#             Economic News: {economic_news}
+                     
+#             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+#             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+#             {date_intervals}
+
+#             Predict the portfolio's **daily returns** over the next 3 months. Include:
+#             1. **Best-Case Scenario** (High returns under favorable conditions).
+#             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+#             3. **Confidence Band** (Range of returns at 95% confidence level).
+            
+#             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+#             Example of simulated_response = 
+#             ### Response Format:
+#             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+#             |------------|-----------------------|-----------------------|---------------------|------------------|
+#             | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+#             | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+#             | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+#             | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+#             | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+#             | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+#             | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+#             | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+#             | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+#             Your Response must be in the above table format no messages is required just table format data.
+#         """
+        
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+#         simulated_response = markdown_to_text(response.text)
+#         print(simulated_response)
+#         line_chart_data = extract_line_chart_data(simulated_response)
+#         print(f"\nLine Chart Data :{line_chart_data}")
+        
+#         refined_line_chart_data = add_noise(line_chart_data)
+#         print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
+
+#         # Save predictions
+#         # save_predictions(client_id,next_quarter,refined_line_chart_data)
+
+#         return simulated_response,refined_line_chart_data
+
+#     except Exception as e:
+#         print(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
 
 # V-1 :
     
@@ -11018,7 +11635,24 @@ def dashboard_infographics():
         print(f"Error calculating dashboard metrics: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+#################################################################################################################################
 
+# Asset Allocation based on INvestor Profile :
+
+# @app.route('/asset_allocation_investor_profile',methods=['POST'])
+# def asset_allocation_investor_profile:
+#     try:
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found in the request"}), 400
+    
+#     except Exception as e :
+        
+        
 
 #################################################################################################################################
 
