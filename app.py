@@ -4064,78 +4064,143 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         
         # Previous Version :
         
-        prompt_template = """
-                            You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
-                            so that the client can reach their financial goals while considering their financial conditions and market trends. 
-                            Use the following instructions to ensure consistent and comprehensive output:
-                            ---
+        # prompt_template = """
+        #                     You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
+        #                     so that the client can reach their financial goals while considering their financial conditions and market trends. 
+        #                     Use the following instructions to ensure consistent and comprehensive output:
+        #                     ---
 
-                            ### Required Output Format:
+        #                     ### Required Output Format:
 
-                            #### **Investment Allocation:**
-                            Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
-                            - **Investment Type:** Specify the type of investment (e.g., "Index Funds", "US Treasury Bonds").
-                            - **Allocation Range:** Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
-                            - **Target:** Describe the purpose and goal of the investment.
-                            - **How to Invest:** Provide practical instructions for investing in this asset.
-                            - **Where to Invest:** List platforms or tools for making the investment, and provide **6-7 specific recommendations per asset class** for diversity and balance.
+        #                     #### **Investment Allocation:**
+        #                     Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+        #                     - **Investment Type:** Specify the type of investment (e.g., "Index Funds", "US Treasury Bonds").
+        #                     - **Allocation Range:** Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+        #                     - **Target:** Describe the purpose and goal of the investment.
+        #                     - **How to Invest:** Provide practical instructions for investing in this asset.
+        #                     - **Where to Invest:** List platforms or tools for making the investment, and provide **6-7 specific recommendations per asset class** for diversity and balance.
 
-                            #### Example Output:
-                            **Growth-Oriented Investments (Minimum X% - Maximum Y%)**:
-                            - **Stocks:** `20% - 30%`
-                            - *Target:* High growth potential with sector diversification.
-                            - *How to Invest:* Direct purchases via a brokerage account; consider market trends.
-                            - *Where to Invest:* Examples include large-cap stocks like Apple (AAPL), Tesla (TSLA), emerging market stocks, and small-cap stocks.
-                            - **ETFs:** `10% - 15%`
-                            - *Target:* Diversified exposure to specific sectors.
-                            - *How to Invest:* Invest in sector-specific or international ETFs through platforms like Fidelity or Vanguard.
-                            - *Where to Invest:* SPDR S&P 500 ETF (SPY), iShares Core MSCI Emerging Markets ETF (IEMG).
+        #                     #### Example Output:
+        #                     **Growth-Oriented Investments (Minimum X% - Maximum Y%)**:
+        #                     - **Stocks:** `20% - 30%`
+        #                     - *Target:* High growth potential with sector diversification.
+        #                     - *How to Invest:* Direct purchases via a brokerage account; consider market trends.
+        #                     - *Where to Invest:* Examples include large-cap stocks like Apple (AAPL), Tesla (TSLA), emerging market stocks, and small-cap stocks.
+        #                     - **ETFs:** `10% - 15%`
+        #                     - *Target:* Diversified exposure to specific sectors.
+        #                     - *How to Invest:* Invest in sector-specific or international ETFs through platforms like Fidelity or Vanguard.
+        #                     - *Where to Invest:* SPDR S&P 500 ETF (SPY), iShares Core MSCI Emerging Markets ETF (IEMG).
 
-                            #### Returns Overview:
-                            - **Minimum Expected Annual Return:** `X% - Y%`
-                            - **Maximum Expected Annual Return:** `X% - Y%`
-                            - **Minimum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
-                            - **Maximum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
-                            - **Time Horizon:** `Z years`
+        #                     #### Returns Overview:
+        #                     - **Minimum Expected Annual Return:** `X% - Y%`
+        #                     - **Maximum Expected Annual Return:** `X% - Y%`
+        #                     - **Minimum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+        #                     - **Maximum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+        #                     - **Time Horizon:** `Z years`
 
-                            ---
+        #                     ---
 
-                            ### Example Output Format:
-                            **Investment Allocation:**
+        #                     ### Example Output Format:
+        #                     **Investment Allocation:**
 
-                            **Growth-Oriented Investments (Minimum 70% - Maximum 90%)**:
-                            - **Stocks:** `20% - 30%`
-                            - *Target:* Capital appreciation from high-growth stocks.
-                            - *How to Invest:* Purchase through brokerage accounts like Fidelity.
-                            - *Where to Invest:* Tesla (TSLA), NVIDIA (NVDA), Apple (AAPL).
+        #                     **Growth-Oriented Investments (Minimum 70% - Maximum 90%)**:
+        #                     - **Stocks:** `20% - 30%`
+        #                     - *Target:* Capital appreciation from high-growth stocks.
+        #                     - *How to Invest:* Purchase through brokerage accounts like Fidelity.
+        #                     - *Where to Invest:* Tesla (TSLA), NVIDIA (NVDA), Apple (AAPL).
 
-                            **Conservative Investments (Minimum 10% - Maximum 30%)**:
-                            - **High-Yield Savings Account:** `5% - 10%`
-                            - *Target:* Maintain liquidity for emergencies.
-                            - *How to Invest:* Deposit funds into FDIC-insured accounts.
-                            - *Where to Invest:* Ally Bank, Marcus by Goldman Sachs.
+        #                     **Conservative Investments (Minimum 10% - Maximum 30%)**:
+        #                     - **High-Yield Savings Account:** `5% - 10%`
+        #                     - *Target:* Maintain liquidity for emergencies.
+        #                     - *How to Invest:* Deposit funds into FDIC-insured accounts.
+        #                     - *Where to Invest:* Ally Bank, Marcus by Goldman Sachs.
 
-                            #### Returns Overview:
-                            - **Minimum Expected Annual Return:** `6% - 8%`
-                            - **Maximum Expected Annual Return:** `12% - 18%`
-                            - **Minimum Expected Growth in Dollars:** `$5,000 - $8,000`
-                            - **Maximum Expected Growth in Dollars:** `$15,000 - $25,000`
-                            - **Time Horizon:** `5 years`
+        #                     #### Returns Overview:
+        #                     - **Minimum Expected Annual Return:** `6% - 8%`
+        #                     - **Maximum Expected Annual Return:** `12% - 18%`
+        #                     - **Minimum Expected Growth in Dollars:** `$5,000 - $8,000`
+        #                     - **Maximum Expected Growth in Dollars:** `$15,000 - $25,000`
+        #                     - **Time Horizon:** `5 years`
 
-                            ---
+        #                     ---
 
-                            Ensure the output strictly follows this structure.
+        #                     Ensure the output strictly follows this structure.
 
-                            ### **Rationale for Investment Suggestions:**
-                            Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and market trends.
+        #                     ### **Rationale for Investment Suggestions:**
+        #                     Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and market trends.
 
-                            ---
+        #                     ---
 
-                            <context>
-                            {context}
-                            </context>
-                            Question: {input}
-                            """
+        #                     <context>
+        #                     {context}
+        #                     </context>
+        #                     Question: {input}
+        #                     """
+        
+        prompt_template =     """You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
+            so that the client can reach their financial goals while considering their financial conditions and market trends. 
+            Use the following instructions to ensure consistent and comprehensive output:
+            ---
+
+            ### Required Output Format:
+
+            #### **Investment Strategy and Allocation:**
+            Provide a detailed investment strategy categorized into **Strategic Asset Allocation**, **Tactical Asset Allocation**, and **Dynamic Asset Allocation**. For each category:
+            - **Type of Allocation:** Briefly explain whether it is long-term, short-term, or adaptable.
+            - **Description:** Summarize the key focus of the allocation (e.g., "Long-Term Asset Selection Based on Expected Returns and Risk Tolerance").
+            - **Goal:** Describe the primary goal of the allocation (e.g., "Maximize Returns While Minimizing Risk").
+            - **Investment Types:** Recommend specific types of investments (e.g., stocks, ETFs, bonds).
+            - **How to Invest:** Provide detailed steps for how the client can allocate their funds effectively based on the type of allocation.
+            - **Where to Invest:** Suggest platforms, tools, or specific examples for implementing these strategies, ensuring a variety of recommendations for each asset class (6-7 examples per type).
+            - **Allocation Range:** Specify minimum and maximum percentage allocations for each type of investment.
+
+            #### Example Output:
+            **Strategic Asset Allocation**:
+            - *Type of Allocation:* Long-term.
+            - *Description:* Focus on long-term asset selection based on expected returns and risk tolerance.
+            - *Goal:* Maximize returns while minimizing risk.
+            - *Investment Types:* Index funds, growth-oriented ETFs, large-cap stocks.
+            - *How to Invest:* Invest in well-diversified portfolios via brokerage accounts like Fidelity or Vanguard.
+            - *Where to Invest:* Examples include SPDR S&P 500 ETF (SPY), Vanguard Total Stock Market ETF (VTI), or Apple (AAPL).
+            - *Allocation Range:* 50%-70%.
+
+            **Tactical Asset Allocation**:
+            - *Type of Allocation:* Short-term.
+            - *Description:* Short-term adjustments to asset allocation based on market conditions.
+            - *Goal:* Maintain long-term strategy while exploiting short-term opportunities.
+            - *Investment Types:* Sector-specific ETFs, emerging market stocks, alternative investments.
+            - *How to Invest:* Monitor market trends and make strategic adjustments through tools like Bloomberg Terminal or brokerage accounts.
+            - *Where to Invest:* Examples include Invesco QQQ ETF, iShares MSCI Emerging Markets ETF, or Tesla (TSLA).
+            - *Allocation Range:* 20%-30%.
+
+            **Dynamic Asset Allocation**:
+            - *Type of Allocation:* Adaptive.
+            - *Description:* Ongoing adjustments based on market conditions and risk tolerance changes.
+            - *Goal:* Maintain strategy while adapting to changing conditions.
+            - *Investment Types:* Balanced funds, diversified mutual funds, inflation-protected securities.
+            - *How to Invest:* Regularly review and rebalance portfolio using platforms like Charles Schwab or Wealthfront.
+            - *Where to Invest:* Examples include Vanguard Balanced Index Fund (VBIAX), TIPS (Treasury Inflation-Protected Securities), or Fidelity Freedom Funds.
+            - *Allocation Range:* 10%-20%.
+
+            #### Returns Overview:
+            - **Minimum Expected Annual Return:** Specify a range (e.g., "X% - Y%").
+            - **Maximum Expected Annual Return:** Specify a range (e.g., "X% - Y%").
+            - **Minimum Expected Growth in Dollars:** Specify a dollar range (e.g., "$X - $Y").
+            - **Maximum Expected Growth in Dollars:** Specify a dollar range (e.g., "$X - $Y").
+            - **Time Horizon:** Specify a time frame for the investment strategy (e.g., "Z years").
+
+            ---
+
+            ### **Rationale for Investment Suggestions:**
+            Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and current market trends.
+
+            ---
+
+            <context>
+            {context}
+            </context>
+            Question: {input}
+        """
         
         print("Prompt Created Successfully")
                 
@@ -9945,6 +10010,115 @@ def fetch_consolidated_portfolio(client_ids):
         return portfolios
 
 
+#################################################################################################################################
+
+# Asset Allocation based on INvestor Profile :
+
+@app.route('/asset_allocation_investor_profile', methods=['POST'])
+def asset_allocation_investor_profile():
+    try:
+        # Fetch client data and validate input
+        clients = request.json.get("data")
+        if not clients or not isinstance(clients, list):
+            return jsonify({"message": "Invalid or missing client data"}), 400
+
+        print("Received client data:", clients)
+
+        # Map client investment personalities
+        client_personality_map = {
+            client["uniqueId"]: client.get("investment_personality", "Unknown")
+            for client in clients if client.get("uniqueId")
+        }
+
+        if not client_personality_map:
+            return jsonify({"message": "No valid client data found"}), 400
+
+        # Fetch consolidated portfolio data for provided clients
+        portfolios = fetch_consolidated_portfolio(list(client_personality_map.keys()))
+        print("Fetched portfolios:", portfolios)
+
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+        # Initialize personality-based asset data
+        personality_asset_data = {"Conservative Investor": {}, "Moderate Investor": {}, "Aggressive Investor": {}}
+
+        # Process portfolios by investment personality
+        for client_id, portfolio in portfolios.items():
+            personality = client_personality_map.get(client_id, "Unknown")
+            print(f"Processing client {client_id} with personality {personality}")
+
+            # Ensure portfolio is wrapped in a dictionary
+            if isinstance(portfolio, list):
+                portfolio = {"assets": portfolio}
+
+            # Validate portfolio structure
+            assets = portfolio.get("assets", [])
+            if not isinstance(assets, list) or personality not in personality_asset_data:
+                print(f"Invalid portfolio for client {client_id}: {portfolio}")
+                continue
+
+            # Aggregate investments by asset class for each personality
+            for asset in assets:
+                asset_class = asset.get("assetClass", "Other").strip().capitalize()
+                invested_amount = asset.get("Amount_Invested", 0)
+
+                # Skip invalid or zero investments
+                try:
+                    invested_amount = float(invested_amount)
+                except ValueError:
+                    invested_amount = 0
+
+                if invested_amount <= 0:
+                    continue
+
+                if asset_class not in personality_asset_data[personality]:
+                    personality_asset_data[personality][asset_class] = 0
+
+                personality_asset_data[personality][asset_class] += invested_amount
+
+        print("Aggregated personality asset data:", personality_asset_data)
+
+        # Function to generate pie chart data
+        def generate_pie_chart_data(personality_key):
+            data = personality_asset_data[personality_key]
+            return {
+                "labels": list(data.keys()) if data else ["No Data"],
+                "datasets": [{
+                    "data": list(data.values()) if data else [0],
+                    "label": f"{personality_key} Asset Allocation",
+                    "backgroundColor": ["#FF9999", "#66B2FF", "#FFCC99", "#99FF99", "#CC99FF"]
+                }]
+            }
+
+        # Generate pie chart data for each personality type
+        conservative_pie_chart_data = generate_pie_chart_data("Conservative Investor")
+        moderate_pie_chart_data = generate_pie_chart_data("Moderate Investor")
+        aggressive_pie_chart_data = generate_pie_chart_data("Aggressive Investor")
+
+        # Debugging outputs
+        print("Conservative Pie Chart Data:", conservative_pie_chart_data)
+        print("Moderate Pie Chart Data:", moderate_pie_chart_data)
+        print("Aggressive Pie Chart Data:", aggressive_pie_chart_data)
+
+        # Format the response
+        response = {
+            "message": "Asset Infographics by Investor Profile generated successfully",
+            "conservative_pie_chart_data": conservative_pie_chart_data,
+            "moderate_pie_chart_data": moderate_pie_chart_data,
+            "aggressive_pie_chart_data": aggressive_pie_chart_data,
+            "details": personality_asset_data
+        }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"Error in asset_allocation_investor_profile: {e}")
+        return jsonify({"message": f"Error in asset_allocation_investor_profile: {e}"}), 500
+
+
+
+#################################################################################################################################
 
 # API to get the asset-class infographics :
 
@@ -11639,69 +11813,6 @@ def dashboard_infographics():
 
 #################################################################################################################################
 
-# Asset Allocation based on INvestor Profile :
-
-@app.route('/asset_allocation_investor_profile',methods=['POST'])
-def asset_allocation_investor_profile():
-
-    try:
-        # Fetch client data and their portfolios
-        clients = request.json.get("data")
-        if not clients:
-            return jsonify({"message": "No client data provided"}), 400
-
-        # Create lookup for client investment personality
-        client_personality_map = {client["uniqueId"]: client.get("investorPersonality", "Unknown") for client in clients if client.get("uniqueId")}
-        if not client_personality_map:
-            return jsonify({"message": "No valid client data found"}), 400
-
-        # Fetch consolidated portfolio data
-        portfolios = fetch_consolidated_portfolio(list(client_personality_map.keys()))
-        if not portfolios:
-            return jsonify({"message": "No portfolio data found for provided clients"}), 404
-
-        # Initialize personality-based asset allocation data
-        personality_data = {"Conservative": 0, "Moderate": 0, "Aggressive": 0}
-
-        # Process portfolios by personality type
-        for client_id, portfolio in portfolios.items():
-            # Get the investor personality for the client
-            personality = client_personality_map.get(client_id, "Unknown")
-
-            # Ensure valid portfolio structure
-            assets = portfolio.get("assets", []) if isinstance(portfolio, dict) else []
-            if not isinstance(assets, list):
-                continue
-
-            # Sum total investment per personality type
-            total_investment = sum(float(asset.get("Amount_Invested", 0)) for asset in assets)
-            if personality in personality_data:
-                personality_data[personality] += total_investment
-
-        # Prepare pie chart data for asset allocation by personality type
-        pie_chart_data = {
-            "labels": list(personality_data.keys()),
-            "datasets": [{
-                "data": list(personality_data.values()),
-                "label": "Total Asset Allocation by Personality Type",
-                "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]  # Default colors for chart
-            }]
-        }
-
-        # Format response for the frontend
-        response = {
-            "message": "Personality-Based Asset Infographics generated successfully",
-            "pie_chart_data": pie_chart_data,
-            "details": personality_data
-        }
-
-        return jsonify(response), 200
-
-    except Exception as e:
-        print(f"Error in personality_asset_infographics: {e}")
-        return jsonify({"message": f"Error in personality_asset_infographics: {e}"}), 500
-0
-        
 
 #################################################################################################################################
 
