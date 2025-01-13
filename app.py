@@ -4062,6 +4062,8 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         clientName = clientName
         # Define the prompt
         
+        # Previous Version :
+        
         prompt_template = """
                             You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
                             so that the client can reach their financial goals while considering their financial conditions and market trends. 
@@ -11639,19 +11641,66 @@ def dashboard_infographics():
 
 # Asset Allocation based on INvestor Profile :
 
-# @app.route('/asset_allocation_investor_profile',methods=['POST'])
-# def asset_allocation_investor_profile:
-#     try:
-#         clients = request.json.get("data")
-#         if not clients:
-#             return jsonify({"message": "No client data provided"}), 400
+@app.route('/asset_allocation_investor_profile',methods=['POST'])
+def asset_allocation_investor_profile():
 
-#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
-#         if not client_ids:
-#             return jsonify({"message": "No valid client IDs found in the request"}), 400
-    
-#     except Exception as e :
-        
+    try:
+        # Fetch client data and their portfolios
+        clients = request.json.get("data")
+        if not clients:
+            return jsonify({"message": "No client data provided"}), 400
+
+        # Create lookup for client investment personality
+        client_personality_map = {client["uniqueId"]: client.get("investorPersonality", "Unknown") for client in clients if client.get("uniqueId")}
+        if not client_personality_map:
+            return jsonify({"message": "No valid client data found"}), 400
+
+        # Fetch consolidated portfolio data
+        portfolios = fetch_consolidated_portfolio(list(client_personality_map.keys()))
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+        # Initialize personality-based asset allocation data
+        personality_data = {"Conservative": 0, "Moderate": 0, "Aggressive": 0}
+
+        # Process portfolios by personality type
+        for client_id, portfolio in portfolios.items():
+            # Get the investor personality for the client
+            personality = client_personality_map.get(client_id, "Unknown")
+
+            # Ensure valid portfolio structure
+            assets = portfolio.get("assets", []) if isinstance(portfolio, dict) else []
+            if not isinstance(assets, list):
+                continue
+
+            # Sum total investment per personality type
+            total_investment = sum(float(asset.get("Amount_Invested", 0)) for asset in assets)
+            if personality in personality_data:
+                personality_data[personality] += total_investment
+
+        # Prepare pie chart data for asset allocation by personality type
+        pie_chart_data = {
+            "labels": list(personality_data.keys()),
+            "datasets": [{
+                "data": list(personality_data.values()),
+                "label": "Total Asset Allocation by Personality Type",
+                "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]  # Default colors for chart
+            }]
+        }
+
+        # Format response for the frontend
+        response = {
+            "message": "Personality-Based Asset Infographics generated successfully",
+            "pie_chart_data": pie_chart_data,
+            "details": personality_data
+        }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"Error in personality_asset_infographics: {e}")
+        return jsonify({"message": f"Error in personality_asset_infographics: {e}"}), 500
+0
         
 
 #################################################################################################################################
