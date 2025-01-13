@@ -7608,63 +7608,89 @@ def generate_client_riskometer_data():
 ##################################################################################################################
 
 
-def calculate_portfolio_risk_ratio(client_portfolio):
-    """
-    Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
+#    #Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
+
+@app.route('/calculate_portfolio_risk_ratio',methods=['POST'])
+def calculate_portfolio_risk_ratio():
     
-    Risk Levels:
-    - High Risk: High allocation in Stocks and Cryptos.
-    - Moderate Risk: Balanced allocation between safe and risky investments.
-    - Low Risk: High allocation in Bonds, ETFs, and Commodities.
+    try:
+        client_id = request.json.get('client_id')
+            
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+        
+        # Load portfolio data (using local or AWS storage based on USE_AWS)
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
 
-    :param client_portfolio: Dictionary containing asset classes and investment amounts.
-    :return: Dictionary with risk ratio and risk category.
-    """
-    # Risk weight mapping for each asset class
-    risk_weights = {
-        "Stocks": 0.9,
-        "Cryptocurrency": 1.0,
-        "Bonds": 0.2,
-        "ETF": 0.3,
-        "Mutual Funds": 0.5,
-        "Commodities": 0.4,
-        "Cash/bank accounts": 0.1,
-        "Real Estate": 0.3,
-        "Other": 0.6
-    }
+            # Verify portfolio data is a list
+            if not isinstance(portfolio_data, list):
+                return jsonify({"message": "Portfolio data is not in the expected format"}), 500
+    
+        # Risk weight mapping for each asset class
+        risk_weights = {
+            "Stocks": 0.9,
+            "Cryptocurrency": 1.0,
+            "Bonds": 0.1,
+            "etf": 0.2,
+            "Mutual Funds": 0.5,
+            "Commodities": 0.4,
+            "Cash/bank accounts": 0.1,
+            "Real Estate": 0.3,
+            "Other": 0.6
+        }
 
-    # Aggregate total investments and weighted risk score
-    total_investment = 0
-    weighted_risk_score = 0
 
-    for asset in client_portfolio.get("assetsDatasets", {}).get("datasets", [])[0].get("data", []):
-        asset_class = asset.get("assetClass", "Other").capitalize()
-        invested_amount = float(asset.get("Amount_Invested", 0))
+        # Aggregate total investments and weighted risk score
+        total_investment = 0
+        weighted_risk_score = 0
 
-        # Accumulate total investment and calculate risk score
-        total_investment += invested_amount
-        weighted_risk_score += invested_amount * risk_weights.get(asset_class, 0.5)  # Default risk weight is moderate
+        for asset in portfolio_data.get("assetsDatasets", {}).get("datasets", [])[0].get("data", []):
+            asset_class = asset.get("assetClass", "Other").capitalize()
+            invested_amount = float(asset.get("Amount_Invested", 0))
 
-    # Calculate risk ratio
-    risk_ratio = (weighted_risk_score / total_investment * 100) if total_investment > 0 else 0
+            # Accumulate total investment and calculate risk score
+            total_investment += invested_amount
+            weighted_risk_score += invested_amount * risk_weights.get(asset_class, 0.5)  # Default risk weight is moderate
 
-    # Categorize portfolio risk
-    if risk_ratio > 75:
-        risk_category = "High Risk"
-    elif 50 < risk_ratio <= 75:
-        risk_category = "Moderate Risk"
-    else:
-        risk_category = "Low Risk"
+        # Calculate risk ratio
+        risk_ratio = (weighted_risk_score / total_investment * 100) if total_investment > 0 else 0
 
-    # Prepare risk analysis data
-    risk_analysis = {
-        "total_investment": total_investment,
-        "weighted_risk_score": weighted_risk_score,
-        "risk_ratio": risk_ratio,
-        "risk_category": risk_category
-    }
+        # Categorize portfolio risk
+        if risk_ratio > 75:
+            risk_category = "High Risk"
+        elif 50 < risk_ratio <= 75:
+            risk_category = "Moderate Risk"
+        else:
+            risk_category = "Low Risk"
 
-    return risk_analysis
+        # Prepare risk analysis data
+        risk_analysis = {
+            "total_investment": total_investment,
+            "weighted_risk_score": weighted_risk_score,
+            "risk_ratio": risk_ratio,
+            "risk_category": risk_category
+        }
+
+        return jsonify({"message": f"generated portfolio riskometer data",
+                            "risk_analysis":risk_analysis}), 200
+    
+    except Exception as e:
+        print(f"Error calculating portfolio risk ratio: {e}")
+        return {"error": f"Error calculating portfolio risk ratio: {e}"}
+    
 
 
 #########################################################################################################################
