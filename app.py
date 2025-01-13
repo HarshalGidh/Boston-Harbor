@@ -9634,35 +9634,121 @@ def asset_class_predictions():
         # Fetch client and portfolio data
         request_data = request.json
         client_id = request_data.get("client_id")
-        client_name = request_data.get("client_name")
-        portfolio_size = request_data.get("portfolio_size")
-        asset_classes = request_data.get("asset_classes")  # List of asset classes in the portfolio
+        funds = request_data.get("funds")
+        asset_classes = """
+                        "Equities"
+                        "Bonds"
+                        Real Estate"
+                        "Commodities"
+                        "Cryptocurrency"
+                        Mutual Funds"
+                        """
 
-        if not client_id or not portfolio_size or not asset_classes:
-            return jsonify({"message": "Missing required fields: client_id, portfolio_size, or asset_classes"}), 400
-
-        # Current date for context
-        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        if not client_id :
+            return jsonify({"message": "Missing required field client_id"}), 400
 
         # AI prediction task setup
         task_description = f"""
-            You are tasked with predicting returns for each asset class within the portfolio for client {client_name} (Client ID: {client_id}).
-            The portfolio has a total size of ${portfolio_size} and includes the following asset classes: {', '.join(asset_classes)}.
-            
-            Consider realistic market trends, volatility, and portfolio allocation.
-            
-            For each asset class, predict:
-            - Best-Case Return (%)
-            - Worst-Case Return (%)
-            - Confidence Band (Range of expected returns at a 95% confidence level)
-            
-            Return predictions in the following format:
-            
-            | Asset Class       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) |
-            |-------------------|----------------------|-----------------------|---------------------|
-            | Asset_Class_1     | XX.XX                | XX.XX                 | XX.XX - XX.XX       |
-            | Asset_Class_2     | XX.XX                | XX.XX                 | XX.XX - XX.XX       |
-        """
+                            You are an AI financial analyst tasked with predicting returns for each asset class within a portfolio. 
+                            The portfolio has a total size of ${funds}, distributed across the following asset classes: {asset_classes}.
+                            
+                            ### Requirements:
+                            1. Use realistic market trends, volatility, historical data patterns, and portfolio allocation insights to generate predictions.
+                            2. For each asset class, provide the following:
+                            - Best-Case Return (%): The maximum expected return based on favorable market conditions.
+                            - Worst-Case Return (%): The minimum expected return during adverse conditions.
+                            - Confidence Band (%): A range representing expected returns at a 95% confidence level.
+
+                            ### Prediction Table Format:
+                            Use the table below as a guide. Populate it with realistic values based on your prediction analysis.
+
+                            | Asset Class       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%)  |
+                            |-------------------|----------------------|-----------------------|---------------------|
+                            | Equities          | 20.00               | -5.00                 | 5.00 - 15.00        |
+                            | Bonds             | 8.00                | 2.00                  | 3.50 - 7.50         |
+                            | Real Estate       | 12.00               | -3.00                 | 4.00 - 10.00        |
+                            | Commodities       | 15.00               | -8.00                 | 2.00 - 12.00        |
+                            | Cryptocurrency    | 50.00               | -25.00                | 10.00 - 35.00       |
+                            | Mutual Funds      | 10.00               | -2.00                 | 4.00 - 8.00         |
+
+                            ### Additional Guidance:
+                            - Ensure the predictions are data-driven and grounded in realistic economic scenarios.
+                            - Assume the client is risk-tolerant and expects a mix of growth and stability.
+                            - Provide explanations for high volatility or large confidence bands (e.g., cryptocurrency).
+                            - Highlight which asset class is likely to contribute the most to the portfolio's overall performance.
+
+                            ### Deliverables:
+                            - Return a well-structured response with predictions for all asset classes in the table format above.
+                            - Provide a summary of portfolio-level performance, including the expected return, variance, and standard deviation.
+                            - You must also answer all these with regards to the data provided :
+                            Variance - Investment Example
+                            By investing in a particular stock, a person can take a profit in a given year of $4000 with a probability of 0.3 or take a loss of $1000 with a probability of 0.7. What are the variance and standard deviation of the investor's gain on the stock?
+                            ➤ E(X) = $4000 (0.3) -$1000 (0.7) = $500
+                            σ2 = [(x2 f(x))] - μ2
+                            = (4000)2(0.3)+(-1000)2(0.7) 5002 $5,250,000
+                            σ = $2291.29
+
+
+                            Example: Portfolio Variance
+                            ■Consider the following information
+                            ■ Invest 50% of your money in Asset A
+                            ■ State
+                            Probability
+                            A
+                            B
+                            Portfolio
+                            ■ Boom
+                            0.4
+                            30%
+                            -5%
+                            12.5%
+                            ■ Bust
+                            0.6
+                            -10%
+                            25%
+                            7.5%
+                            ■ What is the expected return and standard
+                            deviation for each asset?
+                            ■ What is the expected return and standard deviation for the portfolio?
+
+                            Example: Portfolio Variance
+                            Consider the following information:
+                            State Probability
+                            A
+                            B
+                            Boom 0.4
+                            Bust 0.6
+                            30% -5%
+                            -10% 25%
+                            1. What is the expected return for asset A?
+                            2. What is the variance for asset A?
+                            3. What is the standard deviation for asset A?
+
+
+                            Example #4 - Portfolio Variance
+                            Consider the portfolio below, what would be the portfolio's variance?
+                            It is 50% invested in stock A and 25% in each of stocks B and C.
+                            Returns
+                            State of Economy Probability of State of Economy
+                            Stock A
+                            Stock B
+                            Stock C
+                            Boom
+                            0.5
+                            10%
+                            15%
+                            20%
+                            Bust
+                            0.5
+                            8%
+                            4%
+                            0%
+                            Boom; (0.5 x 10%) + (0.25 x 15% ) + (0.25 x 20%) = 13.75%
+                            Bust; (0.5 x 8%) + (0.25 x 4%) + (0.25 x 0%) = 5%
+
+                            Consider this context carefully and generate predictions based on your analysis.
+                            """
+
 
         # AI Model Integration
         print("Generating AI-based predictions...")
@@ -9673,18 +9759,10 @@ def asset_class_predictions():
         # Debugging output for validation
         print("Generated Asset Class Predictions:", simulated_response)
 
-        # Parse predictions to structured format
-        
-        # predictions = extract_asset_class_predictions(simulated_response)
-        # print("Parsed Predictions:", predictions)
-
         # Response structure
         response_data = {
-            "client_id": client_id,
-            "client_name": client_name,
-            "portfolio_size": portfolio_size,
-            # "predicted_returns": predictions,
-            "date": current_date
+            "message": "Asset Class Predictions Generated Successfully",
+            "simulated_response":simulated_response
         }
 
         return jsonify(response_data), 200
