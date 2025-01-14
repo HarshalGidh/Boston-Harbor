@@ -7652,16 +7652,14 @@ def calculate_portfolio_risk_ratio():
             "Other": 0.6
         }
 
-
-        # Aggregate total investments and weighted risk score
+        # Calculate total investment and weighted risk score
         total_investment = 0
         weighted_risk_score = 0
 
-        for asset in portfolio_data.get("assetsDatasets", {}).get("datasets", [])[0].get("data", []):
+        for asset in portfolio_data:
             asset_class = asset.get("assetClass", "Other").capitalize()
             invested_amount = float(asset.get("Amount_Invested", 0))
 
-            # Accumulate total investment and calculate risk score
             total_investment += invested_amount
             weighted_risk_score += invested_amount * risk_weights.get(asset_class, 0.5)  # Default risk weight is moderate
 
@@ -7684,9 +7682,12 @@ def calculate_portfolio_risk_ratio():
             "risk_category": risk_category
         }
 
-        return jsonify({"message": f"generated portfolio riskometer data",
-                            "risk_analysis":risk_analysis}), 200
-    
+        return jsonify({
+            "message": "Generated portfolio risk analysis successfully",
+            "risk_analysis": risk_analysis,
+            "risk_category":risk_category
+        }), 200
+
     except Exception as e:
         print(f"Error calculating portfolio risk ratio: {e}")
         return {"error": f"Error calculating portfolio risk ratio: {e}"}
