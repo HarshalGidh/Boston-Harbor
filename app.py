@@ -4449,15 +4449,12 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         bar_chart_data,_ = generate_chart_data_for_assets()
         
         # Get data for charts
-        chart_data = get_chart_data_from_llm(answer)
+        chart_data = extract_visualization_data_from_text(answer)
 
         # Output the result
-        print("CHART DATA FROM LLM :\n")
-        print(json.dumps(chart_data, indent=4))
-    
-        print(f"Bar chart data: {bar_chart_data}")
-        
-        # pie_chart_data = generate_pie_chart_data(data_extracted)
+        # print(f"CHART DATA FROM LLM :\n{chart_data}\n")
+        print("Extracted Chart Data:\n{chart_data}\n")
+        # print(json.dumps(chart_data, indent=4))
         
         # Example data usage
         labels = [
@@ -4483,69 +4480,200 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         
         print(f"Suggestions : {answer}")
         
-        return answer, pie_chart_data, bar_chart_data, combined_chart_data
+        return answer, pie_chart_data, bar_chart_data, combined_chart_data ,chart_data
             
     except Exception as e:
         print(f"Error generating suggestions: {e}")
         return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 500
 
 
-def get_chart_data_from_llm(text):
+# def extract_visualization_data_from_text(text):
+#     """
+#     Use an LLM to extract data for a pie chart, bar graph, and a table from the provided investment text.
+
+#     Args:
+#         text (str): The input investment text.
+
+#     Returns:
+#         dict: A dictionary containing data for the pie chart, bar graph, and investment strategy table.
+#     """
+#     # LLM prompt to extract relevant data
+#     prompt = f"""
+#         You are a data analyst tasked with extracting structured data from the provided investment text. 
+#         Please extract the following information:
+
+#         1. **Investment Strategy Table**: Convert the "Investment Strategy and Allocation" section into a table with the following columns:
+#            - Type of Allocation
+#            - Description
+#            - Goal
+#            - Investment Types
+#            - How to Invest
+#            - Where to Invest
+#            - Allocation Range (%)
+
+#         2. **Pie Chart Data**: Extract labels and corresponding values (average of allocation range) for each investment strategy mentioned under "Investment Strategy and Allocation".
+
+#         3. **Bar Graph Data**: From the "Returns Overview" section, extract:
+#            - Minimum Expected Annual Return in %
+#            - Maximum Expected Annual Return in %
+#            - Minimum Expected Growth in Dollars (over the given time period)
+#            - Maximum Expected Growth in Dollars (over the given time period)
+
+#         Return the data as a JSON object with the following keys:
+#         - "table_data": [{{
+#             "Type of Allocation": "...",
+#             "Description": "...",
+#             "Goal": "...",
+#             "Investment Types": "...",
+#             "How to Invest": "...",
+#             "Where to Invest": "...",
+#             "Allocation Range": "..."
+#           }}]
+#         - "pie_chart_data": [{{
+#             "label": "Type of Allocation (e.g., Long-term, Tactical, etc.)",
+#             "value": "Average Allocation Percentage"
+#           }}]
+#         - "bar_graph_data": {{
+#             "labels": ["Minimum Return", "Maximum Return"],
+#             "values": [
+#                 {{"percentage": "Minimum Expected Annual Return (%)", "dollars": "Minimum Expected Growth in Dollars"}},
+#                 {{"percentage": "Maximum Expected Annual Return (%)", "dollars": "Maximum Expected Growth in Dollars"}}
+#             ]
+#           }}
+
+#         ### Input Text:
+#         {text}
+#     """
+
+#     try:
+#         # Send the prompt to Gemini LLM
+#         model = genai.GenerativeModel("gemini-1.5-flash")
+#         response = model.generate_content(prompt)
+
+#         # Check for an empty or invalid response
+#         if not response.text.strip():
+#             raise ValueError("LLM returned an empty response.")
+
+#         print(f"LLM Response:\n{response.text}\n")
+
+#         # Clean and parse the LLM response
+#         try:
+#             visualization_data = json.loads(response.text)
+#         except json.JSONDecodeError:
+#             print("Attempting to clean and parse response...")
+#             # Ensure response is trimmed of leading/trailing whitespace
+#             cleaned_response = response.text.strip()
+
+#             # Validate if response has valid JSON structure
+#             if cleaned_response.startswith("{") and cleaned_response.endswith("}"):
+#                 visualization_data = json.loads(cleaned_response)
+#             else:
+#                 raise ValueError("LLM response is not properly formatted as JSON.")
+
+#         return visualization_data
+
+#     except json.JSONDecodeError as json_err:
+#         print(f"Error decoding LLM response as JSON: {json_err}")
+#         return {"error": "LLM response could not be decoded as JSON. Please check the format."}
+
+#     except Exception as e:
+#         print(f"Error extracting visualization data: {e}")
+#         return {"error": str(e)}
+
+def extract_visualization_data_from_text(text):
     """
-    Use an LLM to extract data for pie charts and bar graphs from the investment text.
+    Use an LLM to extract data for a pie chart, bar graph, and a table from the provided investment text.
 
     Args:
-        text (str): The investment text input.
+        text (str): The input investment text.
 
     Returns:
-        dict: A dictionary containing pie chart data and bar chart data, or an error message.
+        dict: A dictionary containing data for the pie chart, bar graph, and investment strategy table.
     """
     # LLM prompt to extract relevant data
     prompt = f"""
-        You are a data analyst. Extract the following data from the provided investment text:
+        You are a data analyst tasked with extracting structured data from the provided investment text. 
+        Please extract the following information:
 
-        1. A list for pie chart visualization, where each entry contains:
-        - Label: The name of the asset (e.g., "Stocks", "Growth ETFs").
-        - Value: The average percentage allocation for the asset.
+        1. **Investment Strategy Table**: Convert the "Investment Strategy and Allocation" section into a table with the following columns:
+           - Type of Allocation
+           - Description
+           - Goal
+           - Investment Types
+           - How to Invest
+           - Where to Invest
+           - Allocation Range (%)
 
-        2. A list for bar chart visualization, where each entry contains:
-        - Label: "Minimum Returns" and "Maximum Returns".
-        - Value: The percentage return for the respective category.
-        - Dollar Value: The growth in dollars for the respective category.
+        2. **Pie Chart Data**: Extract labels and corresponding values (average of allocation range) for each investment strategy mentioned under "Investment Strategy and Allocation".
 
-        Return the output as a JSON object with two keys:
-        - "pie_chart_data": [list of pie chart entries].
-        - "bar_chart_data": [list of bar chart entries].
+        3. **Bar Graph Data**: From the "Returns Overview" section, extract:
+           - Minimum Expected Annual Return in %
+           - Maximum Expected Annual Return in %
+           - Minimum Expected Growth in Dollars (over the given time period)
+           - Maximum Expected Growth in Dollars (over the given time period)
 
-        Here is the investment text:
+        Return the data as a JSON object with the following keys:
+        - "table_data": [{{
+            "Type of Allocation": "...",
+            "Description": "...",
+            "Goal": "...",
+            "Investment Types": "...",
+            "How to Invest": "...",
+            "Where to Invest": "...",
+            "Allocation Range": "..."
+          }}]
+        - "pie_chart_data": [{{
+            "label": "Type of Allocation (e.g., Long-term, Tactical, etc.)",
+            "value": "Average Allocation Percentage"
+          }}]
+        - "bar_graph_data": {{
+            "labels": ["Minimum Return", "Maximum Return"],
+            "values": [
+                {{"percentage": "Minimum Expected Annual Return (%)", "dollars": "Minimum Expected Growth in Dollars"}},
+                {{"percentage": "Maximum Expected Annual Return (%)", "dollars": "Maximum Expected Growth in Dollars"}}
+            ]
+          }}
+
+        ### Input Text:
         {text}
     """
 
     try:
         # Send the prompt to Gemini LLM
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
 
-        # Check if the response text is empty
+        # Check for an empty or invalid response
         if not response.text.strip():
-            raise ValueError("Empty response from LLM")
+            raise ValueError("LLM returned an empty response.")
 
-        # Attempt to parse the response text as JSON
-        try:
-            chart_data = json.loads(response.text)
-        except json.JSONDecodeError:
-            # Attempt to clean or transform the response if JSON decoding fails
-            print("Invalid JSON format in LLM response, attempting fallback...")
-            html_suggestions = markdown.markdown(response.text)
-            plain_text = markdown_to_text(html_suggestions)
-            chart_data = json.loads(plain_text)
+        print(f"LLM Response:\n{response.text}\n")
 
-        return chart_data
+        # Clean and parse the LLM response
+        
+        # try:
+        #     visualization_data = json.loads(response.text)
+        # except json.JSONDecodeError:
+        #     print("Attempting to clean and parse response...")
+        #     # Ensure response is trimmed of leading/trailing whitespace
+        #     cleaned_response = response.text.strip()
+
+        #     # Validate if response has valid JSON structure
+        #     if cleaned_response.startswith("{") and cleaned_response.endswith("}"):
+        #         visualization_data = json.loads(cleaned_response)
+        #     else:
+        #         raise ValueError("LLM response is not properly formatted as JSON.")
+
+        visualization_data = response.text
+        return visualization_data
+
+    except json.JSONDecodeError as json_err:
+        print(f"Error decoding LLM response as JSON: {json_err}")
+        return {"error": "LLM response could not be decoded as JSON. Please check the format."}
 
     except Exception as e:
-        print(f"Error fetching data from Gemini LLM: {e}")
+        print(f"Error extracting visualization data: {e}")
         return {"error": str(e)}
-
 
 
 # # api for generating suggestions with client id :
@@ -4590,7 +4718,7 @@ def personality_selected():
                 #     'data': client_data
                 # }), 200
                 
-                result,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions_using_clientid(investmentPersonality,
+                result,pie_chart_data,bar_chart_data,combined_chart_data,table_data = asyncio.run(make_suggestions_using_clientid(investmentPersonality,
                                                                                                                    clientName,client_data))
                 
                 htmlSuggestions = markdown.markdown(result)
@@ -4620,7 +4748,8 @@ def personality_selected():
                     "investmentSuggestions": answer,
                     "pieChartData": pie_chart_data,
                     "barChartData": bar_chart_data,
-                    "compoundedChartData":combined_chart_data
+                    "compoundedChartData":combined_chart_data,
+                    "table_data": table_data
                 }), 200
                 
             except s3.exceptions.NoSuchKey:
