@@ -88,7 +88,6 @@ from flask import Flask, request, jsonify, send_file
 import asyncio
 from flask_cors import CORS
 # app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 from config import config
 
@@ -97,11 +96,19 @@ env = os.getenv("FLASK_ENV", "development")
 app_config = config[env]
 
 app = Flask(__name__)
+# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+CORS(app, resources={r"/*": {"origins": "http://wealth-Management.mresult.com"}})
+
+
 # CORS(app, resources={r"/*": {"origins": "*"}})
-CORS(app, resources={r"/*": {"origins": [
-    "http://192.168.29.254:51866",
-    "http://wealth-Management.mresult.com"
-]}})
+
+# CORS(app, resources={r"/*": {"origins": [
+#     "http://localhost:3000",
+#     "http://192.168.29.254:51866",
+#     "http://wealth-Management.mresult.com"
+# ]}})
+
 app.config.from_object(app_config)
 
 print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
@@ -117,14 +124,14 @@ def get_data():
     }
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
-    response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-    print("cors aheaders updated ")
-    return response
+# @app.after_request
+# def add_cors_headers(response):
+#     response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
+#     response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
+#     response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+#     response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+#     print("cors aheaders updated ")
+#     return response
 
 
 # # AWS keys
