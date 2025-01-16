@@ -88,7 +88,6 @@ from flask import Flask, request, jsonify, send_file
 import asyncio
 from flask_cors import CORS
 # app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 from config import config
 
@@ -97,11 +96,22 @@ env = os.getenv("FLASK_ENV", "development")
 app_config = config[env]
 
 app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": "*"}})
-CORS(app, resources={r"/*": {"origins": [
-    "http://192.168.29.254:51866",
-    "http://wealth-Management.mresult.com"
-]}})
+CORS(app)
+
+@app.after_request
+def set_cors_headers(response):
+    """
+    Add dynamic CORS headers to the response after every request.
+    """
+    origin = request.headers.get('Origin', '*')  # Extract the Origin header
+    response.headers['Access-Control-Allow-Origin'] = origin  # Dynamically set the allowed origin
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    print(f"Set CORS headers for Origin: {origin}")
+    return response
+
+# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
 app.config.from_object(app_config)
 
 print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
