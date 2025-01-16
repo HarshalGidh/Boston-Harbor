@@ -81,6 +81,33 @@ USE_AWS = True  # Set to False to use local storage
 import boto3
 load_dotenv()
 
+from flask import Flask, request, jsonify
+
+# app = Flask(__name__)
+from flask import Flask, request, jsonify, send_file
+import asyncio
+from flask_cors import CORS
+# app = Flask(__name__)
+# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+from config import config
+
+# Load the environment
+env = os.getenv("FLASK_ENV", "development")
+app_config = config[env]
+
+app = Flask(__name__)
+app.config.from_object(app_config)
+
+
+@app.route('/api/endpoint', methods=['GET'])
+def get_data():
+    return {
+        "base_url": app.config['BASE_URL'],
+        "message": f"Running in {env} mode",
+        "debug": app.config['DEBUG']
+    }
+
 # # AWS keys
 aws_access_key = os.getenv('aws_access_key')
 aws_secret_key = os.getenv('aws_secret_key')
@@ -241,14 +268,6 @@ def list_s3_keys(bucket_name, prefix=""):
 
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-from flask import Flask, request, jsonify
-
-# app = Flask(__name__)
-from flask import Flask, request, jsonify, send_file
-import asyncio
-from flask_cors import CORS
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 # Configure generativeai with your API key
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -8159,7 +8178,7 @@ def actual_vs_predicted():
         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
         portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
 
-        # Load previously predicted line chart data
+        # Load previously predicted current quarter line chart data
         if USE_AWS:
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
@@ -8441,6 +8460,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             Investor Personality: {investor_personality}
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
+            Daily Changes So far (Fluctuations): {raw_daily_changes_data}
             Portfolio Daily Dates : {sorted_actual_dates}
             Portfolio Daily Returns: {actual_line_chart_data}
                      
@@ -8448,6 +8468,9 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
             If Provided try to align the returns with what the current daily returns are dont give unrealistic returns.If returns are in negative showcase that and give the predictions in that negative range if their returns dont seem to go positive only after you analyze all the information.
             If the Provided Daily Returns are very high then see if they can sustain these returns and try to predict as per the current daily returns after you analyze all the information.
+            Try to align your Predictions with what the current daily returns are so that the predictions meet the Actual Data Chnages.
+            Your Predictions should try to capture the Actual Daily Changes Data and match the Fluctuations seen so far.
+            For as many Actual Daily Changes we already have in the {date_intervals} capture all of those in our Predictions Range so that our future Prediction will align with the current chnages.Whatver trends you see with the Daily Changes see if you can Predict the values in that trend if possible.
             Based on the given provided information :
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
@@ -9358,6 +9381,32 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             asset['stationarity'] = stationarity
             asset['forecasted_returns'] = forecasted_returns.tolist()
             asset['simulated_returns'] = simulated_returns
+        
+        
+        # Load previously predicted current quarter line chart data
+        
+         # Get current quarter
+        current_quarter = get_current_quarter()
+
+        # Define file paths and S3 keys
+        predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+        
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+                predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
+            except s3.exceptions.NoSuchKey:
+                # Create Prediction Line Chart as it wasn't created before
+                # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                print("\nSaving the Predictions Line Chart\n")
+                # save_predictions(client_id, current_quarter, predicted_line_chart_data)
+        else:
+            predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+            if not predicted_line_chart_data:
+                return jsonify({"message": f"No previous predictions found for this client."}), 404
+
             
          # Process daily changes data
         daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
@@ -9458,10 +9507,12 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
             Overall Daily Changes Data : {raw_daily_changes_data}
+            Current Quarters Predictions Data : {predicted_line_chart_data}
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
+            You Predictions Should start from where the Current Quarters Predictions Data {predicted_line_chart_data} Ended so that we can have a continous Predcition Line Charts
 
            Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
@@ -12018,5 +12069,9 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0',debug=True)
+
+
+if __name__ == "__main__":
+    app.run(debug=app_config.DEBUG)
