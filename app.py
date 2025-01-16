@@ -117,14 +117,14 @@ def get_data():
     }
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
-    response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-    print("cors aheaders updated ")
-    return response
+# @app.after_request
+# def add_cors_headers(response):
+#     response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
+#     response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
+#     response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+#     response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+#     print("cors aheaders updated ")
+#     return response
 
 
 # # AWS keys
