@@ -96,19 +96,61 @@ env = os.getenv("FLASK_ENV", "development")
 app_config = config[env]
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Prevent Flask from caching static responses
+app.config['USE_ETAGS'] = False  # Disable ETag generation globally
+
 CORS(app)
 
+# @app.after_request
+# def set_cors_headers(response):
+#     """
+#     Add dynamic CORS headers to the response after every request.
+#     """
+#     origin = request.headers.get('Origin', '*')  # Extract the Origin header
+#     response.headers['Access-Control-Allow-Origin'] = origin  # Dynamically set the allowed origin
+#     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+#     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+#     print(f"Set CORS headers for Origin: {origin}")
+#     return response
+
 @app.after_request
-def set_cors_headers(response):
+def set_cors_and_cache_control_headers(response):
     """
-    Add dynamic CORS headers to the response after every request.
+    Add dynamic CORS headers and disable caching for all responses.
     """
-    origin = request.headers.get('Origin', '*')  # Extract the Origin header
-    response.headers['Access-Control-Allow-Origin'] = origin  # Dynamically set the allowed origin
+    # Dynamically capture the Origin header
+    origin = request.headers.get('Origin', '*') 
+    print(f"[DEBUG] Request Headers: {request.headers}")
+    print(f"[DEBUG] Request Method: {request.method}") 
+    response.headers['Access-Control-Allow-Origin'] = origin  # Set dynamic CORS origin
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+    # Disable caching completely
+    response.cache_control.no_cache = True
+    response.cache_control.max_age = 0
+    response.cache_control.must_revalidate = True
+    response.headers["Expires"] = "0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["ETag"] = ""  # Disable ETag to avoid 304 Not Modified responses
+
+    # Debugging output
     print(f"Set CORS headers for Origin: {origin}")
+    print(f"Cache-Control headers set to disable caching.")
+    
     return response
+
+# Example route to test
+@app.route('/test-endpoint', methods=['GET'])
+def test_endpoint():
+    """
+    Example endpoint to verify CORS and caching headers.
+    """
+    data = {"message": "CORS and caching headers test successful."}
+    response = jsonify(data)
+    return response
+
 
 # CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
@@ -117,6 +159,7 @@ app.config.from_object(app_config)
 print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
 print(f"BASE_URL: {os.getenv('BASE_URL')}")
 print(f"DEBUG: {os.getenv('DEBUG')}")
+
 
 @app.route('/api/endpoint', methods=['GET'])
 def get_data():
