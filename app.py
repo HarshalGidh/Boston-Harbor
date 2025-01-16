@@ -81,6 +81,52 @@ USE_AWS = True  # Set to False to use local storage
 import boto3
 load_dotenv()
 
+from flask import Flask, request, jsonify
+
+# app = Flask(__name__)
+from flask import Flask, request, jsonify, send_file
+import asyncio
+from flask_cors import CORS
+# app = Flask(__name__)
+# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+from config import config
+
+# Load the environment
+env = os.getenv("FLASK_ENV", "development")
+app_config = config[env]
+
+app = Flask(__name__)
+# CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": [
+    "http://192.168.29.254:51866",
+    "http://wealth-Management.mresult.com"
+]}})
+app.config.from_object(app_config)
+
+print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
+print(f"BASE_URL: {os.getenv('BASE_URL')}")
+print(f"DEBUG: {os.getenv('DEBUG')}")
+
+@app.route('/api/endpoint', methods=['GET'])
+def get_data():
+    return {
+        "base_url": app.config['BASE_URL'],
+        "message": f"Running in {env} mode",
+        "debug": app.config['DEBUG']
+    }
+
+
+# @app.after_request
+# def add_cors_headers(response):
+#     response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
+#     response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
+#     response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+#     response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+#     print("cors aheaders updated ")
+#     return response
+
+
 # # AWS keys
 aws_access_key = os.getenv('aws_access_key')
 aws_secret_key = os.getenv('aws_secret_key')
@@ -93,7 +139,7 @@ personality_assessment_folder = os.getenv('personality_assessment_folder')
 login_folder = os.getenv('login_folder')
 daily_changes_folder = os.getenv('daily_changes_folder')
 signUp_user_folder = os.getenv('signUp_user_folder')
-
+PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
 # Connecting to Amazon S3
 s3 = boto3.client(
     's3',
@@ -116,11 +162,78 @@ def list_s3_keys(bucket_name, prefix=""):
 
 # Call the function
 # list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
-list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
 # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
 
 ####################################################################################
+
+# Download the files :
+
+# def download_json_file(bucket_name, file_key, local_file_path):
+#     """
+#     Downloads a JSON file from an S3 bucket to a local file.
+
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) of the file in the bucket
+#     :param local_file_path: Path to save the file locally
+#     """
+#     try:
+#         # Download the file
+#         s3.download_file(bucket_name, file_key, local_file_path)
+#         print(f"File '{file_key}' successfully downloaded to '{local_file_path}'.")
+        
+#         # Load the JSON content to confirm it's valid
+#         with open(local_file_path, 'r') as file:
+#             data = json.load(file)
+#             print("Downloaded JSON content:", data)
+#         return data
+    
+#     except Exception as e:
+#         print(f"Error downloading file: {e}")
+#         return None
+
+# # Example usage 
+# local_file_path = "local_data\orders\orders_SF3648.json"
+# downloaded_data = download_json_file(S3_BUCKET_NAME,"order_list_folder/SF3648_orders.json", local_file_path)
+
+# downloaded_data = download_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
+
+# print(downloaded_data)
+
+######################################################################################
+
+# Upload File :
+
+# def upload_json_file(bucket_name, file_key, local_file_path):
+#     """
+#     Uploads a JSON file from the local file system to an S3 bucket.
+
+#     :param bucket_name: Name of the S3 bucket
+#     :param file_key: Key (path) to upload the file to in the bucket
+#     :param local_file_path: Path of the file locally to be uploaded
+#     """
+#     try:
+#         # Upload the file
+#         s3.upload_file(local_file_path, bucket_name, file_key, ExtraArgs={'ContentType': 'application/json'})
+#         print(f"File '{local_file_path}' successfully uploaded to '{file_key}' in bucket '{bucket_name}'.")
+    
+#     except Exception as e:
+#         print(f"Error uploading file: {e}")
+
+# # Example usage
+# local_file_path = "local_data\portfolios\portfolio_SF3648.json"
+# upload_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
+
+# local_file_path = "local_data\orders\orders_SF3648.json"
+# upload_json_file(S3_BUCKET_NAME, "order_list_folder/SF3648_orders.json", local_file_path)
+
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+
+
+######################################################################################
+
+
 # delete folders/files from bucket :
 
 
@@ -128,6 +241,14 @@ list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 # S3 bucket and file details
 
 # FILE_KEY = "order_list_folder/JM4162_orders.json"
+# FILE_KEY = "order_list_folder/JR5059_orders.json"
+# FILE_KEY = "portfolio_list_folder//JM4162.json"
+# FILE_KEY = "portfolio_list_folder//JR5059.json"
+
+# FILE_KEY = "order_list_folder/SF3648_orders.json" 
+
+# FILE_KEY = "order_list_folder/SF3648_orders.json" 
+
 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
@@ -152,6 +273,9 @@ list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 # # Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
+# # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+
 
 
 # =------------------------------------------------------=
@@ -163,14 +287,6 @@ list_s3_keys(S3_BUCKET_NAME, order_list_folder)
 
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-from flask import Flask, request, jsonify
-
-# app = Flask(__name__)
-from flask import Flask, request, jsonify, send_file
-import asyncio
-from flask_cors import CORS
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 # Configure generativeai with your API key
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -3662,6 +3778,99 @@ def generate_chart_data(data):
 
     return pie_chart_data, bar_chart_data
 
+def generate_chart_data_for_assets():
+    # Investment Categories and Allocations
+    investment_data = {
+        "Growth-Oriented Investments": {
+            "Stocks": {"min": 30, "max": 40},
+            "ETFs": {"min": 15, "max": 20},
+            "Growth Stock Mutual Funds": {"min": 10, "max": 15},
+            "Real Estate Investment Trusts (REITs)": {"min": 10, "max": 15},
+            "Emerging Markets Stocks": {"min": 5, "max": 10},
+        },
+        "Conservative Investments": {
+            "High-Yield Savings Account": {"min": 5, "max": 10},
+            "Treasury Bonds": {"min": 5, "max": 10},
+        }
+    }
+
+    # Generate Pie Chart Data
+    labels = list(investment_data['Growth-Oriented Investments'].keys()) + \
+             list(investment_data['Conservative Investments'].keys())
+    max_allocations = [
+        investment_data['Growth-Oriented Investments'][label]['max'] for label in investment_data['Growth-Oriented Investments']
+    ] + [
+        investment_data['Conservative Investments'][label]['max'] for label in investment_data['Conservative Investments']
+    ]
+    min_allocations = [
+        investment_data['Growth-Oriented Investments'][label]['min'] for label in investment_data['Growth-Oriented Investments']
+    ] + [
+        investment_data['Conservative Investments'][label]['min'] for label in investment_data['Conservative Investments']
+    ]
+
+    num_labels = len(labels)
+    dynamic_colors = generate_colors(num_labels)
+    dynamic_pie_chart_colors = generate_colors(len(labels))
+
+    # Pie Chart Data
+    pie_chart_data = {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': max_allocations,
+            'backgroundColor': dynamic_pie_chart_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+    # Bar Chart Data
+    bar_chart_data = {
+        'labels': labels,
+        'datasets': [
+            {
+                'label': 'Allocation for Min Returns (%)',
+                'data': min_allocations,
+                'backgroundColor': 'skyblue'
+            },
+            {
+                'label': 'Allocation for Max Returns (%)',
+                'data': max_allocations,
+                'backgroundColor': 'lightgreen'
+            }
+        ]
+    }
+
+    return pie_chart_data, bar_chart_data
+
+
+def generate_colors(num_colors):
+    # Generate distinct, vibrant colors in hex format
+    return ["#" + ''.join(random.choices('0123456789ABCDEF', k=6)) for _ in range(num_colors)]
+
+
+def generate_pie_chart_data(data):
+    labels = list(data['Growth-Oriented Investments'].keys()) + list(data['Conservative Investments'].keys())
+    max_allocations = [
+        data['Growth-Oriented Investments'][label]['max'] for label in data['Growth-Oriented Investments']
+    ] + [
+        data['Conservative Investments'][label]['max'] for label in data['Conservative Investments']
+    ]
+
+    # Generate dynamic colors for the pie chart
+    dynamic_colors = generate_colors(len(labels))
+    
+    pie_chart_data = {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': max_allocations,
+            'backgroundColor': dynamic_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+    return pie_chart_data
+
 
 #new retrieval_chain code :
 # async def generate_prompt_template(retriever,investmentPersonality,clientName,client_data):
@@ -3890,124 +4099,146 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         )
         clientName = clientName
         # Define the prompt
-        prompt_template = """ 
-                                You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
-                                Use the following instructions to ensure consistent output:
-                                ---
+        
+        # Previous Version :
+        
+        # prompt_template = """
+        #                     You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
+        #                     so that the client can reach their financial goals while considering their financial conditions and market trends. 
+        #                     Use the following instructions to ensure consistent and comprehensive output:
+        #                     ---
 
-                                ### Required Output Format:
-                                
-                                #### Client Financial Details:
-                                - **Client Name**: """ + clientName + """
-                                - **Assets**:
-                                - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
-                                - **Liabilities**:
-                                - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
-                                - **Other Details**:
-                                - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
-                                - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
-                                - **Investment Period** `Z years`
-                                
-                                #### Investment Allocation:
-                                Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
-                                - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
-                                - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
-                                - **Target**: Describe the purpose of the investment.
-                                - **How to Invest**: Provide instructions on how to invest in this asset.
-                                - **Where to Invest**: Specify platforms or tools for making the investment.
+        #                     ### Required Output Format:
 
-                                **Example**:
-                                **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
-                                - **Stocks**: `20% - 30%`
-                                - **ETFs**: `10% - 15%`
-                                - **Mutual Funds**: `10% - 20%`
-                                - **Cryptocurrency**: ` 5% - 10%`
-                                - **Real Estates or REITS**: `10% - 20%`
-                                - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
-                                - *How to Invest*: Provide information on how to invest in which market 
-                                - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
-                                
-                                **Conservative Investments (Minimum X% - Maximum Y%) **:
-                                - **High-Yield Savings Account**: `30% - 40%`
-                                - **Bonds**: `10% - 20%`
-                                - **Commodities**: `5% - 10%`
-                                - **Cash**: `5% - 10%`
-                                - *Target*: Maintain liquidity for emergencies.
-                                - *How to Invest*: Provide information on how to invest.
-                                - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+        #                     #### **Investment Allocation:**
+        #                     Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+        #                     - **Investment Type:** Specify the type of investment (e.g., "Index Funds", "US Treasury Bonds").
+        #                     - **Allocation Range:** Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+        #                     - **Target:** Describe the purpose and goal of the investment.
+        #                     - **How to Invest:** Provide practical instructions for investing in this asset.
+        #                     - **Where to Invest:** List platforms or tools for making the investment, and provide **6-7 specific recommendations per asset class** for diversity and balance.
 
-                                #### Returns Overview:
-                                - **Minimum Expected Annual Return**: `X% - Y%`
-                                - **Maximum Expected Annual Return**: `X% - Y%`
-                                - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
-                                - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
-                                - **Time Horizon**: `Z years`
+        #                     #### Example Output:
+        #                     **Growth-Oriented Investments (Minimum X% - Maximum Y%)**:
+        #                     - **Stocks:** `20% - 30%`
+        #                     - *Target:* High growth potential with sector diversification.
+        #                     - *How to Invest:* Direct purchases via a brokerage account; consider market trends.
+        #                     - *Where to Invest:* Examples include large-cap stocks like Apple (AAPL), Tesla (TSLA), emerging market stocks, and small-cap stocks.
+        #                     - **ETFs:** `10% - 15%`
+        #                     - *Target:* Diversified exposure to specific sectors.
+        #                     - *How to Invest:* Invest in sector-specific or international ETFs through platforms like Fidelity or Vanguard.
+        #                     - *Where to Invest:* SPDR S&P 500 ETF (SPY), iShares Core MSCI Emerging Markets ETF (IEMG).
 
-                                ---
+        #                     #### Returns Overview:
+        #                     - **Minimum Expected Annual Return:** `X% - Y%`
+        #                     - **Maximum Expected Annual Return:** `X% - Y%`
+        #                     - **Minimum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+        #                     - **Maximum Expected Growth in Dollars:** `$X - $Y` (based on the time horizon)
+        #                     - **Time Horizon:** `Z years`
 
-                                ### Example Output:
-                                
-                                #### Client Financial Details:
-                                | Asset Type          | Current Value ($) | Annual Contribution ($) |
-                                |----------------------|-------------------|--------------------------|
-                                | 401(k), 403(b), 457  | 300               | 15                       |
-                                | Traditional IRA      | 200               | 15                       |
-                                | Roth IRA             | 500               | 28                       |
-                                | Cash/Bank Accounts   | 500,000           | 30,000                   |
-                                | Real Estate          | 1,000,000         | -                        |
-                                | Total Assets Value   | 1,501,000         | -                        |
+        #                     ---
 
-                                | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
-                                |---------------------|-------------|--------------------|----------------------|
-                                | Mortgage            | 1,000       | 10                | 100                  |
-                                | Credit Card         | 400         | 8                 | 400                  |
-                                | Other Loans         | 500         | 6                 | 100                  |
-                                | Total Liabilities   | 1,900       | -                 | -                    |
-                                
-                                | Investrment Period | 3 years |
-                                
-                                **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
-                                - **Stocks**: `20% - 30%`
-                                - **ETFs**: `5% - 10%`
-                                - **Mutual Funds**: `5% - 20%`
-                                - **Cryptocurrency**: ` 5% - 10%`
-                                - **Real Estates or REITS**: `5% - 10%`
-                                - *Target*: Long-term growth potential aligned with the market.
-                                - *How to Invest*: Purchase low-cost index funds.
-                                - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+        #                     ### Example Output Format:
+        #                     **Investment Allocation:**
 
-                                **Conservative Investments (Minimum 40% - Maximum 70%)**:
-                                - **High-Yield Savings Account**: `20% - 30%`
-                                - **Bonds**: `10% - 20%`
-                                - **Commodities**: `5% - 10%`
-                                - **Cash**: `5% - 10%`
-                                - *Target*: Maintain liquidity for emergencies.
-                                - *How to Invest*: Deposit funds into an FDIC-insured account.
-                                - *Where to Invest*: Ally Bank, Capital One 360.
+        #                     **Growth-Oriented Investments (Minimum 70% - Maximum 90%)**:
+        #                     - **Stocks:** `20% - 30%`
+        #                     - *Target:* Capital appreciation from high-growth stocks.
+        #                     - *How to Invest:* Purchase through brokerage accounts like Fidelity.
+        #                     - *Where to Invest:* Tesla (TSLA), NVIDIA (NVDA), Apple (AAPL).
 
-                                #### Returns Overview:
-                                - **Minimum Expected Annual Return**: `4% - 6%`
-                                - **Maximum Expected Annual Return**: `8% - 15%`
-                                - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
-                                - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
-                                - **Time Horizon**: `3 years`
+        #                     **Conservative Investments (Minimum 10% - Maximum 30%)**:
+        #                     - **High-Yield Savings Account:** `5% - 10%`
+        #                     - *Target:* Maintain liquidity for emergencies.
+        #                     - *How to Invest:* Deposit funds into FDIC-insured accounts.
+        #                     - *Where to Invest:* Ally Bank, Marcus by Goldman Sachs.
 
-                                ---
+        #                     #### Returns Overview:
+        #                     - **Minimum Expected Annual Return:** `6% - 8%`
+        #                     - **Maximum Expected Annual Return:** `12% - 18%`
+        #                     - **Minimum Expected Growth in Dollars:** `$5,000 - $8,000`
+        #                     - **Maximum Expected Growth in Dollars:** `$15,000 - $25,000`
+        #                     - **Time Horizon:** `5 years`
 
-                                Ensure the output strictly follows this structure.
+        #                     ---
 
+        #                     Ensure the output strictly follows this structure.
 
-                            ### Rationale for Investment Suggestions:
-                            Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+        #                     ### **Rationale for Investment Suggestions:**
+        #                     Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and market trends.
 
-                            ---
-                            <context>
-                            {context}
-                            </context>
-                            Question: {input}
+        #                     ---
 
+        #                     <context>
+        #                     {context}
+        #                     </context>
+        #                     Question: {input}
+        #                     """
+        
+        prompt_template =     """You are a Financial Advisor tasked with creating responsible and detailed investment suggestions for a client based on their investment personality: """ + investmentPersonality + """
+            so that the client can reach their financial goals while considering their financial conditions and market trends. 
+            Use the following instructions to ensure consistent and comprehensive output:
+            ---
+
+            ### Required Output Format:
+
+            #### **Investment Strategy and Allocation:**
+            Provide a detailed investment strategy categorized into **Strategic Asset Allocation**, **Tactical Asset Allocation**, and **Dynamic Asset Allocation**. For each category:
+            - **Type of Allocation:** Briefly explain whether it is long-term, short-term, or adaptable.
+            - **Description:** Summarize the key focus of the allocation (e.g., "Long-Term Asset Selection Based on Expected Returns and Risk Tolerance").
+            - **Goal:** Describe the primary goal of the allocation (e.g., "Maximize Returns While Minimizing Risk").
+            - **Investment Types:** Recommend specific types of investments (e.g., stocks, ETFs, bonds).
+            - **How to Invest:** Provide detailed steps for how the client can allocate their funds effectively based on the type of allocation.
+            - **Where to Invest:** Suggest platforms, tools, or specific examples for implementing these strategies, ensuring a variety of recommendations for each asset class (6-7 examples per type).
+            - **Allocation Range:** Specify minimum and maximum percentage allocations for each type of investment.
+
+            #### Example Output:
+            **Strategic Asset Allocation**:
+            - *Type of Allocation:* Long-term.
+            - *Description:* Focus on long-term asset selection based on expected returns and risk tolerance.
+            - *Goal:* Maximize returns while minimizing risk.
+            - *Investment Types:* Index funds, growth-oriented ETFs, large-cap stocks.
+            - *How to Invest:* Invest in well-diversified portfolios via brokerage accounts like Fidelity or Vanguard.
+            - *Where to Invest:* Examples include SPDR S&P 500 ETF (SPY), Vanguard Total Stock Market ETF (VTI), or Apple (AAPL).
+            - *Allocation Range:* 50%-70%.
+
+            **Tactical Asset Allocation**:
+            - *Type of Allocation:* Short-term.
+            - *Description:* Short-term adjustments to asset allocation based on market conditions.
+            - *Goal:* Maintain long-term strategy while exploiting short-term opportunities.
+            - *Investment Types:* Sector-specific ETFs, emerging market stocks, alternative investments.
+            - *How to Invest:* Monitor market trends and make strategic adjustments through tools like Bloomberg Terminal or brokerage accounts.
+            - *Where to Invest:* Examples include Invesco QQQ ETF, iShares MSCI Emerging Markets ETF, or Tesla (TSLA).
+            - *Allocation Range:* 20%-30%.
+
+            **Dynamic Asset Allocation**:
+            - *Type of Allocation:* Adaptive.
+            - *Description:* Ongoing adjustments based on market conditions and risk tolerance changes.
+            - *Goal:* Maintain strategy while adapting to changing conditions.
+            - *Investment Types:* Balanced funds, diversified mutual funds, inflation-protected securities.
+            - *How to Invest:* Regularly review and rebalance portfolio using platforms like Charles Schwab or Wealthfront.
+            - *Where to Invest:* Examples include Vanguard Balanced Index Fund (VBIAX), TIPS (Treasury Inflation-Protected Securities), or Fidelity Freedom Funds.
+            - *Allocation Range:* 10%-20%.
+
+            #### Returns Overview:
+            - **Minimum Expected Annual Return:** Specify a range (e.g., "X% - Y%").
+            - **Maximum Expected Annual Return:** Specify a range (e.g., "X% - Y%").
+            - **Minimum Expected Growth in Dollars:** Specify a dollar range (e.g., "$X - $Y").
+            - **Maximum Expected Growth in Dollars:** Specify a dollar range (e.g., "$X - $Y").
+            - **Time Horizon:** Specify a time frame for the investment strategy (e.g., "Z years").
+
+            ---
+
+            ### **Rationale for Investment Suggestions:**
+            Provide a detailed explanation of why these suggestions align with the client’s financial personality, goals, and current market trends.
+
+            ---
+
+            <context>
+            {context}
+            </context>
+            Question: {input}
         """
-                
         
         print("Prompt Created Successfully")
                 
@@ -4031,7 +4262,177 @@ async def generate_prompt_with_retriever(retriever, investmentPersonality, clien
         print(f"Error in generating prompt or retrieval chain: {e}")
         return None
 
+# V -1 : with client table 
+
+# async def generate_prompt_with_retriever(retriever, investmentPersonality, clientName):
+#     try:
+#         llm = ChatGoogleGenerativeAI(
+#             model="gemini-1.5-flash",
+#             temperature=0.45,
+#             top_p=0.85,
+#             google_api_key=GOOGLE_API_KEY
+#         )
+#         clientName = clientName
+#         # Define the prompt
+#         prompt_template = """ 
+#                                 You are a Financial Advisor tasked with creating responsible investment suggestions for a client based on their investment personality : """ + investmentPersonality +   "\n" + """ so that the client can reach their Financial Goals, based on their Financial Conditions.
+#                                 Use the following instructions to ensure consistent output:
+#                                 ---
+
+#                                 ### Required Output Format:
+                                
+#                                 #### Client Financial Details:
+#                                 - **Client Name**: """ + clientName + """
+#                                 - **Assets**:
+#                                 - List all asset types, their current values, and annual contributions in a tabular format (columns: "Asset Type", "Current Value", "Annual Contribution").
+#                                 - **Liabilities**:
+#                                 - List all liability types, their balances, interest rates, and monthly payments in a tabular format (columns: "Liability Type", "Balance", "Interest Rate", "Monthly Payment").
+#                                 - **Other Details**:
+#                                 - Retirement plan details, income sources, and goals should be listed in a clear and concise format.
+#                                 - Client's Financial Condition : Analyze the Details and mention the Client's Financial Condition as : Stable/ Currently Stable / Unstable.
+#                                 - **Investment Period** `Z years`
+                                
+#                                 #### Investment Allocation:
+#                                 Split investments into **Growth-Oriented Investments** and **Conservative Investments**. Ensure each category includes:
+#                                 - **Investment Type**: Specify the investment type (e.g., "Index Funds", "US Treasury Bonds").
+#                                 - **Allocation Range**: Specify minimum and maximum allocation percentages (e.g., `10% - 20%`).
+#                                 - **Target**: Describe the purpose of the investment.
+#                                 - **How to Invest**: Provide instructions on how to invest in this asset.
+#                                 - **Where to Invest**: Specify platforms or tools for making the investment.
+
+#                                 **Example**:
+#                                 **Growth-Oriented Investments (Minimum X% - Maximum Y%) **:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `10% - 15%`
+#                                 - **Mutual Funds**: `10% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `10% - 20%`
+#                                 - *Target*: Long-term growth potential aligned with the overall market performance tailored to fullfil Client's Financial Goals and manage his Financial Condition.
+#                                 - *How to Invest*: Provide information on how to invest in which market 
+#                                 - *Where to Invest*: Provide Information to buy which assets and how much to invest in terms of amount and percentage(%).Mention 5-6 assets.
+                                
+#                                 **Conservative Investments (Minimum X% - Maximum Y%) **:
+#                                 - **High-Yield Savings Account**: `30% - 40%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Provide information on how to invest.
+#                                 - *Where to Invest*: Mention where to invest and how much to allocate in terms of money and percentage(%). Mention 5-6 assets.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `X% - Y%`
+#                                 - **Maximum Expected Annual Return**: `X% - Y%`
+#                                 - **Minimum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Maximum Expected Growth in Dollars**: `$X - $Y` (based on the time horizon)
+#                                 - **Time Horizon**: `Z years`
+
+#                                 ---
+
+#                                 ### Example Output:
+                                
+#                                 #### Client Financial Details:
+#                                 | Asset Type          | Current Value ($) | Annual Contribution ($) |
+#                                 |----------------------|-------------------|--------------------------|
+#                                 | 401(k), 403(b), 457  | 300               | 15                       |
+#                                 | Traditional IRA      | 200               | 15                       |
+#                                 | Roth IRA             | 500               | 28                       |
+#                                 | Cash/Bank Accounts   | 500,000           | 30,000                   |
+#                                 | Real Estate          | 1,000,000         | -                        |
+#                                 | Total Assets Value   | 1,501,000         | -                        |
+
+#                                 | Liability Type      | Balance ($) | Interest Rate (%) | Monthly Payment ($) |
+#                                 |---------------------|-------------|--------------------|----------------------|
+#                                 | Mortgage            | 1,000       | 10                | 100                  |
+#                                 | Credit Card         | 400         | 8                 | 400                  |
+#                                 | Other Loans         | 500         | 6                 | 100                  |
+#                                 | Total Liabilities   | 1,900       | -                 | -                    |
+                                
+#                                 | Investrment Period | 3 years |
+                                
+#                                 **Growth-Oriented Investments (Minimum 40% - Maximum 80%)**:
+#                                 - **Stocks**: `20% - 30%`
+#                                 - **ETFs**: `5% - 10%`
+#                                 - **Mutual Funds**: `5% - 20%`
+#                                 - **Cryptocurrency**: ` 5% - 10%`
+#                                 - **Real Estates or REITS**: `5% - 10%`
+#                                 - *Target*: Long-term growth potential aligned with the market.
+#                                 - *How to Invest*: Purchase low-cost index funds.
+#                                 - *Where to Invest*: Stocks such as NVIDIA,AAPL, Vanguard, LiteCoin.
+
+#                                 **Conservative Investments (Minimum 40% - Maximum 70%)**:
+#                                 - **High-Yield Savings Account**: `20% - 30%`
+#                                 - **Bonds**: `10% - 20%`
+#                                 - **Commodities**: `5% - 10%`
+#                                 - **Cash**: `5% - 10%`
+#                                 - *Target*: Maintain liquidity for emergencies.
+#                                 - *How to Invest*: Deposit funds into an FDIC-insured account.
+#                                 - *Where to Invest*: Ally Bank, Capital One 360.
+
+#                                 #### Returns Overview:
+#                                 - **Minimum Expected Annual Return**: `4% - 6%`
+#                                 - **Maximum Expected Annual Return**: `8% - 15%`
+#                                 - **Minimum Expected Growth in Dollars**: `$4,000 - $6,000`
+#                                 - **Maximum Expected Growth in Dollars**: `$8,000 - $15,000`
+#                                 - **Time Horizon**: `3 years`
+
+#                                 ---
+
+#                                 Ensure the output strictly follows this structure.
+
+
+#                             ### Rationale for Investment Suggestions:
+#                             Provide a detailed explanation of why these suggestions align with the client’s financial personality and goals.
+
+#                             ---
+#                             <context>
+#                             {context}
+#                             </context>
+#                             Question: {input}
+
+#         """
+                
+        
+#         print("Prompt Created Successfully")
+                
+
+#         llm_prompt = ChatPromptTemplate.from_template(prompt_template)
+
+#         document_chain = create_stuff_documents_chain(llm, llm_prompt)
+        
+#         combine_docs_chain = None  
+
+#         if retriever is not None :  
+#             retriever_chain = create_retrieval_chain(retriever,document_chain) 
+#             print("\nRetrieval chain created successfully\n")
+#             print(retriever_chain)
+#             return retriever_chain
+#         else:
+#             print("Failed to create retrieval chain: Missing retriever or combine_docs_chain")
+#             return None
+
+#     except Exception as e:
+#         print(f"Error in generating prompt or retrieval chain: {e}")
+#         return None
+
 # # using aws :
+
+def generate_pie_chart_data(labels, data_values):
+    num_labels = len(labels)
+    dynamic_colors = generate_colors(num_labels)
+
+    return {
+        'labels': labels,
+        'datasets': [{
+            'label': 'Investment Allocation',
+            'data': data_values,
+            'backgroundColor': dynamic_colors,
+            'hoverOffset': 4
+        }]
+    }
+
+
+
 
 async def make_suggestions_using_clientid(investmentPersonality, clientName, client_data):
     try:
@@ -4049,9 +4450,20 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
             raise Exception("Failed to create retrieval chain.")
 
         # Use the chain to generate a response
-        query = f"""Generate financial suggestions for the client {clientName} based on their investment personality: {investmentPersonality} 
-                tailored to their Financial Goals and Considering their Financial Situations. Suggest 6-7 assets per category with 6-7 examples per asset."""
+        # query = f"""Generate financial suggestions for the client {clientName} based on their investment personality: {investmentPersonality} 
+        #         tailored to their Financial Goals and Considering their Financial Situations. Suggest 6-7 assets per category with 6-7 examples per asset."""
         
+        query = f"""
+                Generate personalized and responsible financial investment suggestions for the client {clientName} based on their investment personality: {investmentPersonality}.
+                With the given Client Data : {client_data} Ensure suggestions align with the client's financial goals, current market trends, and financial conditions.
+                Provide a **diverse range of 6-7 assets per category** for each investment class (Growth-Oriented and Conservative) and give **6-7 specific examples per asset** with actionable guidance.
+                Include:
+                1. Allocation ranges, target purpose, and how-to-invest instructions for each asset.
+                2. Market insights and rationale for asset selection based on current trends.
+                3. A return overview for a realistic time horizon.
+                4. Suggestions for rebalancing strategies if market conditions change significantly.
+                """
+
         
         # response = retrieval_chain.invoke(query)
         response = retrieval_chain.invoke({"input": query})
@@ -4071,9 +4483,30 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         min_allocations = normalize_allocations(min_allocations)
         max_allocations = normalize_allocations(max_allocations)
 
-        bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
-    
-        print(f"Bar chart data: {bar_chart_data}")
+        # bar_chart_data,pie_chart_data = generate_chart_data(data_extracted)
+        bar_chart_data,_ = generate_chart_data_for_assets()
+        
+        # Get data for charts
+        chart_data = extract_visualization_data_from_text(answer)
+
+        # Output the result
+        # print(f"CHART DATA FROM LLM :\n{chart_data}\n")
+        print("Extracted Chart Data:\n{chart_data}\n")
+        # print(json.dumps(chart_data, indent=4))
+        
+        # Example data usage
+        labels = [
+            "Stocks", "ETFs", "Growth Stock Mutual Funds",
+            "Real Estate Investment Trusts (REITs)", "Emerging Markets Stocks",
+            "High-Yield Savings Account", "Treasury Bonds"
+        ]
+        data_values = [40, 20, 15, 15, 10, 10, 10]
+
+        # Generate Pie Chart Data
+        pie_chart_data = generate_pie_chart_data(labels, data_values)
+        print("Pie Chart Data:", pie_chart_data)
+        print(pie_chart_data)
+
         print(f"Pie chart data: {pie_chart_data}")
 
         
@@ -4085,15 +4518,202 @@ async def make_suggestions_using_clientid(investmentPersonality, clientName, cli
         
         print(f"Suggestions : {answer}")
         
-        return answer, pie_chart_data, bar_chart_data, combined_chart_data
+        return answer, pie_chart_data, bar_chart_data, combined_chart_data ,chart_data
             
     except Exception as e:
         print(f"Error generating suggestions: {e}")
         return jsonify({'message': f'Error occurred while generating suggestions: {e}'}), 500
 
 
+# def extract_visualization_data_from_text(text):
+#     """
+#     Use an LLM to extract data for a pie chart, bar graph, and a table from the provided investment text.
 
+#     Args:
+#         text (str): The input investment text.
+
+#     Returns:
+#         dict: A dictionary containing data for the pie chart, bar graph, and investment strategy table.
+#     """
+#     # LLM prompt to extract relevant data
+#     prompt = f"""
+#         You are a data analyst tasked with extracting structured data from the provided investment text. 
+#         Please extract the following information:
+
+#         1. **Investment Strategy Table**: Convert the "Investment Strategy and Allocation" section into a table with the following columns:
+#            - Type of Allocation
+#            - Description
+#            - Goal
+#            - Investment Types
+#            - How to Invest
+#            - Where to Invest
+#            - Allocation Range (%)
+
+#         2. **Pie Chart Data**: Extract labels and corresponding values (average of allocation range) for each investment strategy mentioned under "Investment Strategy and Allocation".
+
+#         3. **Bar Graph Data**: From the "Returns Overview" section, extract:
+#            - Minimum Expected Annual Return in %
+#            - Maximum Expected Annual Return in %
+#            - Minimum Expected Growth in Dollars (over the given time period)
+#            - Maximum Expected Growth in Dollars (over the given time period)
+
+#         Return the data as a JSON object with the following keys:
+#         - "table_data": [{{
+#             "Type of Allocation": "...",
+#             "Description": "...",
+#             "Goal": "...",
+#             "Investment Types": "...",
+#             "How to Invest": "...",
+#             "Where to Invest": "...",
+#             "Allocation Range": "..."
+#           }}]
+#         - "pie_chart_data": [{{
+#             "label": "Type of Allocation (e.g., Long-term, Tactical, etc.)",
+#             "value": "Average Allocation Percentage"
+#           }}]
+#         - "bar_graph_data": {{
+#             "labels": ["Minimum Return", "Maximum Return"],
+#             "values": [
+#                 {{"percentage": "Minimum Expected Annual Return (%)", "dollars": "Minimum Expected Growth in Dollars"}},
+#                 {{"percentage": "Maximum Expected Annual Return (%)", "dollars": "Maximum Expected Growth in Dollars"}}
+#             ]
+#           }}
+
+#         ### Input Text:
+#         {text}
+#     """
+
+#     try:
+#         # Send the prompt to Gemini LLM
+#         model = genai.GenerativeModel("gemini-1.5-flash")
+#         response = model.generate_content(prompt)
+
+#         # Check for an empty or invalid response
+#         if not response.text.strip():
+#             raise ValueError("LLM returned an empty response.")
+
+#         print(f"LLM Response:\n{response.text}\n")
+
+#         # Clean and parse the LLM response
+#         try:
+#             visualization_data = json.loads(response.text)
+#         except json.JSONDecodeError:
+#             print("Attempting to clean and parse response...")
+#             # Ensure response is trimmed of leading/trailing whitespace
+#             cleaned_response = response.text.strip()
+
+#             # Validate if response has valid JSON structure
+#             if cleaned_response.startswith("{") and cleaned_response.endswith("}"):
+#                 visualization_data = json.loads(cleaned_response)
+#             else:
+#                 raise ValueError("LLM response is not properly formatted as JSON.")
+
+#         return visualization_data
+
+#     except json.JSONDecodeError as json_err:
+#         print(f"Error decoding LLM response as JSON: {json_err}")
+#         return {"error": "LLM response could not be decoded as JSON. Please check the format."}
+
+#     except Exception as e:
+#         print(f"Error extracting visualization data: {e}")
+#         return {"error": str(e)}
+
+def extract_visualization_data_from_text(text):
+    """
+    Use an LLM to extract data for a pie chart, bar graph, and a table from the provided investment text.
+
+    Args:
+        text (str): The input investment text.
+
+    Returns:
+        dict: A dictionary containing data for the pie chart, bar graph, and investment strategy table.
+    """
+    # LLM prompt to extract relevant data
+    prompt = f"""
+        You are a data analyst tasked with extracting structured data from the provided investment text. 
+        Please extract the following information:
+
+        1. **Investment Strategy Table**: Convert the "Investment Strategy and Allocation" section into a table with the following columns:
+           - Type of Allocation
+           - Description
+           - Goal
+           - Investment Types
+           - How to Invest
+           - Where to Invest
+           - Allocation Range (%)
+
+        2. **Pie Chart Data**: Extract labels and corresponding values (average of allocation range) for each investment strategy mentioned under "Investment Strategy and Allocation".
+
+        3. **Bar Graph Data**: From the "Returns Overview" section, extract:
+           - Minimum Expected Annual Return in %
+           - Maximum Expected Annual Return in %
+           - Minimum Expected Growth in Dollars (over the given time period)
+           - Maximum Expected Growth in Dollars (over the given time period)
+
+        Return the data as a JSON object with the following keys:
+        - "table_data": [{{
+            "Type of Allocation": "...",
+            "Description": "...",
+            "Goal": "...",
+            "Investment Types": "...",
+            "How to Invest": "...",
+            "Where to Invest": "...",
+            "Allocation Range": "..."
+          }}]
+        - "pie_chart_data": [{{
+            "label": "Type of Allocation (e.g., Long-term, Tactical, etc.)",
+            "value": "Average Allocation Percentage"
+          }}]
+        - "bar_graph_data": {{
+            "labels": ["Minimum Return", "Maximum Return"],
+            "values": [
+                {{"percentage": "Minimum Expected Annual Return (%)", "dollars": "Minimum Expected Growth in Dollars"}},
+                {{"percentage": "Maximum Expected Annual Return (%)", "dollars": "Maximum Expected Growth in Dollars"}}
+            ]
+          }}
+
+        ### Input Text:
+        {text}
+    """
+
+    try:
+        # Send the prompt to Gemini LLM
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+
+        # Check for an empty or invalid response
+        if not response.text.strip():
+            raise ValueError("LLM returned an empty response.")
+
+        print(f"LLM Response:\n{response.text}\n")
+
+        # Clean and parse the LLM response
         
+        # try:
+        #     visualization_data = json.loads(response.text)
+        # except json.JSONDecodeError:
+        #     print("Attempting to clean and parse response...")
+        #     # Ensure response is trimmed of leading/trailing whitespace
+        #     cleaned_response = response.text.strip()
+
+        #     # Validate if response has valid JSON structure
+        #     if cleaned_response.startswith("{") and cleaned_response.endswith("}"):
+        #         visualization_data = json.loads(cleaned_response)
+        #     else:
+        #         raise ValueError("LLM response is not properly formatted as JSON.")
+
+        visualization_data = response.text
+        return visualization_data
+
+    except json.JSONDecodeError as json_err:
+        print(f"Error decoding LLM response as JSON: {json_err}")
+        return {"error": "LLM response could not be decoded as JSON. Please check the format."}
+
+    except Exception as e:
+        print(f"Error extracting visualization data: {e}")
+        return {"error": str(e)}
+
+
 # # api for generating suggestions with client id :
 
 @app.route('/personality-assessment', methods=['POST'])
@@ -4136,7 +4756,7 @@ def personality_selected():
                 #     'data': client_data
                 # }), 200
                 
-                result,pie_chart_data,bar_chart_data,combined_chart_data = asyncio.run(make_suggestions_using_clientid(investmentPersonality,
+                result,pie_chart_data,bar_chart_data,combined_chart_data,table_data = asyncio.run(make_suggestions_using_clientid(investmentPersonality,
                                                                                                                    clientName,client_data))
                 
                 htmlSuggestions = markdown.markdown(result)
@@ -4144,7 +4764,8 @@ def personality_selected():
                 
                 formatSuggestions = markdown_to_text(htmlSuggestions)
                 answer = markdown_table_to_html(formatSuggestions)
-                print(answer)
+                
+                # print(answer)
                  
                 # Return the Results :
                 
@@ -4160,10 +4781,13 @@ def personality_selected():
                 return jsonify({
                     "status": 200,
                     "message": "Success",
-                    "investmentSuggestions": formatSuggestions,
+                    "clientdata":client_data,
+                    # "investmentSuggestions": formatSuggestions,
+                    "investmentSuggestions": answer,
                     "pieChartData": pie_chart_data,
                     "barChartData": bar_chart_data,
-                    "compoundedChartData":combined_chart_data
+                    "compoundedChartData":combined_chart_data,
+                    "table_data": table_data
                 }), 200
                 
             except s3.exceptions.NoSuchKey:
@@ -4502,18 +5126,38 @@ def get_stock_data(ticker):
         cashflow = stock.cashflow
 
         # Step 2: Get News Related to Stock
-        news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
-        news_response = requests.get(news_url)
-        if news_response.status_code == 200:
-            news_data = news_response.json()
-            articles = news_data.get('articles', [])
-            if articles:
-                top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
-                data['Top_News'] = top_news
+        try:
+            # Fetch Stock News
+            news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+            news_response = requests.get(news_url, timeout=10)
+
+            if news_response.status_code == 200:
+                news_data = news_response.json()
+                articles = news_data.get('articles', [])
+                if articles:
+                    top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+                    data['Top_News'] = top_news
+                else:
+                    data['Top_News'] = "No news articles found."
             else:
-                data['Top_News'] = "No news articles found."
-        else:
-            data['Top_News'] = "Failed to fetch news articles."
+                error_msg = news_response.json().get("message", "Unknown error occurred.")
+                data['Top_News'] = f"Failed to fetch news articles. Error: {error_msg}"
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error fetching news: {e}")
+            data['Top_News'] = "Network error occurred while fetching news."
+
+        # news_url = f'https://newsapi.org/v2/everything?q={ticker}&apiKey={NEWS_API_KEY}&pageSize=3'
+        # news_response = requests.get(news_url)
+        # if news_response.status_code == 200:
+        #     news_data = news_response.json()
+        #     articles = news_data.get('articles', [])
+        #     if articles:
+        #         top_news = "\n\n".join([f"{i+1}. {article['title']} - {article['url']}" for i, article in enumerate(articles)])
+        #         data['Top_News'] = top_news
+        #     else:
+        #         data['Top_News'] = "No news articles found."
+        # else:
+        #     data['Top_News'] = "Failed to fetch news articles."
     except Exception as e:
         logging.info(f"Error occurred while collecting stock data: {e}")
         print(f"Error occurred while collecting stock data: :\n{e}")
@@ -4597,189 +5241,447 @@ def format_chat_history_for_llm(chat_history, new_query):
 
 from flask import jsonify, send_file, make_response
 
+
+
 @app.route('/analyze_stock', methods=['POST'])
 def analyze_stock():
+    """
+    Generate thorough stock analysis using LLM based on company details, market news, and performance.
+    """
     try:
+        # Fetch input data
         ticker = request.json.get('ticker')
-        company = request.json.get('company',None)
-        query = request.json.get('query')
-        chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
-        # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
+        company = request.json.get('company', None)
         
-        # Load chat history
-        chat_history = load_chat_history(chat_id)
+        if not ticker:
+            print("error : Ticker is required")
+            ticker = "AMGN"
+            # return jsonify({"error": "Ticker is required"}), 400
+        
+        # Fetch stock data
+        data, formatted_data, avg_close, file_path = get_stock_data(ticker)
+        
+        # Create analysis task prompt for LLM
+        task_prompt = f"""
+        You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
+        Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
+        Company news : {data.get('Top_News')}
+        You have enough data available to analyze the stock and no need to say lack of data or context.
 
-        # If no ticker provided in the request, try to extract it from the query
-        if not ticker and query:
-            # ticker = extract_ticker(query)
-            
-            ticker,company = extract_ticker(query)
-        
-        # If a valid ticker is found, fetch stock data
-        if ticker:
-            try:
-                data, formatted_data, avg_close,file_path = get_stock_data(ticker)
-                user_query = ticker  # Save the ticker as the user query
-            except Exception as e:
-                print("Error getting the stock data")
-                return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
-        else:
-            # No valid ticker found, generate generic suggestions
-            print("No valid ticker found in the query, generating general stock suggestions.")
-            data = {}  # No specific stock data need to check for news
-            formatted_data = ""  # No financial data
-            avg_close = 0
-            user_query = query  # Save the original user query if no ticker is found
+        **Company Name:** 
+        **PE Ratio:** {data.get('PE_Ratio')}
+        **EPS:** {data.get('EPS')}
+        **Book Value:** {data.get('Book_Value')}
+        **ROE:** {data.get('ROE')}
+        **ROCE:** {data.get('ROCE')}
+        **Order Booking:** Not Provided
+        **Revenue Growth:** {data.get('Revenue_Growth')}
+        **Earnings Growth:** {data.get('Earnings_Growth')}
+        **Today's Market Performance:** Closing Price - {data.get('Todays_Closing_Price')}, High Price - {data.get('Today_High_Price')}
 
-        # If query is empty, set a default query for stock analysis
-        # if not query:
-        #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
+        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
+        - Whether the stock is overvalued or undervalued.
+        - Predictions for its performance in the upcoming quarter.
+        - Recommendations for buying, holding, or selling the stock.
+        - Give your views on the KPIs in a table format for the Stock:
+        PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
+        """
         
-        
-
-        
-         # Save the user's query (ticker or original query) to chat history
-        if user_query:
-            chat_history.append({"user_query": user_query, "message": query})
-        
-        # Detect if this is a follow-up query based on previous history
-        if chat_history:
-            print("This is a follow-up query. Checking previous chat history.")
-            # The logic here could vary; you might compare the current query with past responses or check patterns
-            query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
-
-        # Save the user's query (ticker or original query) to chat history
-        chat_history.append({"user_query": user_query, "message": query})
-        
-      
-            
-        # Format the chat history for the LLM
-        try :
-            formatted_history = format_chat_history_for_llm(chat_history, query)
-        except Exception as e:
-            logging.error(f"Error while formatting chat history for LLM: {e}")
-            return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
-        
-        
-    except Exception as e :
-        logging.error(f"Error while fetching stock data: {e}")
-        return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
-    
-    try:
-        if ticker:
-            # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
-            #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-            #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
-            #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
-            #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
-            #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
-            #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
-            #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
-            #             Do not answer any questions unrelated to the stocks."""
-                        
-            task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
-                    Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-                    Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
-                    Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
-                    Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
-                    Advise whether to buy this stock now or not, with reasons for your advice."""
-        
-
-            query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
-        
-        else:
-            task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
-                        You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
-                        with any queries they might have.
-                        If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
-                        If the user has asked a follow up question then provide them a good response by also considering their previous queries
-                        Do not answer any questions unrelated to the stocks."""
-            
-            query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
-            print(f"The formatted chat history passed to llm is : {formatted_history}")
-            print(f"The query passed to llm is : {query}")
-         # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
-        #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
-        #             Predict the stock price range for the next week and provide reasons for your prediction.
-        #             Advise whether to buy this stock now or not, with reasons for your advice."""
-        
-        
-        # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+        # Generate content using LLM model
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(query)
-        print(response.text)
-        print(data)
-    
+        llm_response = model.generate_content(task_prompt)
+        # analysis_response = markdown_to_text(llm_response.text)
+        
+        # # Extract insights and suggestions from the response
+        # formatted_suggestions = markdown.markdown(analysis_response)
+        # print(f"\nOutput:\n{formatted_suggestions}")
+        
+        htmlSuggestions = markdown.markdown(llm_response.text)
+        logging.info(f"Suggestions for investor: \n{htmlSuggestions}")
+        
+        formatSuggestions = markdown_to_text(htmlSuggestions)
+        answer = markdown_table_to_html(formatSuggestions)
+        print(answer)
+        
+        stock_price_predictions_data = stock_price_predictions(ticker)
+        # Construct response object
+        response_data = {
+            "ticker": ticker,
+            "company": company,
+            "average_closing_price": f"${avg_close:.2f}",
+            "analysis": answer, # formatted_suggestions,
+            "news": data.get("Top_News", "No news available"),
+            "graph_url": f"https://finance.yahoo.com/chart/{ticker}",
+            "predictions":stock_price_predictions_data
+        }
+
+        # Attach the Excel file if available
+        # if os.path.exists(file_path):
+        #     file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+        #     file_response.headers['X-Stock-Metadata'] = jsonify(response_data)
+        #     return file_response
+
+        return jsonify(response_data)
+
     except Exception as e:
-        logging.error(f"Error performing analysis with generative AI: {e}")
-        return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
-    
-    # Extract response from the model
+        logging.error(f"Error generating stock analysis: {e}")
+        return jsonify({"error": f"Failed to generate stock analysis: {str(e)}"}), 500
+
+def stock_price_predictions(ticker):
     try:
-        html_suggestions = markdown.markdown(response.text)
+        # Step 1: Fetch historical stock data
+        stock = yf.Ticker(ticker)
+        historical_data = stock.history(period="6mo")
+        if historical_data.empty:
+            return jsonify({"message": f"No historical data found for ticker: {ticker}"}), 404
+
+        # Step 2: Calculate key statistics from historical data
+        volatility = compute_volatility(historical_data['Close'])
+        sharpe_ratio = compute_sharpe_ratio(historical_data['Close'])
+        recent_trend = historical_data['Close'].pct_change().tail(5).mean() * 100  # Last 5-day trend
+
+        # Step 3: Fetch related market and economic news
+        news = fetch_news(ticker)
+        market_conditions = collect_market_conditions()
         
-        print(f"Html Suggestions : {html_suggestions}")
+        if market_conditions == None:
+            print("Market Conditions couldnt be determined")
+            market_conditions = ""
         
-        logging.info(f"Suggestions for stock: \n{response.text}")
-        
-        # format_suggestions = markdown_to_text(response)
-        print(f"Html Suggestions : {html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
-        
+        print(market_conditions)
+
+        # Generate prompt for LLM model
+        task = f"""
+            You are a top financial analyst tasked with predicting stock price trends for {ticker}.
+            Analyze the following:
+            - Recent stock price volatility: {volatility:.2f}%
+            - Sharpe Ratio: {sharpe_ratio:.2f}
+            - Recent price trends (5-day): {recent_trend:.2f}%
+            - Market and economic conditions: {market_conditions}
+            - Relevant news: {news}
+
+            Predict the expected stock prices for the next month (30 days) under these conditions:
+            1. **Best-Case Scenario** (Optimistic market conditions).
+            2. **Worst-Case Scenario** (Pessimistic market conditions).
+            3. **Confidence Band** (Range of expected prices with 95% confidence).
+            
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+            Example of simulated_response = 
+            ### Response Format:
+            | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            |------------|-----------------------|-----------------------|---------------------|------------------|
+            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+            Your Response must be in the above table format no messages is required just table format data.
+            """
+
+        # Step 4: Simulate LLM prediction
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(task)
+
+        simulated_response = markdown_to_text(response.text)
+        print(simulated_response)
+
+        # Step 5: Extract and refine predictions
+        line_chart_data = extract_line_chart_data(simulated_response)
+        refined_predictions = add_noise(line_chart_data)
+
+        # Return refined prediction results
+        return refined_predictions
+    
+        # return jsonify({
+        #     "ticker": ticker,
+        #     "predictions": refined_predictions,
+        #     "analysis": simulated_response
+        # })
+
     except Exception as e:
-        logging.error(f"Error extracting text from response: {e}")
-        print(f"Error extracting text from response : {e}")
-        return jsonify({"error": "Failed to analyze stock data"}), 500
+        print(f"Error in predicting stock prices: {e}")
+        return jsonify({"message": f"Error predicting stock prices: {e}"}), 500
 
-    # Save the assistant's response to chat history
-    chat_history.append({"user_query": user_query, "message": format_suggestions})
-    save_chat_history(chat_id, chat_history)
 
-    # Increment chat_id for the next follow-up question
-    new_chat_id = get_next_chat_id()
+def collect_market_conditions():
+    """
+    Fetch and process current market conditions data, including economic indicators,
+    news, and trends to assist in stock analysis and prediction.
     
-    if data == {}:
-        data['Top_News'] = None
+    Returns:
+        dict: A dictionary containing market conditions such as interest rates, inflation,
+              geopolitical news, and general market sentiment.
+    """
+    market_conditions = {}
+
+    try:
+        # economic_data_url = "https://api.example.com/economic-indicators"
+        economic_data_url = f"https://www.alphavantage.co/query?function=REAL_GDP&apikey={ALPHA_VANTAGE_API_KEY}"
         
-    data['Company'] = company if company else None
+        market_news_url = f"https://www.alphavantage.co/query?function=SECTOR&apikey={ALPHA_VANTAGE_API_KEY}"
+
+        # market_news_url = "https://api.example.com/market-news"
+
+        # Fetch economic indicators
+        # economic_response = requests.get(economic_data_url)
+        # if economic_response.status_code == 200:
+        #     economic_data = economic_response.json()
+        #     market_conditions['interest_rates'] = economic_data.get('interest_rates', 'Data unavailable')
+        #     market_conditions['inflation_rate'] = economic_data.get('inflation_rate', 'Data unavailable')
+        # else:
+        #     market_conditions['interest_rates'] = 'Failed to fetch interest rates'
+        #     market_conditions['inflation_rate'] = 'Failed to fetch inflation rate'
+
+        # # Fetch market news
+        # news_response = requests.get(market_news_url)
+        # if news_response.status_code == 200:
+        #     news_data = news_response.json()
+        #     market_conditions['market_news'] = [article['title'] for article in news_data.get('articles', [])][:5]
+        # else:
+        #     market_conditions['market_news'] = 'Failed to fetch market news'
+
+        # # Add other relevant conditions
+        # market_conditions['geopolitical_tensions'] = "Moderate tensions observed globally."
+        # market_conditions['us_elections'] = "Upcoming elections may influence market trends."
+        
+        try:
+            # Fetch market data from API
+            economic_response = requests.get(economic_data_url)
+            market_response = requests.get(market_news_url)
+
+            # Check for successful API responses
+            if economic_response.status_code == 200 and market_response.status_code == 200:
+                market_conditions = {
+                    "interest_rates": economic_response.json().get("interest_rates", "Data unavailable"),
+                    "inflation_rate": economic_response.json().get("inflation_rate", "Data unavailable"),
+                    "market_news": market_response.json().get("news", []),
+                    "geopolitical_tensions": "Moderate tensions observed globally.",
+                    "us_elections": "Upcoming elections may influence market trends."
+                }
+            else:
+                raise ValueError("API data fetch failed.")
+
+        except Exception as e:
+            print(f"Error fetching market conditions: {e}")
+            market_conditions = get_default_market_conditions()
+
+
+    except Exception as e:
+        logging.error(f"Error fetching market conditions: {e}")
+        market_conditions['error'] = f"Error fetching market conditions: {e}"
+
+    return market_conditions
+
+def get_default_market_conditions():
+    default_conditions = {
+        "interest_rates": "Stable interest rates at 4.5%.",
+        "inflation_rate": "Moderate inflation at 3.1%.",
+        "market_news": [
+            "Global markets show mixed trends amid economic recovery.",
+            "Tech stocks rally as demand for AI-driven solutions increases.",
+            "Oil prices stabilize after months of volatility."
+        ],
+        "geopolitical_tensions": "Moderate tensions observed globally.",
+        "us_elections": "After the elections result of Donald Trump winning the electeions may influence market trends in positive way.",
+        "global_trade": "Trade agreements show positive progress with new MAGA (Make America Great Again) Policies.",
+        "consumer_confidence": "Consumer confidence index steadily increasing."
+    }
+    return default_conditions
+
+
+################################################################################
+# v-1 :
+
+# @app.route('/analyze_stock', methods=['POST'])
+# def analyze_stock():
+#     try:
+#         ticker = request.json.get('ticker')
+#         company = request.json.get('company',None)
+#         query = request.json.get('query')
+#         chat_id = request.json.get('chat_id', get_next_chat_id())  # Use auto-incrementing chat ID if not provided
+#         # chat_id = request.json.get('chat_id', 1)  # Default chat_id to 1 if not provided
+        
+#         # Load chat history
+#         chat_history = load_chat_history(chat_id)
+
+#         # If no ticker provided in the request, try to extract it from the query
+#         if not ticker and query:
+#             # ticker = extract_ticker(query)
+            
+#             ticker,company = extract_ticker(query)
+        
+#         # If a valid ticker is found, fetch stock data
+#         if ticker:
+#             try:
+#                 data, formatted_data, avg_close,file_path = get_stock_data(ticker)
+#                 user_query = ticker  # Save the ticker as the user query
+#             except Exception as e:
+#                 print("Error getting the stock data")
+#                 return jsonify({'message': f'Error occurred while fetching stock data: {e}'}), 400
+#         else:
+#             # No valid ticker found, generate generic suggestions
+#             print("No valid ticker found in the query, generating general stock suggestions.")
+#             data = {}  # No specific stock data need to check for news
+#             formatted_data = ""  # No financial data
+#             avg_close = 0
+#             user_query = query  # Save the original user query if no ticker is found
+
+#         # If query is empty, set a default query for stock analysis
+#         # if not query:
+#         #     query = "Generate general stock suggestions based on current market trends and give some stock predictions."
+        
+        
+
+        
+#          # Save the user's query (ticker or original query) to chat history
+#         if user_query:
+#             chat_history.append({"user_query": user_query, "message": query})
+        
+#         # Detect if this is a follow-up query based on previous history
+#         if chat_history:
+#             print("This is a follow-up query. Checking previous chat history.")
+#             # The logic here could vary; you might compare the current query with past responses or check patterns
+#             query = f"Following up on: {chat_history[-1]['user_query']} \n\n {chat_history[-1]['message']}" + query
+
+#         # Save the user's query (ticker or original query) to chat history
+#         chat_history.append({"user_query": user_query, "message": query})
+        
       
-    # Return all collected and analyzed data
-      # Create a response dictionary # gave responses in headers :
-    # response_dict = {
-    #     "data": data,
-    #     "average_closing_price": f"${avg_close:.2f}",
-    #     "analysis": format_suggestions,  # Use the response text here
-    #     "news": data.get('Top_News'),
-    #     "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-    # }
-    # # If the Excel file exists, send it as an attachment along with the response
-    # if os.path.exists(file_path):
-    #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
-    #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
-    #         file_response.headers['X-Stock-Metadata'] = json.dumps(response_dict)  # Add metadata as a custom header
-    #         return file_response
-    # else:
-    #     return jsonify(response_dict)
+            
+#         # Format the chat history for the LLM
+#         try :
+#             formatted_history = format_chat_history_for_llm(chat_history, query)
+#         except Exception as e:
+#             logging.error(f"Error while formatting chat history for LLM: {e}")
+#             return jsonify({'message': 'Internal Server Error in Formatting Chat History'}), 500
+        
+        
+#     except Exception as e :
+#         logging.error(f"Error while fetching stock data: {e}")
+#         return jsonify({'message': 'Internal Server Error in Stock Data Fetch'}), 500
     
-    # if os.path.exists(file_path): # works for either file or response
-    #         # Combine the file response and JSON response
-    #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
-    #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
-    #         print("File is passed as attachment")
-    #         return file_response
-    # else:
-    #     print("Data is passed")
-    #     return jsonify(response_dict)
+#     try:
+#         if ticker:
+#             # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+#             #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#             #             Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+#             #             Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+#             #             Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+#             #             Advise whether to buy this stock now or not, with reasons for your advice. If no stock data is provided just answer the user's query.
+#             #             If the user asks for some stock suggestions then provide them a list of stock suggestions based on the query.
+#             #             If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#             #             Do not answer any questions unrelated to the stocks."""
+                        
+#             task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query and if the company's details are provided,
+#                     Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#                     Give the user details and information of all the KPI's related to the compnay such as PE ratio,EPS,Book Value,ROE,ROCE,Ernings Growth and Revenue Growth and give your views on them.
+#                     Analyse all the stock information and provide the analysis of the company's performance related to Income Statement,Balance Sheet, and Cashflow.
+#                     Predict the stock price range for the next week (if a particular time period is not mentioned) and provide reasons for your prediction.
+#                     Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+
+#             query = task + "\nStock Data: " + str(data) + "\nFinancial Data: " + formatted_data + query
+        
+#         else:
+#             task = """You are a Stock Market Expert. You know everything about stock market trends and patterns.Given a stock related query.
+#                         You are the best Stock recommendations AI and you give the best recommendations for stocks.Answer to the questions of the users and help them 
+#                         with any queries they might have.
+#                         If the user asks for some stock suggestions or some good stocks then provide them a list of stock suggestions based on the query give them the well known stocks in that sector or whatever the query asks for .
+#                         If the user has asked a follow up question then provide them a good response by also considering their previous queries
+#                         Do not answer any questions unrelated to the stocks."""
+            
+#             query = task + query + "\n\nConversation:\n" + formatted_history #+ chat_history
+#             print(f"The formatted chat history passed to llm is : {formatted_history}")
+#             print(f"The query passed to llm is : {query}")
+#          # task = f"""You are a Stock Market Expert. You know everything about stock market trends and patterns.
+#         #             Based on the provided stock data, analyze the stock's performance, including whether it is overvalued or undervalued.
+#         #             Predict the stock price range for the next week and provide reasons for your prediction.
+#         #             Advise whether to buy this stock now or not, with reasons for your advice."""
+        
+        
+#         # Use your generative AI model for analysis (example with 'gemini-1.5-flash')
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(query)
+#         print(response.text)
+#         print(data)
     
-    return jsonify({
-        # "Company": company,
-        "data": data,
-        "average_closing_price": f"${avg_close:.2f}",
-        "analysis": format_suggestions,
-        "news": data['Top_News'],
-        "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
-    }) # "chat_history" : chat_history
-    # # "new_chat_id" : new_chat_id
+#     except Exception as e:
+#         logging.error(f"Error performing analysis with generative AI: {e}")
+#         return jsonify({f"error": "Failed to give analysis of stock data : {e}"}), 500
+    
+#     # Extract response from the model
+#     try:
+#         html_suggestions = markdown.markdown(response.text)
+        
+#         print(f"Html Suggestions : {html_suggestions}")
+        
+#         logging.info(f"Suggestions for stock: \n{response.text}")
+        
+#         # format_suggestions = markdown_to_text(response)
+#         print(f"Html Suggestions : {html_suggestions}")
+#         format_suggestions = markdown_to_text(html_suggestions)
+        
+#     except Exception as e:
+#         logging.error(f"Error extracting text from response: {e}")
+#         print(f"Error extracting text from response : {e}")
+#         return jsonify({"error": "Failed to analyze stock data"}), 500
+
+#     # Save the assistant's response to chat history
+#     chat_history.append({"user_query": user_query, "message": format_suggestions})
+#     save_chat_history(chat_id, chat_history)
+
+#     # Increment chat_id for the next follow-up question
+#     new_chat_id = get_next_chat_id()
+    
+#     if data == {}:
+#         data['Top_News'] = None
+        
+#     data['Company'] = company if company else None
+      
+#     # Return all collected and analyzed data
+#       # Create a response dictionary # gave responses in headers :
+#     # response_dict = {
+#     #     "data": data,
+#     #     "average_closing_price": f"${avg_close:.2f}",
+#     #     "analysis": format_suggestions,  # Use the response text here
+#     #     "news": data.get('Top_News'),
+#     #     "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+#     # }
+#     # # If the Excel file exists, send it as an attachment along with the response
+#     # if os.path.exists(file_path):
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         file_response.headers['X-Stock-Metadata'] = json.dumps(response_dict)  # Add metadata as a custom header
+#     #         return file_response
+#     # else:
+#     #     return jsonify(response_dict)
+    
+#     # if os.path.exists(file_path): # works for either file or response
+#     #         # Combine the file response and JSON response
+#     #         file_response = send_file(file_path, as_attachment=True, download_name=f'{ticker}_financial_data.xlsx')
+#     #         file_response.headers['Content-Disposition'] = f'attachment; filename={ticker}_financial_data.xlsx'
+#     #         print("File is passed as attachment")
+#     #         return file_response
+#     # else:
+#     #     print("Data is passed")
+#     #     return jsonify(response_dict)
+    
+#     return jsonify({
+#         # "Company": company,
+#         "data": data,
+#         "average_closing_price": f"${avg_close:.2f}",
+#         "analysis": format_suggestions,
+#         "news": data['Top_News'],
+#         "graph_url": f"https://finance.yahoo.com/chart/{ticker}"
+#     }) # "chat_history" : chat_history
+#     # # "new_chat_id" : new_chat_id
 
 def extract_excel_data(file_path):
     financial_data = ""
@@ -5750,7 +6652,7 @@ def get_reit_price():
 
         if yield_response.status_code == 200:
             yield_data = yield_response.json()
-            dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", "4%-6%")
+            dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
         else:
             dividend_yield = 5 # default value
 
@@ -6144,7 +7046,10 @@ def create_transaction(order_data, asset_class):
                 "Ownership": ownership,
                 "Date": order_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
                 "Name": order_data.get('name'),
-                "TransactionAmount": order_data.get('investmentAmount'),
+                "UnitPrice": order_data.get('price'),
+                "TransactionAmount": order_data.get('TransactionAmount'),  # "TransactionAmount": order_data.get('investmentAmount'),
+                "Action": order_data.get('buy_or_sell'),
+                "Units": order_data.get('units'),
                 "DividendYield": order_data.get('dividendYield')
             }
         else:
@@ -6554,7 +7459,7 @@ def portfolio():
             "daily_changes": daily_changes,
             "portfolio_data": portfolio_data,
         }
-
+        
         return jsonify(portfolio_response), 200
 
     except Exception as e:
@@ -6745,23 +7650,6 @@ def analyze_portfolio():
                 Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
                 """
                 
-        # task = f"""
-        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-        #         The portfolio contains several stocks and investments.
-        #         Based on the portfolio data provided:
-
-        #         - The available funds for the client are {funds}.
-        #         - The current value of the portfolio is {portfolio_current_value}.
-        #         - The portfolio's daily change is {portfolio_daily_change}.
-        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
-
-        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable or Unstable irrespective of their current investmnets or remaining funds or current returns.If the user has a good portfolio mention that as well.
-        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
-        #         Also, provide suggestions for asset allocation, tax efficiency, and market trends.
-        #         """
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(task)
@@ -6790,138 +7678,188 @@ def analyze_portfolio():
         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
 
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         # Retrieve the requested asset type
-#         assetName = request.json.get('assetName', 'all')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         client_id = request.json.get('client_id')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+#######################################################################################################################
 
-#         # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-
-#         # Load portfolio data for client (if analyzing the whole portfolio)
-#         portfolio_data = {}
-#         portfolio_news = {}
-
-#         if assetName == 'all':
-#             # Load the complete portfolio
-#             with open(f'portfolio_{client_id}.json', 'r') as f:
-#                 portfolio_data = json.load(f)
-#             portfolio_news = collect_portfolio_news(portfolio_data)
-
-#         else:
-#             # Extract specific asset data from request if assetName is specific
-#             portfolioList = request.json.get('portfolioList', [])
-#             portfolio_data = [item for item in portfolioList if item.get('assetClass', '').lower() == assetName.lower()]
-            
-#             # Fetch news for each asset in the specified list
-#             portfolio_news = collect_portfolio_news(portfolio_data)
+# generate riskometer data :
+    
+@app.route('/client_riskometer_data',methods =['POST'])
+def generate_client_riskometer_data():
+   
+    try:
+        client_id = request.json.get('client_id')
         
-#         # Fetching Client's Financial Data to get Financial 
-#         print(f"Received Client Id : {client_id}")
-#         # client_id = request.args.get('clientId')
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
         
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
+         # Load client financial data (from AWS or local based on USE_AWS)
+        
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+                return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        
+        
+        client_name = client_data.get("clientDetail", {}).get("clientName", "Unknown Client")
 
-#         # Define the S3 key for the object
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+        # Calculate essential metrics
+        funds = float(client_data.get("investmentAmount", 0) or 0)
+        assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+        liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+        net_worth = assets - liabilities
 
-#         # Retrieve the object from S3
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             # Decode and parse the JSON data
-#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+        # Calculate savings rate
+        annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+        savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+
+        # Calculate emergency fund coverage and liquidity metrics
+        monthly_expenses = sum(
+            float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
+        ) + sum(
+            float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
+        )
+        assets_labels = client_data["assetsDatasets"]["labels"]
+        assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+
+        # Liquid assets for emergency funds
+        liquid_asset_categories = [
+            "Cash/bank accounts",
+            "Brokerage/non-qualified accounts",
+            "529 Plans",
+            "Roth IRA, Roth 401(k)"
+        ]
+        liquid_assets = sum(
+            float(assets_data[i] or 0)
+            for i, label in enumerate(assets_labels)
+            if label in liquid_asset_categories
+        )
+        
+        liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
+        emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+        # Debt-to-Asset Ratio
+        debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+        # Determine risk level (example categorization logic)
+        risk_level = "High Risk" if debt_to_asset_ratio > 75 else "Moderate Risk" if debt_to_asset_ratio > 50 else "Low Risk"
+
+        # Prepare data for frontend visualization
+        riskometer_data = {
+            "client_name": client_name,
+            "net_worth": net_worth,
+            "savings_rate": savings_rate,
+            "liquidity_ratio": liquidity_ratio,
+            "emergency_fund_coverage": emergency_fund_coverage,
+            "debt_to_asset_ratio": debt_to_asset_ratio,
+            "risk_level": risk_level,
+        }
+
+        return jsonify({"message": f"generated riskometer data",
+                        "riskometer_data":riskometer_data}), 200
+        
+        
+    except Exception as e:
+        print(f"Error generating riskometer data: {e}")
+        return {"error": f"Error generating riskometer data: {e}"}
+
+##################################################################################################################
+
+
+#    #Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
+
+@app.route('/calculate_portfolio_risk_ratio',methods=['POST'])
+def calculate_portfolio_risk_ratio():
+    
+    try:
+        client_id = request.json.get('client_id')
             
-#         except Exception as e:
-#             logging.error(f"Error occurred while retrieving client data from S3: {e}")
-#             return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+        
+        # Load portfolio data (using local or AWS storage based on USE_AWS)
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
 
-#          # Initialize portfolio-level metrics
-#         portfolio_current_value = request.json.get('portfolio_current_value') 
-#         portfolio_daily_change = request.json.get('porfolio_daily_change')
-#         portfolio_daily_change_perc = request.json.get('portfolio_daily_change_perc')
-#         portfolio_investment_gain_loss = request.json.get('portfolio_investment_gain_loss')
-#         portfolio_investment_gain_loss_perc = request.json.get('portfolio_investment_gain_loss_perc')
+            # Verify portfolio data is a list
+            if not isinstance(portfolio_data, list):
+                return jsonify({"message": "Portfolio data is not in the expected format"}), 500
+    
+        # Risk weight mapping for each asset class
+        risk_weights = {
+            "Stocks": 0.9,
+            "Cryptocurrency": 1.0,
+            "Bonds": 0.1,
+            "etf": 0.2,
+            "Mutual Funds": 0.5,
+            "Commodities": 0.4,
+            "Cash/bank accounts": 0.1,
+            "Real Estate": 0.3,
+            "Other": 0.6
+        }
 
-#         print(f"{portfolio_current_value} \n{portfolio_daily_change} \n{portfolio_daily_change_perc} \n{portfolio_investment_gain_loss} \n{portfolio_investment_gain_loss_perc}" )
+        # Calculate total investment and weighted risk score
+        total_investment = 0
+        weighted_risk_score = 0
 
+        for asset in portfolio_data:
+            asset_class = asset.get("assetClass", "Other").capitalize()
+            invested_amount = float(asset.get("Amount_Invested", 0))
 
-#         # Task prompt for LLM based on the asset name
-        # task = f"""
-        #         You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-        #         The portfolio contains several stocks and investments.
-        #         Based on the portfolio data provided:
+            total_investment += invested_amount
+            weighted_risk_score += invested_amount * risk_weights.get(asset_class, 0.5)  # Default risk weight is moderate
 
-        #         - The available funds for the client are {funds}.
-        #         - The current value of the portfolio is {portfolio_current_value}.
-        #         - The portfolio's daily change is {portfolio_daily_change}.
-        #         - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-        #         - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-        #         - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-        #         - The risk tolerance of the client based on their investment personality is {investor_personality}.
+        # Calculate risk ratio
+        risk_ratio = (weighted_risk_score / total_investment * 100) if total_investment > 0 else 0
 
-        #         Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets,Liabilities and Debts of of the Client as : Stable,Currently Stable or Unstable.
-        #         Based on the Client's Financial Situation and the Client's Financial Goals,
-        #         Provide an in-depth analysis of the portfolio, including an evaluation of performance, suggestions for improvement, 
-        #         and detailed stock recommendations to the Wealth Manager for the client based on the Client's Financial Situation and in order to achive their Financial Goal's and the Client's risk tolerance for the given portfolio : {portfolio_data}
-        #         and top news of each holdings in the portfolio : {portfolio_news} and the economic news of the US Market : {economic_news}
+        # Categorize portfolio risk
+        if risk_ratio > 75:
+            risk_category = "High Risk"
+        elif 50 < risk_ratio <= 75:
+            risk_category = "Moderate Risk"
+        else:
+            risk_category = "Low Risk"
 
-        #         - If the client has a conservative investment personality, give stocks and low risk assets recommendations that could provide returns with minimal risk.
-        #         - If the client has a moderate investment personality, give stocks and medium risk assets recommendations that could provide returns with a moderate level of risk.
-        #         - If the client has an aggressive investment personality, give stocks,Real Estate,cryptocurrency,or any High Risk High Reward Assets recommendations that could provide higher returns with higher risk. 
-        #         Also, help the Wealth Manager rearrange the funds, including which stocks to sell and when to buy them.
+        # Prepare risk analysis data
+        risk_analysis = {
+            "total_investment": total_investment,
+            "weighted_risk_score": weighted_risk_score,
+            "risk_ratio": risk_ratio,
+            "risk_category": risk_category
+        }
 
-        #         Provide detailed reasons for each stock recommendation based on the funds available to the client and their investor personality in order for the Client to achive their Financial Goals. Include specific suggestions on handling the portfolio, such as when to buy, when to sell, and in what quantities, to maximize the client's profits. Highlight the strengths and weaknesses of the portfolio, and give an overall performance analysis.
+        return jsonify({
+            "message": "Generated portfolio risk analysis successfully",
+            "risk_analysis": risk_analysis,
+            "risk_category":risk_category
+        }), 200
 
-        #         Additionally, provide:
+    except Exception as e:
+        print(f"Error calculating portfolio risk ratio: {e}")
+        return {"error": f"Error calculating portfolio risk ratio: {e}"}
+    
 
-        #         1. A risk assessment of the current portfolio composition.
-        #         2. Give a proper Analysis and Performance of the current portfolio holdings by considering its current news.
-        #         3. Funds Rearrangement of the portfolio if required and give stocks that would give better returns to the client.
-        #         4. Recommendations for sector allocation to balance risk and return as per the investor personality and suggest stocks accordingly.
-        #         5. Strategies for tax efficiency in the portfolio management.
-        #         6. Insights on market trends and current economic news that could impact the portfolio.
-        #         7. Explain in brief the Contingency plans for different market scenarios (bullish, bearish, and volatile markets) and suggest some stocks/assets and sectors from which the client can benefit .
-        #         8. Explain How the client can achieve their Financial Goals of the client that they have mentioned and whether they can  achieve it/them till the time(if mentioned) they are planning of achieving it/them.
-
-        #         Ensure the analysis is comprehensive and actionable, helping the Wealth Manager make informed decisions to optimize the client's portfolio.
-        #         Dont give any Disclaimer as you are providing all the information to a Wealth Manager who is a Financial Advisor and has good amount of knowledge and experience in managing Portfolios.
-        #         """
-
-#         # Generate response using LLM
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the response
-#             html_suggestions = markdown.markdown(response.text)
-#             format_suggestions = markdown_to_text(html_suggestions)
-            
-#             # Return response in JSON format
-#             return jsonify({
-#                     "portfolio_current_value": portfolio_current_value,
-#                     "portfolio_daily_change": portfolio_daily_change,
-#                     "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-#                     "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#                     "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-#                     "suggestion": format_suggestions,
-#                      "assetClass": assetName
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error generating suggestions from LLM: {e}")
-#             return jsonify({"message": f"Error occurred while analyzing the portfolio: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in analyzing portfolio for asset '{assetName}': {e}")
-#         return jsonify({"message": f"Error analyzing portfolio for asset '{assetName}'"}), 500
 
 #########################################################################################################################
 # Analyzing the Portfolio using Local Storage :
@@ -6939,248 +7877,6 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-# @app.route('/portfolio', methods=['POST'])
-# def portfolio():
-#     try:
-#         # Extract client ID and current date
-#         client_id = request.json.get('client_id')
-#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
- 
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
- 
-#         # Load orders from the local file
-#         order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
- 
-#         if not os.path.exists(order_file_path):
-#             return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
- 
-#         with open(order_file_path, 'r') as file:
-#             client_orders = json.load(file)
- 
-#         # Initialize portfolio data and metrics
-#         portfolio_data = []
-#         portfolio_current_value = 0
-#         porfolio_daily_change = 0
-#         portfolio_investment_gain_loss = 0
- 
-#         # Load existing daily changes for the quarter
-#         daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
-#         if os.path.exists(daily_changes_file):
-#             with open(daily_changes_file, 'r') as file:
-#                 daily_changes = json.load(file)
-#         else:
-#             daily_changes = {}
- 
-#         # Process client orders
-#         for order in client_orders:
-#             asset_class = order.get('AssetClass', 'N/A')
-#             name = order.get('Name', 'N/A')
-#             symbol = order.get('Symbol', 'N/A')
-#             units = order.get('Units', 0)
-#             bought_price = order.get('UnitPrice', 0)
-#             transaction_amount = order.get('TransactionAmount', 0)
- 
-#             # Fetch current stock price
-#             def fetch_current_stock_price(ticker):
-#                 stock = yf.Ticker(ticker)
-#                 try:
-#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
-#                     return current_price
-#                 except Exception as e:
-#                     print(f"Error fetching stock price for {ticker}: {e}")
-#                     return 0
- 
-#             current_price = fetch_current_stock_price(symbol)
-#             diff_price = current_price - bought_price
-#             daily_price_change = diff_price
-#             daily_value_change = daily_price_change * units
-#             current_value = current_price * units
- 
-#             # Calculate investment gain/loss and other metrics
-#             investment_gain_loss = diff_price * units
-#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
- 
-#             # Append data to portfolio
-#             portfolio_data.append({
-#                 "assetClass": asset_class,
-#                 "name": name,
-#                 "symbol": symbol,
-#                 "Quantity": units,
-#                 "Delayed_Price": current_price,
-#                 "current_value": current_value,
-#                 "Daily_Price_Change": daily_price_change,
-#                 "Daily_Value_Change": daily_value_change,
-#                 "Amount_Invested_per_Unit": bought_price,
-#                 "Amount_Invested": transaction_amount,
-#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-#                 "Investment_Gain_or_Loss": investment_gain_loss,
-#                 "Time_Held": order.get('Date', 'N/A'),
-#             })
- 
-#             # Update portfolio metrics
-#             portfolio_current_value += current_value
-#             porfolio_daily_change += daily_price_change
-#             portfolio_investment_gain_loss += investment_gain_loss
- 
-#         # Calculate daily change percentages
-#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
-#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
- 
-#         # Update daily changes for the current date
-#         daily_changes[curr_date] = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#         }
- 
-#         # Save daily changes to a file
-#         with open(daily_changes_file, 'w') as file:
-#             json.dump(daily_changes, file, indent=4)
- 
-#         # Save portfolio data as JSON
-#         portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-#         with open(portfolio_file_path, 'w') as file:
-#             json.dump(portfolio_data, file, indent=4)
- 
-#         # Response data
-#         portfolio_response = {
-#             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
-#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
-#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-#             "daily_changes": daily_changes,
-#             "portfolio_data": portfolio_data,
-#         }
- 
-#         return jsonify(portfolio_response), 200
- 
-#     except Exception as e:
-#         print(f"Error occurred in portfolio: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-# New Version :
-from flask import Flask, request, jsonify
-import requests
-import os
-import json
-import markdown
-
-# @app.route('/analyze_portfolio', methods=['POST'])
-# def analyze_portfolio():
-#     try:
-#         # Retrieve input data
-#         assetName = request.json.get('assetName', 'all')
-#         client_id = request.json.get('client_id')
-#         client_name = request.json.get('client_name')
-#         funds = request.json.get('funds')
-#         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
-
-#         # Validate client_id
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Define file path for portfolio data
-#         portfolio_file_path = f"local_data/portfolios/portfolio_{client_id}.json"
-
-#         # Load portfolio data from local file
-#         if os.path.exists(portfolio_file_path):
-#             with open(portfolio_file_path, 'r') as f:
-#                 portfolio_data = json.load(f)
-#         else:
-#             return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
-
-#         # Verify portfolio data is a list
-#         if not isinstance(portfolio_data, list):
-#             return jsonify({"message": "Portfolio data is not in the expected format"}), 500
-
-#         # Initialize variables to calculate portfolio-level metrics
-#         portfolio_current_value = sum(asset["current_value"] for asset in portfolio_data)
-#         portfolio_daily_change = sum(asset["Daily_Value_Change"] for asset in portfolio_data)
-#         portfolio_investment_gain_loss = sum(asset["Investment_Gain_or_Loss"] for asset in portfolio_data)
-
-#         if portfolio_current_value != 0:
-#             portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
-#             portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
-#         else:
-#             portfolio_daily_change_perc = 0
-#             portfolio_investment_gain_loss_perc = 0
-
-#         # Filter portfolio data if a specific asset type is requested
-#         if assetName != 'all':
-#             filtered_portfolio_data = [
-#                 asset for asset in portfolio_data if asset["assetClass"].lower() == assetName.lower()
-#             ]
-#         else:
-#             filtered_portfolio_data = portfolio_data
-
-#         # Initialize economic news to pass to LLM
-#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
-#         economic_news = {topic: fetch_news(topic) for topic in topics}
-        
-#         # Load client financial data from local storage
-#         client_data_file_path = f"client_data/client_data/{client_id}.json"
-#         if os.path.exists(client_data_file_path):
-#             with open(client_data_file_path, 'r') as f:
-#                 client_data = json.load(f)
-#         else:
-#             return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
-
-#         portfolio_news = collect_portfolio_news(filtered_portfolio_data)
-
-#         # Task prompt for LLM based on the asset name
-#         task = f"""
-#                 You are the best Stock Market Expert and Portfolio Analyst working for a Wealth Manager on the client: {client_name}.
-#                 The portfolio contains several stocks and investments.
-#                 Based on the portfolio data provided:
-
-#                 - The available funds for the client are {funds}.
-#                 - The current value of the portfolio is {portfolio_current_value}.
-#                 - The portfolio's daily change is {portfolio_daily_change}.
-#                 - The daily percentage change is {portfolio_daily_change_perc:.2f}%.
-#                 - The total gain/loss in the portfolio is {portfolio_investment_gain_loss}.
-#                 - The percentage gain/loss in the portfolio is {portfolio_investment_gain_loss_perc:.2f}%.
-#                 - The risk tolerance of the client based on their investment personality is {investor_personality}.
-#                 - These are the relevant news for all the stocks in the portfolio : {portfolio_news}
-#                 - These are the relevant economic news : {economic_news}
-
-#                 Given the Clients Financial Data: {client_data} determine the Financial Situation based on the Assets, Liabilities, and Debts of the Client as: Stable, Currently Stable, or Unstable.
-#                 Based on the Client's Financial Situation and the Client's Financial Goals, provide an in-depth analysis of the portfolio, 
-#                 including an evaluation of performance, suggestions for improvement, and detailed stock recommendations to the Wealth Manager 
-#                 for the client based on the Client's Financial Situation and risk tolerance for the portfolio: {filtered_portfolio_data}.
-#                 Ensure your analysis includes detailed recommendations, risk assessments, and strategies tailored to the client's financial goals based on the recent news regarding the assets in the portfolio : {portfolio_news} and the economic news : {economic_news} .
-#                 """
-
-#         try:
-#             model = genai.GenerativeModel('gemini-1.5-flash')
-#             response = model.generate_content(task)
-
-#             # Process the response
-#             html_suggestions = markdown.markdown(response.text)
-#             format_suggestions = markdown_to_text(html_suggestions)
-
-#             # Return the analysis response
-#             return jsonify({
-#                 "portfolio_current_value": portfolio_current_value,
-#                 "portfolio_daily_change": portfolio_daily_change,
-#                 "portfolio_daily_change_perc": f"{portfolio_daily_change_perc:.2f}%",
-#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-#                 "portfolio_investment_gain_loss_perc": f"{portfolio_investment_gain_loss_perc:.2f}%",
-#                 "suggestion": format_suggestions,
-#                 "assetClass": assetName
-#             }), 200
-
-#         except Exception as e:
-#             print(f"Error in generating analysis: {e}")
-#             return jsonify({"message": f"Error generating analysis: {e}"}), 500
-
-#     except Exception as e:
-#         print(f"Error in analyzing portfolio: {e}")
-#         return jsonify({"message": f"Error analyzing portfolio: {e}"}), 500
 
 
 #####################################################################################################################
@@ -7271,17 +7967,216 @@ def calculate_actual_returns(client_id):
 
 
 # Define directories for local storage
-# PORTFOLIO_DIR = "local_data/portfolios"
-# PREDICTIONS_DIR = "local_data/predictions"
-# COMPARISONS_DIR = "local_data/comparisons"
+PORTFOLIO_DIR = "local_data/portfolios"
+PREDICTIONS_DIR = "local_data/predictions"
+COMPARISONS_DIR = "local_data/comparisons"
 
-# os.makedirs(PORTFOLIO_DIR, exist_ok=True)
-# os.makedirs(PREDICTIONS_DIR, exist_ok=True)
-# os.makedirs(COMPARISONS_DIR, exist_ok=True)
+os.makedirs(PORTFOLIO_DIR, exist_ok=True)
+os.makedirs(PREDICTIONS_DIR, exist_ok=True)
+os.makedirs(COMPARISONS_DIR, exist_ok=True)
+
+
+def save_predictions(client_id, current_quarter, refined_line_chart_data):
+    """
+    Save predictions line chart data to AWS S3 or locally.
+    
+    Args:
+        client_id (str): Unique client identifier.
+        current_quarter (str): Current quarter for prediction data.
+        refined_line_chart_data (dict): Refined line chart data to save.
+    """
+    try:
+        if USE_AWS:
+            # Save predictions to AWS S3
+            predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=predictions_key,
+                    Body=json.dumps(refined_line_chart_data),
+                    ContentType='application/json'
+                )
+                print(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} in AWS.")
+                logging.info(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving predictions to AWS: {e}")
+                print(f"Error saving predictions to AWS: {e}")
+                return {"message": f"Error saving predictions to AWS: {e}"}, 500
+        else:
+            # Save predictions locally
+            prediction_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+            try:
+                with open(prediction_file_path, 'w') as file:
+                    json.dump(refined_line_chart_data, file, indent=4)
+                logging.info(f"Saved predictions for client_id: {client_id}, quarter: {current_quarter} locally.")
+            except Exception as e:
+                logging.error(f"Error saving predictions locally: {e}")
+                return {"message": f"Error saving predictions locally: {e}"}, 500
+    except Exception as e:
+        logging.error(f"Unexpected error in saving predictions: {e}")
+        return {"message": f"Internal server error: {e}"}, 500
 
 
 
 # Actual vs Predicted Endpoint
+
+# test version :
+
+# @app.route('/actual_vs_predicted', methods=['POST'])
+# def actual_vs_predicted():
+#     try:
+#         # Retrieve client ID and current portfolio daily change
+#         client_id = request.json.get('client_id')
+#         portfolio_daily_change = request.json.get('portfolio_daily_change')
+#         current_date = datetime.now().strftime("%Y-%m-%d")
+        
+#         client_name = request.json.get("client_name")
+#         funds = request.json.get("funds")
+#         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        
+#         # Get current quarter
+#         current_quarter = get_current_quarter()
+
+#         # Define file paths and S3 keys
+#         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+#         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+#         portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
+
+#         # Load previously predicted line chart data
+#         # if USE_AWS:
+#         #     try:
+#         #         response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+#         #         predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+#         #         print("\nFound Prediction Line Chart Data \n")
+#         #     except s3.exceptions.NoSuchKey:
+#         #         # Create Prediction Line Chart as it wasn't created before
+#                 # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#                 # print("\nSaving the Predictions Line Chart\n")
+#                 # save_predictions(client_id, current_quarter, predicted_line_chart_data)
+#         # else:
+#         #     predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+#         #     if not predicted_line_chart_data:
+#         #         return jsonify({"message": f"No previous predictions found for this client."}), 404
+        
+#         predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#         print("\nSaving the Predictions Line Chart\n")
+#         save_predictions(client_id, current_quarter, predicted_line_chart_data)
+
+#         # Fetch and process portfolio data
+#         if USE_AWS:
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+#             # Load previous portfolio predictions data
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+#                 previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 previous_portfolio_data = None
+#         else:
+#             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#             current_portfolio_data = load_from_file(portfolio_file)
+#             if not current_portfolio_data:
+#                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+#             portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_portfolio.json")
+#             previous_portfolio_data = load_from_file(portfolio_predictions_file)
+
+#         # Check for changes in the portfolio
+#         # if current_portfolio_data != previous_portfolio_data:
+#         #     print("Portfolio data has changed. Updating predictions.")
+#         #     predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+
+#         #     # Save updated portfolio and predictions
+#         #     if USE_AWS:
+#         #         s3.put_object(
+#         #             Bucket=S3_BUCKET_NAME,
+#         #             Key=portfolio_predictions_key,
+#         #             Body=json.dumps(current_portfolio_data),
+#         #             ContentType='application/json'
+#         #         )
+#         #         save_predictions(client_id, current_quarter, predicted_line_chart_data)
+#         #     else:
+#         #         save_to_file(portfolio_predictions_file, current_portfolio_data)
+#         #         save_to_file(predicted_file_path, predicted_line_chart_data)
+#         # else:
+#         #     print("No changes in portfolio. Using existing predictions.")
+
+#         # Process daily changes data
+#         daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#         if USE_AWS:
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+#             except s3.exceptions.NoSuchKey:
+#                 logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+#         else:
+#             daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     raw_daily_changes_data = json.load(file)
+#             else:
+#                 logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+#                 return jsonify({"message": "No daily changes data found."}), 404
+
+#         # Process daily changes data for only current quarter :
+#         daily_changes_data = []
+#         current_quarter_date = get_current_quarter_dates()
+#         start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+#         print(f"Current Quarter Start Date :{start_date}")
+        
+#         for timestamp, details in raw_daily_changes_data.items():
+#             try:
+#                 # Normalize the date
+#                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+#                 # Safely get the correct daily change value
+#                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+#                 # Append if the value is not zero and is after or on the start date
+#                 if value != 0 and date >= start_date:
+#                     daily_changes_data.append({"date": date, "value": value})
+#             except Exception as e:
+#                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         # Remove duplicates, retaining the latest value for each date
+#         unique_daily_changes = {}
+#         for entry in daily_changes_data:
+#             unique_daily_changes[entry["date"]] = entry["value"]
+
+#         # Convert back to a sorted list of values and dates starting from the current date
+#         sorted_actual_dates = sorted(unique_daily_changes.keys())
+#         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+#         # Debugging output
+#         print("Processed Daily Changes Data:", daily_changes_data)
+#         print("Unique Daily Changes:", unique_daily_changes)
+#         print("Actual Line Chart Data:", actual_line_chart_data)
+#         print("Actual Data Dates:", sorted_actual_dates)
+
+        
+#         return jsonify({
+#             "client_id": client_id,
+#             "comparison_chart_data": {
+#                 "actual_dates": sorted_actual_dates,
+#                 "actual_values": actual_line_chart_data,
+#                 "predicted": predicted_line_chart_data,
+#             }
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error generating comparison: {e}")
+#         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
+# v-2 : Very Fast and Also checks changes in Portfolio :
+# Best Version of actual_vs_predicted
+
 @app.route('/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
     try:
@@ -7290,100 +8185,156 @@ def actual_vs_predicted():
         portfolio_daily_change = request.json.get('portfolio_daily_change')
         current_date = datetime.now().strftime("%Y-%m-%d")
         
-        # client_name = request.json.get("client_name")
-        # funds = request.json.get("funds")
-        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        client_name = request.json.get("client_name")
+        funds = request.json.get("funds")
+        investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
         
-        current_quarter = "2025_Q1"
+        # Get current quarter
+        current_quarter = get_current_quarter()
 
         # Define file paths and S3 keys
         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-        predicted_s3_key = f"predictions/{client_id}_{current_quarter}_line_chart.json"
+        predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+        portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
 
-        # portfolio_file_path = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-        # portfolio_s3_key = f"portfolios/portfolio_{client_id}.json"
-
-        # Load previously predicted line chart data
+        # Load previously predicted current quarter line chart data
         if USE_AWS:
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
             except s3.exceptions.NoSuchKey:
-                # Create Prediction Line Chart :
-                # predicted_line_chart_data = create_current_prediction_line_chart(client_id,client_name,funds,investor_personality)
-                return jsonify({"message": f"Predicted line chart file not found for client ID: {client_id}"}), 404
+                # Create Prediction Line Chart as it wasn't created before
+                predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                print("\nSaving the Predictions Line Chart\n")
+                save_predictions(client_id, current_quarter, predicted_line_chart_data)
         else:
             predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
             if not predicted_line_chart_data:
                 return jsonify({"message": f"No previous predictions found for this client."}), 404
 
         # Fetch and process portfolio data
-        # Load portfolio data
         if USE_AWS:
-            # portfolio_key = f"{portfolio_list_folder}{client_id}.json"
             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
-                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+                current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
             except s3.exceptions.NoSuchKey:
                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+            # Load previous portfolio predictions data
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+                previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                previous_portfolio_data = None
         else:
             portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
-            portfolio_data = load_from_file(portfolio_file)
-            if not portfolio_data:
+            current_portfolio_data = load_from_file(portfolio_file)
+            if not current_portfolio_data:
                 return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+            portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_portfolio.json")
+            previous_portfolio_data = load_from_file(portfolio_predictions_file)
 
-        # Update daily returns if there's a change (dummy function call, implement if needed)
-        # update_daily_returns(client_id, portfolio_daily_change, current_date)
+        # Check for changes in the portfolio
+        if current_portfolio_data != previous_portfolio_data:
+            print("Portfolio data has changed. Updating predictions.")
+            predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
 
-        # Calculate actual returns
-        actual_line_chart_data = [602.58, 506.62, 618.96, 606.66, 1570.58, 3955.08, 3982.38, 4068.60]
-
-        # Combine actual and predicted data
-        comparison_data = {
-            "actual": actual_line_chart_data,
-            "predicted": predicted_line_chart_data
-        }
-
-        # Save comparison data
-        # Save line chart data locally or to AWS based on storage flag
-        if USE_AWS:
-            comparison_s3_key = f"comparisons/{client_id}_{current_quarter}_comparison_chart.json"
-            try:
+            # Save updated portfolio and predictions
+            if USE_AWS:
                 s3.put_object(
                     Bucket=S3_BUCKET_NAME,
-                    Key=comparison_s3_key,
-                    Body=json.dumps(comparison_data),
+                    Key=portfolio_predictions_key,
+                    Body=json.dumps(current_portfolio_data),
                     ContentType='application/json'
                 )
-            except Exception as e:
-                logging.error(f"Error saving prediction data to AWS: {e}")
-                return jsonify({"message": "Error saving prediction data to AWS."}), 500
+                save_predictions(client_id, current_quarter, predicted_line_chart_data)
+            else:
+                save_to_file(portfolio_predictions_file, current_portfolio_data)
+                save_to_file(predicted_file_path, predicted_line_chart_data)
         else:
-            comparison_file_path = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_comparison_chart.json")
-            save_to_file(comparison_file_path, comparison_data)
-            # comparison_file = os.path.join(COMPARISONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-            # save_to_file(comparison_file, comparison_data)
+            print("No changes in portfolio. Using existing predictions.")
 
-        # Return the comparison data
+        # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
+
+        # Process daily changes data for only current quarter :
+        daily_changes_data = []
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+        # Debugging output
+        print("Processed Daily Changes Data:", daily_changes_data)
+        print("Unique Daily Changes:", unique_daily_changes)
+        print("Actual Line Chart Data:", actual_line_chart_data)
+        print("Actual Data Dates:", sorted_actual_dates)
+
         return jsonify({
             "client_id": client_id,
-            "comparison_chart_data": comparison_data
+            "comparison_chart_data": {
+                "actual_dates": sorted_actual_dates,
+                "actual_values": actual_line_chart_data,
+                "predicted": predicted_line_chart_data,
+            },
         }), 200
 
     except Exception as e:
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
+############################################################################################
 
+#####################################################################################################################
 
 def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
     try:
         # Retrieve client and portfolio details
-        # client_id = request.json.get("client_id")
-        # client_name = request.json.get("client_name")
-        # funds = request.json.get("funds")
-        # investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+        client_id = request.json.get("client_id")
+        client_name = request.json.get("client_name")
+        funds = request.json.get("funds")
+        investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
 
         # Load portfolio data (from AWS or local storage)
         if USE_AWS:
@@ -7405,7 +8356,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
         # Prepare date intervals for the current quarter
         current_quarter = get_current_quarter()
-        current_quarter_dates = get_current_quarter_dates()
+        date_intervals = get_current_quarter_dates()
         print(f"Current Quarter: {current_quarter}")
 
         confidence_data = []
@@ -7432,27 +8383,156 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             asset["beta"] = compute_beta(historical_returns, market_returns)
             asset["forecasted_returns"] = arima_forecast(historical_returns).tolist()
             asset["simulated_returns"] = simulate_fluctuations(asset["forecasted_returns"][0], asset["volatility"])
+            
+        # Load client financial data
+        if USE_AWS:
+            # client_summary_key = f"{client_summary_folder}{client_id}.json"
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+                client_financial_data = load_from_file(client_summary_file)
+                if not client_financial_data:
+                    return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+                logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+                # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+        else:
+            client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+            client_financial_data = load_from_file(client_summary_file)
+            if not client_financial_data:
+                return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+        # Initialize economic news to pass to LLM
+        topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+        economic_news = {topic: fetch_news(topic) for topic in topics}
+        portfolio_news = collect_portfolio_news(portfolio_data)
+        
+        # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
+            
+        # Process daily changes data for only current quarter :
+        daily_changes_data = []
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+        
+        # Generate task for LLM with refined prediction ranges
+        min_actual_return = min(actual_line_chart_data)
+        max_actual_return = max(actual_line_chart_data)
+        buffer = 0.05 * (max_actual_return - min_actual_return)
+
 
         # Generate task for LLM
         task = f"""
-            You are tasked with predicting the **current quarter's (3-month)** returns for a client's portfolio.
-            Client Name: {client_name}
+            You are the world's best financial advisor tasked with predicting the current quarter's (3-month) returns for a client's portfolio containing various assets.
+            You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+            - Random market fluctuations (up and down movements).
+            - Economic volatility.
+            - Natural noise in predictions.
+            The client, {client_name}, has the following portfolio:
+
             Portfolio Details: {portfolio_data}
+            Portfolio Analyis: {asset}
+            Financial Situation: {client_financial_data}
+            Available Funds: ${funds}
             Investor Personality: {investor_personality}
-            Funds: ${funds}
+            Portfolio News: {portfolio_news}
+            Economic News: {economic_news}
+            Daily Changes So far (Fluctuations): {raw_daily_changes_data}
+            Portfolio Daily Dates : {sorted_actual_dates}
+            Portfolio Daily Returns: {actual_line_chart_data}
+                     
+            Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+            Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
+            If Provided try to align the returns with what the current daily returns are dont give unrealistic returns.If returns are in negative showcase that and give the predictions in that negative range if their returns dont seem to go positive only after you analyze all the information.
+            If the Provided Daily Returns are very high then see if they can sustain these returns and try to predict as per the current daily returns after you analyze all the information.
+            Try to align your Predictions with what the current daily returns are so that the predictions meet the Actual Data Chnages.
+            Your Predictions should try to capture the Actual Daily Changes Data and match the Fluctuations seen so far.
+            For as many Actual Daily Changes we already have in the {date_intervals} capture all of those in our Predictions Range so that our future Prediction will align with the current chnages.Whatver trends you see with the Daily Changes see if you can Predict the values in that trend if possible.
+            Based on the given provided information :
+            Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+            {date_intervals}
 
-            Predict the portfolio's **daily returns** for the current quarter:
-            - **Best-Case Scenario** (High returns under favorable conditions)
-            - **Worst-Case Scenario** (Low returns under unfavorable conditions)
-            - **Confidence Band** (95% range of returns)
+            Predict the portfolio's **daily returns** in this quarter(3 months). Include:
+            1. **Best-Case Scenario** (High returns under favorable conditions).
+            2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+            3. **Confidence Band** (Range of returns at 95% confidence level).
             
-            Dates to Predict: {current_quarter_dates}
+            1. Ensure predicted returns reflect realistic market conditions by keeping.
 
+            2. Avoid predicting sudden, unrealistic spikes or crashes unless explicitly indicated by the actual returns.
+
+            3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
+
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+
+            
+            Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+            The client, {client_name}, has a portfolio characterized by the following constraints:
+
+            - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
+            - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
+            - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
+
+            Example of simulated_response = 
             ### Response Format:
             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
             |------------|-----------------------|-----------------------|---------------------|------------------|
             | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
-            | ...        | ...   | ...   | ...                 | ...  |
+            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+            Your Response must be in the above table format no messages is required just table format data.
         """
 
         # Simulate LLM response
@@ -7467,10 +8547,17 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
         refined_line_chart_data = add_noise(line_chart_data)
         print(f"Refined Line Chart Data: {refined_line_chart_data}")
+        
+        # Adjust refined predictions to align with actual returns
+        refined_line_chart_data = adjust_predictions_to_actual_range(actual_line_chart_data, refined_line_chart_data)
+        
+        refined_line_chart_data = add_dynamic_fluctuations(refined_line_chart_data, actual_line_chart_data)
+        print(f"Adjusted Refined Line Chart Data: {refined_line_chart_data}")
 
         # Save predictions
-        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
-        save_to_file(prediction_file, refined_line_chart_data)
+        
+        # prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        # save_to_file(prediction_file, refined_line_chart_data)
 
         # Return the response
         return refined_line_chart_data
@@ -7484,20 +8571,99 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+    
 
-# from datetime import datetime, timedelta
+
+def adjust_predictions_to_actual_range(actual_data, predicted_data):
+    """
+    Adjust predicted returns to match the range and variability of actual returns,
+    while managing extreme losses and unrealistic predictions.
+    
+    :param actual_data: List of actual portfolio daily returns
+    :param predicted_data: Dict containing predicted returns and confidence band data
+    :return: Updated predicted_data with adjusted values
+    """
+    if not actual_data:
+        print("No actual data available to adjust predictions.")
+        return predicted_data
+
+    # Calculate key statistics from actual data
+    actual_mean = np.mean(actual_data)
+    actual_std_dev = np.std(actual_data)
+    min_actual = min(actual_data)
+    max_actual = max(actual_data)
+
+    # Set thresholds to clamp predictions within realistic ranges
+    lower_bound = min_actual * 1.2  # 20% buffer for losses
+    upper_bound = max_actual * 1.2  # 20% buffer for gains
+
+    def clamp(value):
+        return max(lower_bound, min(value, upper_bound))
+
+    # Adjust predicted values using scaling, bias correction, and clamping
+    scale_factor = actual_std_dev / np.std(predicted_data["best_case"]) if np.std(predicted_data["best_case"]) > 0 else 1
+    bias_adjustment = actual_mean - np.mean(predicted_data["best_case"])
+
+    predicted_data["best_case"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["best_case"]]
+    predicted_data["worst_case"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["worst_case"]]
+    predicted_data["total_returns"]["percentages"] = [clamp((x * scale_factor) + bias_adjustment) for x in predicted_data["total_returns"]["percentages"]]
+
+    # Adjust confidence bands similarly
+    predicted_data["confidence_band"] = [
+        (clamp((lower * scale_factor) + bias_adjustment), clamp((upper * scale_factor) + bias_adjustment))
+        for lower, upper in predicted_data["confidence_band"]
+    ]
+
+    print("Predictions adjusted and clamped to manage large losses.")
+    return predicted_data
+
+import numpy as np
+
+def add_dynamic_fluctuations(predicted_data, actual_data, fluctuation_factor=0.05):
+    """
+    Adjusts predicted values by introducing dynamic fluctuations to prevent flat-line behavior.
+    
+    :param predicted_data: Dict containing predicted best_case, worst_case, and total_returns
+    :param actual_data: List of actual daily returns
+    :param fluctuation_factor: Factor to control the degree of random fluctuations (default 5%)
+    :return: Updated predicted_data with dynamic fluctuations
+    """
+    def introduce_fluctuation(value):
+        noise = np.random.uniform(-fluctuation_factor, fluctuation_factor) * abs(value)
+        return value + noise
+
+    # Apply fluctuation to avoid flat-line predictions
+    predicted_data["best_case"] = [introduce_fluctuation(x) for x in predicted_data["best_case"]]
+    predicted_data["worst_case"] = [introduce_fluctuation(x) for x in predicted_data["worst_case"]]
+    predicted_data["total_returns"]["percentages"] = [introduce_fluctuation(x) for x in predicted_data["total_returns"]["percentages"]]
+
+    # Apply fluctuation to confidence bands while maintaining order
+    predicted_data["confidence_band"] = [
+        (min(introduce_fluctuation(lower), introduce_fluctuation(upper)), 
+         max(introduce_fluctuation(lower), introduce_fluctuation(upper)))
+        for lower, upper in predicted_data["confidence_band"]
+    ]
+
+    return predicted_data
+
+import calendar
+from datetime import datetime, timedelta
 
 def get_current_quarter():
     now = datetime.now()
     quarter = (now.month - 1) // 3 + 1
     return f"Q{quarter}-{now.year}"
 
+
 def get_current_quarter_dates():
     now = datetime.now()
-    quarter_start_month = 3 * ((now.month - 1) // 3) + 1
-    quarter_start = datetime(now.year, quarter_start_month, 1)
-    next_quarter_start = quarter_start + timedelta(days=90)  # Approximation
-    dates = [quarter_start + timedelta(days=i) for i in range(0, (next_quarter_start - quarter_start).days, 7)]
+    quarter = (now.month - 1) // 3 + 1
+    start_month = 3 * (quarter - 1) + 1
+    start_date = datetime(now.year, start_month, 1)
+    _, days_in_month = calendar.monthrange(now.year, start_month + 2)  # End of quarter
+    end_date = datetime(now.year, start_month + 2, days_in_month)
+
+    dates = [start_date + timedelta(days=i) for i in range(0, (end_date - start_date).days + 1, 7)]
     return [date.strftime("%Y-%m-%d") for date in dates]
 
 
@@ -7731,9 +8897,52 @@ def compute_beta(asset_returns, market_returns):
 # 3. Add ARIMA Forecasting for Returns
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
-from statsmodels.tsa.arima.model import ARIMA
-import pandas as pd
-import numpy as np
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+import warnings
+
+# def check_stationarity(data):
+#     """Placeholder function to check if the series is stationary."""
+#     from statsmodels.tsa.stattools import adfuller
+#     result = adfuller(data)
+#     return result[1] <= 0.05  # p-value <= 0.05 implies stationarity
+
+# def arima_forecast(returns, forecast_days=92):
+#     """
+#     Use ARIMA to forecast future returns with robust error handling.
+#     """
+#     if not isinstance(returns, pd.Series):
+#         returns = pd.Series(returns)
+
+#     # Clean data
+#     returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+#     # Ensure enough data points
+#     if len(returns) < 10:
+#         print("Insufficient data for ARIMA, using mean-based forecast.")
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
+#     # Ensure the index has a frequency for time series modeling
+#     if returns.index.inferred_freq is None:
+#         returns.index = pd.date_range(start=returns.index[0], periods=len(returns), freq='B')
+
+#     # Check stationarity and apply differencing if needed
+#     if not check_stationarity(returns):
+#         returns = returns.diff().dropna()
+
+#     # Suppress convergence warnings
+#     warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+#     # ARIMA model with error handling
+#     try:
+#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+#         model_fit = model.fit()
+#         forecast = model_fit.forecast(steps=forecast_days)
+#         return forecast
+#     except Exception as e:
+#         print(f"ARIMA failed: {e}")
+#         # Fallback: Return constant mean forecast
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
 
 def check_stationarity(series):
     """Perform ADF test to check stationarity."""
@@ -7741,9 +8950,8 @@ def check_stationarity(series):
     return result[1] < 0.05  # Stationary if p-value < 0.05
 
 
-from statsmodels.tsa.arima.model import ARIMA
 
-def arima_forecast(returns, forecast_days=30):
+def arima_forecast(returns, forecast_days=92):
     """Use ARIMA to forecast future returns with error handling."""
     if not isinstance(returns, pd.Series):
         returns = pd.Series(returns)
@@ -7840,7 +9048,6 @@ import re
 # Line Chart V-3 :
 import re
 
-import re
 
 def extract_line_chart_data(response_text):
     """Parses table text into structured line chart data."""
@@ -7879,6 +9086,45 @@ def extract_line_chart_data(response_text):
         "confidence_band": confidence_band,
         "total_returns": {"percentages": total_returns}
     }
+ 
+def extract_next_quarter_line_chart_data(response_text):
+    """
+    Parses table text into structured data for monetary-based predictions.
+    Ensures the correct handling of best-case, worst-case, and confidence band values.
+    """
+    dates, best_case, worst_case, confidence_band, total_returns_amounts = [], [], [], [], []
+
+    # Split the response text into lines and process rows after headers
+    lines = response_text.strip().split("\n")
+
+    for line in lines[2:]:  # Skip headers
+        columns = [col.strip() for col in line.split("|")[1:-1]]  # Remove outer '|'
+
+        if len(columns) == 6:  # Ensure row has required columns
+            try:
+                dates.append(columns[1])
+                best_case.append(float(columns[2].replace("$", "").strip()))
+                worst_case.append(float(columns[3].replace("$", "").strip()))
+                
+                # Extract confidence band values
+                confidence_low = float(columns[4].replace("$", "").strip())
+                confidence_high = float(columns[5].replace("$", "").strip())
+                confidence_band.append((confidence_low, confidence_high))
+                
+                total_returns_amounts.append(float(columns[5].replace("$", "").strip()))
+            except ValueError as e:
+                print(f"Skipping row due to value error: {e}")
+
+    # Ensure compatibility with expected output format
+    return {
+        "dates": dates,
+        "best_case": best_case,
+        "worst_case": worst_case,
+        "confidence_band": confidence_band,
+        "total_returns": {"percentages": [], "amounts": total_returns_amounts}
+    }
+
+
 
 def plot_return_predictions(line_chart_data):
     dates = line_chart_data["dates"]
@@ -7978,7 +9224,7 @@ def plot_refined_data(refined_data):
 
 # Final Predict Returns for Next Quarter :
 
-
+# v-2 :
 @app.route('/predict_returns', methods=['POST'])
 def predict_returns():
     try:
@@ -7987,6 +9233,100 @@ def predict_returns():
         client_name = request.json.get('client_name')
         funds = request.json.get('funds')
         investor_personality = request.json.get('investor_personality', 'Aggressive Investor Personality')
+        
+        # current_quarter = get_current_quarter()
+        next_quarter = get_next_quarter()
+        
+        predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
+        next_predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{next_quarter}_line_chart.json"
+        portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{next_quarter}_portfolio.json"
+        
+        simulated_response = None  # Initialize simulated_response in case no change in Portfolio
+        
+        # Load previously predicted line chart data
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=next_predicted_s3_key)
+                refined_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
+            except s3.exceptions.NoSuchKey:
+                # Create Next Quarter Prediction Line Chart as it wasn't created before
+                
+                simulated_response,refined_line_chart_data = create_next_quarter_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                
+                print("\nSaving the Next Quarter Returns Predictions Line Chart\n")
+                save_predictions(client_id, next_quarter, refined_line_chart_data)
+        else:
+            refined_line_chart_data = load_from_file(predicted_file_path, next_predicted_s3_key)
+            if not refined_line_chart_data:
+                return jsonify({"message": f"No previous predictions found for this client."}), 404
+
+        # Fetch and process portfolio data
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                current_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            
+            # Load previous portfolio predictions data
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_predictions_key)
+                previous_portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                previous_portfolio_data = None
+        else:
+            portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+            current_portfolio_data = load_from_file(portfolio_file)
+            if not current_portfolio_data:
+                return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+            
+            portfolio_predictions_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_portfolio.json")
+            previous_portfolio_data = load_from_file(portfolio_predictions_file)
+
+        # Check for changes in the portfolio
+        # if current_portfolio_data == previous_portfolio_data:
+        if current_portfolio_data != previous_portfolio_data:
+        
+            print("Portfolio data has changed. Updating predictions for next quarter returns.")
+            
+            simulated_response,refined_line_chart_data = create_next_quarter_prediction_line_chart(client_id, client_name, funds, investor_personality)
+
+            # Save updated portfolio and predictions
+            if USE_AWS:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=portfolio_predictions_key,
+                    Body=json.dumps(current_portfolio_data),
+                    ContentType='application/json'
+                )
+                save_predictions(client_id, next_quarter, refined_line_chart_data)
+            else:
+                save_to_file(portfolio_predictions_file, current_portfolio_data)
+                save_to_file(predicted_file_path, refined_line_chart_data)
+        else:
+            print("No changes in portfolio. Using existing predictions.")
+
+
+        # Return the response
+        return jsonify({
+            "client_id": client_id,
+            "client_name": client_name,
+            "predicted_returns": simulated_response,
+            "line_chart_data": refined_line_chart_data
+        }), 200
+
+    except Exception as e:
+        print(f"Error in predicting returns: {e}")
+        return jsonify({"message": f"Error predicting returns: {e}"}), 500
+    
+
+
+# V-2 :
+
+def create_next_quarter_prediction_line_chart(client_id,client_name,funds,investor_personality):
+    try:
 
         # Load portfolio data (using local or AWS storage based on USE_AWS)
         if USE_AWS:
@@ -8060,9 +9400,87 @@ def predict_returns():
             asset['stationarity'] = stationarity
             asset['forecasted_returns'] = forecasted_returns.tolist()
             asset['simulated_returns'] = simulated_returns
+        
+        
+        # Load previously predicted current quarter line chart data
+        
+         # Get current quarter
+        current_quarter = get_current_quarter()
+
+        # Define file paths and S3 keys
+        predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+        predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+        
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
+                predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
+                print("\nFound Prediction Line Chart Data \n")
+            except s3.exceptions.NoSuchKey:
+                # Create Prediction Line Chart as it wasn't created before
+                # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+                print("\nSaving the Predictions Line Chart\n")
+                # save_predictions(client_id, current_quarter, predicted_line_chart_data)
+        else:
+            predicted_line_chart_data = load_from_file(predicted_file_path, predicted_s3_key)
+            if not predicted_line_chart_data:
+                return jsonify({"message": f"No previous predictions found for this client."}), 404
 
             
+         # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
             
+        # Process daily changes data for only current quarter :
+        daily_changes_data = []
+        current_quarter_date = get_current_quarter_dates()
+        start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
+        print(f"Current Quarter Start Date :{start_date}")
+        
+        for timestamp, details in raw_daily_changes_data.items():
+            try:
+                # Normalize the date
+                date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
+
+                # Safely get the correct daily change value
+                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+
+                # Append if the value is not zero and is after or on the start date
+                if value != 0 and date >= start_date:
+                    daily_changes_data.append({"date": date, "value": value})
+            except Exception as e:
+                logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+        # Remove duplicates, retaining the latest value for each date
+        unique_daily_changes = {}
+        for entry in daily_changes_data:
+            unique_daily_changes[entry["date"]] = entry["value"]
+
+        # Convert back to a sorted list of values and dates starting from the current date
+        sorted_actual_dates = sorted(unique_daily_changes.keys())
+        actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+        
+        # Generate task for LLM with refined prediction ranges
+        min_actual_return = min(actual_line_chart_data)
+        max_actual_return = max(actual_line_chart_data)
+        buffer = 0.05 * (max_actual_return - min_actual_return)
+
+
         # Load client financial data
         if USE_AWS:
             # client_summary_key = f"{client_summary_folder}{client_id}.json"
@@ -8107,69 +9525,533 @@ def predict_returns():
             Investor Personality: {investor_personality}
             Portfolio News: {portfolio_news}
             Economic News: {economic_news}
+            Overall Daily Changes Data : {raw_daily_changes_data}
+            Current Quarters Predictions Data : {predicted_line_chart_data}
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
+            You Predictions Should start from where the Current Quarters Predictions Data {predicted_line_chart_data} Ended so that we can have a continous Predcition Line Charts
 
-            Predict the portfolio's **daily returns** over the next 3 months. Include:
+           Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
             3. **Confidence Band** (Range of returns at 95% confidence level).
             
+            1. Ensure predicted returns reflect realistic market conditions by keeping.
+
+            2. Avoid predicting sudden, unrealistic spikes or crashes unless explicitly indicated by the actual returns.
+
+            3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
+
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+
+            
             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+            Refer to the daily portfolio changes {raw_daily_changes_data} to get estimations of the Projected Portfolios Returns in the Next Quarter.Try to match the Current Daily Returns Range so that the Projections become more accurate and realistic.
+
+            The client, {client_name}, has a portfolio characterized by the following constraints:
+
+            - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
+            - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
+            - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
 
             Example of simulated_response = 
             ### Response Format:
             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
             |------------|-----------------------|-----------------------|---------------------|------------------|
-            | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
-            | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
-            | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
-            | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
-            | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
-            | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
-            | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
-            | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
-            | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+            | 2025-01-01 | 22.5                  | -1.0                  | 6.0% - 20.0%        | 14.0             |
+            | 2025-01-15 | 30.0                  | 5.0                   | 7.5% - 24.0%        | 18.5             |
+            | 2025-01-31 | 35.0                  | 11.0                  | 14.0% - 28.0%       | 20.0             |
+            | 2025-02-01 | 25.0                  | 3.0                   | -1.8% - 20.0%       | 16.5             |
+            | 2025-02-15 | 33.5                  | 6.0                   | 10.0% - 26.0%       | 27.5             |
+            | 2025-02-28 | 45.0                  | 11.0                  | 14.0% - 28.0%       | 20.0             |
+            | 2025-03-01 | 50.5                  | 12.0                  | 20.0% - 34.0%       | 33.75            |
+            | 2025-03-15 | 46.0                  | 8.5                   | 26.5% - 39.0%       | 34.25            |
+            | 2025-03-31 | 50.5                  | 11.0                  | 30.0% - 44.0%       | 36.75            |
 
             
             Your Response must be in the above table format no messages is required just table format data.
+
+            Make Sure all the table contents have values and no null/none/blank value is passed.
         """
-        
+            # | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+            # |------------|-----------------------|-----------------------|---------------------|------------------|
+            # | 2025-01-01 | 22.5                  | -1.0                  | 20.0% - 6.0%        | 14.0             |
+            # | 2025-01-15 | 30.0                  | 5.0                   | 24.0% - 7.5%        | 18.5             |
+            # | 2025-01-31 | 35.0                  | 11.0                  | 28.0% - 14.0%       | 20.0             |
+            # | 2025-02-01 | 25.0                  | 3.0                   | 20.0% - -1.8%       | 16.5             |
+            # | 2025-02-15 | 33.5                  | 6.0                   | 26.0% - 10.0%       | 27.5             |
+            # | 2025-02-28 | 45.0                  | 11.0                  | 28.0% - 14.0%       | 20.0             |
+            # | 2025-03-01 | 50.5                  | 12.0                  | 34.0% - 20.0%       | 33.75            |
+            # | 2025-03-15 | 46.0                  | 8.5                   | 39.0% - 26.5%       | 34.25            |
+            # | 2025-03-31 | 50.5                  | 11.0                  | 44.0% - 30.0%       | 36.75            |
+
+            # Example of simulated_response = 
+            # ### Response Format:
+            
+
+            
         # Simulate LLM prediction
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(task)
         simulated_response = markdown_to_text(response.text)
         print(simulated_response)
+        
         line_chart_data = extract_line_chart_data(simulated_response)
+        # line_chart_data = extract_next_quarter_line_chart_data(simulated_response)
         print(f"\nLine Chart Data :{line_chart_data}")
         
         refined_line_chart_data = add_noise(line_chart_data)
         print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
-        
-        # Plot return predictions :
-        # plot_return_predictions(line_chart_data)
-        # plot_refined_data(refined_line_chart_data)
-        # plot_return_predictions_with_fluctuations(refined_line_chart_data)
 
         # Save predictions
-        prediction_file = os.path.join(PREDICTIONS_DIR, f"{client_id}_{next_quarter}_line_chart.json")
-        save_to_file(prediction_file, refined_line_chart_data)
+        # save_predictions(client_id,next_quarter,refined_line_chart_data)
 
-        # Return the response
-        return jsonify({
-            "client_id": client_id,
-            "client_name": client_name,
-            "predicted_returns": simulated_response,
-            "line_chart_data": refined_line_chart_data
-        }), 200
+        return simulated_response,refined_line_chart_data
 
     except Exception as e:
         print(f"Error in predicting returns: {e}")
         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+        
     
+# Gives Percentages : V-1 :
+# def create_next_quarter_prediction_line_chart(client_id,client_name,funds,investor_personality):
+#     try:
+
+#         # Load portfolio data (using local or AWS storage based on USE_AWS)
+#         if USE_AWS:
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#                 portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#         else:
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             if not os.path.exists(portfolio_file_path):
+#                 return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+#             with open(portfolio_file_path, 'r') as file:
+#                 portfolio_data = json.load(file)
+        
+#         # portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+#         # portfolio_data = load_from_file(portfolio_file)
+#         # if portfolio_data is None:
+#         #     return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load market data for beta calculation
+#         market_returns = fetch_historical_returns(MARKET_INDEX)
+
+#         # Prepare date intervals
+#         next_quarter = get_next_quarter()
+#         print(f"Next Quarter: {next_quarter}")
+
+#         confidence_data = []
+        
+#         # Iterate over each asset in the portfolio
+        
+#         for asset in portfolio_data:  # Iterate directly over the list of dictionaries
+#             ticker = asset.get('symbol')  # Use .get() to safely retrieve the 'symbol' key
+#             if not ticker:
+#                 continue
+#             if ticker == 'N/A':
+#                 continue
+
+#             # Fetch historical returns
+#             historical_returns = fetch_historical_returns(ticker)
+#             if historical_returns.empty:
+#                 print(f"No valid returns for {ticker}. Assigning defaults.")
+#                 asset['volatility'] = 0.8
+#                 asset['sharpe_ratio'] = 0.7
+#                 asset['beta'] = 0.5
+#                 asset['forecasted_returns'] = [0] * FORECAST_DAYS
+#                 asset['simulated_returns'] = [0] * FORECAST_DAYS
+#                 continue
+
+#             # Metrics Calculation
+#             volatility = compute_volatility(historical_returns)
+#             print(volatility)
+#             sharpe_ratio = compute_sharpe_ratio(historical_returns)
+#             print(sharpe_ratio)
+#             beta = compute_beta(historical_returns, market_returns)
+#             print(beta)
+#             stationarity = adf_test(historical_returns)
+#             print(stationarity)
+
+#             # Forecasting
+#             forecasted_returns = arima_forecast(historical_returns)
+#             print(forecasted_returns)
+#             simulated_returns = simulate_fluctuations(forecasted_returns.iloc[0], volatility)
+#             print(simulated_returns)
+
+#             # Save metrics back to the portfolio
+#             asset['volatility'] = volatility
+#             asset['sharpe_ratio'] = sharpe_ratio
+#             asset['beta'] = beta
+#             asset['stationarity'] = stationarity
+#             asset['forecasted_returns'] = forecasted_returns.tolist()
+#             asset['simulated_returns'] = simulated_returns
+
+#         # Load client financial data
+#         if USE_AWS:
+#             # client_summary_key = f"{client_summary_folder}{client_id}.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_financial_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#                 client_financial_data = load_from_file(client_summary_file)
+#                 if not client_financial_data:
+#                     return jsonify({"message": f"No client financial data found for client ID in local: {client_id}"}), 404
+#                 logging.error(f"Error retrieving client financial data from AWS,will extract File from Local if Present: {e}")
+#                 # return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+#         else:
+#             client_summary_file = os.path.join(CLIENT_SUMMARY_DIR, f"{client_id}.json")
+#             client_financial_data = load_from_file(client_summary_file)
+#             if not client_financial_data:
+#                 return jsonify({"message": f"No client financial data found for client ID: {client_id}"}), 404
+
+#         # Initialize economic news to pass to LLM
+#         topics = ["rising interest rates", "U.S. inflation", "geopolitical tensions", "US Elections", "Global Wars"]
+#         economic_news = {topic: fetch_news(topic) for topic in topics}
+#         portfolio_news = collect_portfolio_news(portfolio_data)
+
+#         # Generate date intervals for next quarter
+#         date_intervals = get_next_quarter_dates()
+#         next_quarter = get_next_quarter()
+
+#         task = f"""
+#             You are the world's best financial advisor tasked with predicting the next quarter's (3-month) returns for a client's portfolio containing various assets.
+#             You are the best at Predicting client's portfolio returns and nothing is impossible for you to predict, and you consider all realistic market factors such as:
+#             - Random market fluctuations (up and down movements).
+#             - Economic volatility.
+#             - Natural noise in predictions.
+#             The client, {client_name}, has the following portfolio:
+
+#             Portfolio Details: {portfolio_data}
+#             Portfolio Analyis: {asset}
+#             Financial Situation: {client_financial_data}
+#             Available Funds: ${funds}
+#             Investor Personality: {investor_personality}
+#             Portfolio News: {portfolio_news}
+#             Economic News: {economic_news}
+                     
+#             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
+#             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
+#             {date_intervals}
+
+#             Predict the portfolio's **daily returns** over the next 3 months. Include:
+#             1. **Best-Case Scenario** (High returns under favorable conditions).
+#             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
+#             3. **Confidence Band** (Range of returns at 95% confidence level).
+            
+#             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
+
+#             Example of simulated_response = 
+#             ### Response Format:
+#             | Date       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%) | Total Return (%) |
+#             |------------|-----------------------|-----------------------|---------------------|------------------|
+#             | 2025-01-01 | 2.5 | -1.0 | 1.0% - 2.0% | 0.75 |
+#             | 2025-01-15 | 3.0 | -0.5 | 1.5% - 2.5% | 1.25 |
+#             | 2025-01-31 | 3.5 | 0.0 | 2.0% - 3.0% | 1.75 |
+#             | 2025-02-01 | 4.0 | 0.5 | 2.5% - 3.5% | 2.25 |
+#             | 2025-02-15 | 4.5 | 1.0 | 3.0% - 4.0% | 2.75 |
+#             | 2025-02-28 | 5.0 | 1.5 | 3.5% - 4.5% | 3.25 |
+#             | 2025-03-01 | 5.5 | 2.0 | 4.0% - 5.0% | 3.75 |
+#             | 2025-03-15 | 6.0 | 2.5 | 4.5% - 5.5% | 4.25 |
+#             | 2025-03-31 | 6.5 | 3.0 | 5.0% - 6.0% | 4.75 |
+
+            
+#             Your Response must be in the above table format no messages is required just table format data.
+#         """
+        
+#         # Simulate LLM prediction
+#         model = genai.GenerativeModel('gemini-1.5-flash')
+#         response = model.generate_content(task)
+#         simulated_response = markdown_to_text(response.text)
+#         print(simulated_response)
+#         line_chart_data = extract_line_chart_data(simulated_response)
+#         print(f"\nLine Chart Data :{line_chart_data}")
+        
+#         refined_line_chart_data = add_noise(line_chart_data)
+#         print(f"\nRefined Line Chart Data :{refined_line_chart_data}")
+
+#         # Save predictions
+#         # save_predictions(client_id,next_quarter,refined_line_chart_data)
+
+#         return simulated_response,refined_line_chart_data
+
+#     except Exception as e:
+#         print(f"Error in predicting returns: {e}")
+#         return jsonify({"message": f"Error predicting returns: {e}"}), 500
+
+
+######################################################################################################################
+
+# Asset Class Returns Prediction :
+
+def calculate_predicted_returns_by_asset_class(portfolio_data, funds, investor_personality):
+    """
+    Calculate predicted returns for each asset class based on portfolio size and risk profile.
+    """
+    asset_class_predictions = {}
     
+    for asset in portfolio_data:
+        asset_class = asset.get("class", "Others")  # Define or infer asset class
+        ticker = asset.get("symbol")
+        allocation_percentage = asset.get("allocation", 0)  # % allocation to this asset
+        
+        if not ticker or allocation_percentage == 0:
+            continue
+        
+        # Simulate AI-driven predictions
+        historical_returns = fetch_historical_returns(ticker)
+        forecasted_returns = arima_forecast(historical_returns).tolist() if not historical_returns.empty else [0] * FORECAST_DAYS
+        
+        # Scale returns based on portfolio allocation
+        predicted_returns = [
+            (funds * allocation_percentage / 100) * return_pct / 100
+            for return_pct in forecasted_returns
+        ]
+        
+        # Aggregate predictions by asset class
+        if asset_class not in asset_class_predictions:
+            asset_class_predictions[asset_class] = predicted_returns
+        else:
+            asset_class_predictions[asset_class] = [
+                x + y for x, y in zip(asset_class_predictions[asset_class], predicted_returns)
+            ]
+    
+    return asset_class_predictions
+
+
+
+@app.route('/asset_class_predictions', methods=['POST'])
+def asset_class_predictions():
+    try:
+        # Fetch client and portfolio data
+        request_data = request.json
+        client_id = request_data.get("client_id")
+        funds = request_data.get("funds")
+        asset_classes = """
+                        "Equities"
+                        "Bonds"
+                        Real Estate"
+                        "Commodities"
+                        "Cryptocurrency"
+                        Mutual Funds"
+                        """
+
+        if not client_id :
+            return jsonify({"message": "Missing required field client_id"}), 400
+        
+         # Load portfolio data (using local or AWS storage based on USE_AWS)
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+        else:
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            if not os.path.exists(portfolio_file_path):
+                return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
+
+        # Verify portfolio data is a list
+        if not isinstance(portfolio_data, list):
+            return jsonify({"message": "Portfolio data is not in the expected format"}), 500
+
+        # Process daily changes data
+        daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                raw_daily_changes_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Raw Daily Changes Data :\n{raw_daily_changes_data}")
+            except s3.exceptions.NoSuchKey:
+                logging.warning(f"No daily changes data found for client ID: {client_id} in AWS.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        else:
+            daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    raw_daily_changes_data = json.load(file)
+            else:
+                logging.warning(f"No daily changes data found locally for client ID: {client_id}.")
+                return jsonify({"message": "No daily changes data found."}), 404
+        
+        # Tasks Set up :
+            
+        task_asset_class_returns = f"""
+                                    You are a financial analyst AI tasked with generating return predictions for each asset class in a portfolio. 
+                                    The portfolio details are as follows:
+                                    - **Portfolio Details:** {portfolio_data}
+                                    - **Daily Changes Data:** {raw_daily_changes_data}
+                                    - **Portfolio Size:** ${funds}
+                                    - **Asset Classes:** {asset_classes}
+
+                                    ### Requirements:
+                                    1. For each asset class, predict:
+                                    - **Best-Case Return (%):** The maximum expected return based on favorable market conditions.
+                                    - **Worst-Case Return (%):** The minimum expected return during adverse conditions.
+                                    - **Confidence Band (%):** The range of expected returns at a 95% confidence level.
+
+                                    2. Ensure your predictions are based on:
+                                    - Historical market trends and volatility.
+                                    - Realistic economic scenarios.
+                                    - Each asset class's expected behavior under different market conditions.
+
+                                    ### Deliverables:
+                                    Generate predictions in the following table format:
+
+                                    | Asset Class       | Best-Case Return (%) | Worst-Case Return (%) | Confidence Band (%)  |
+                                    |-------------------|----------------------|-----------------------|---------------------|
+                                    | Equities          | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+                                    | Bonds             | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+                                    | Real Estate       | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+                                    | Commodities       | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+                                    | Cryptocurrency    | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+                                    | Mutual Funds      | XX.XX               | XX.XX                 | XX.XX - XX.XX       |
+
+                                    ### Additional Guidance:
+                                    - Use realistic and data-driven analysis for your predictions.
+                                    - Highlight which asset class is expected to contribute the most to overall portfolio performance.
+                                    - If an asset class is expected to show high volatility or large confidence bands, provide a short explanation.
+
+                                    Ensure the table is complete and accurate.
+                                    """
+
+
+        task_portfolio_variance = f"""
+                                    You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio. 
+                                    The portfolio details are as follows:
+                                    - **Portfolio Details:** {portfolio_data}
+                                    - **Daily Changes Data:** {raw_daily_changes_data}
+                                    - **Portfolio Size:** ${funds}
+                                    - **Asset Classes:** {asset_classes}
+
+                                    ### Portfolio Assumptions:
+                                    - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
+                                    - Use the following provided examples to guide your calculations:
+                                    
+                                    #### Example 1: Variance Calculation for a Single Stock
+                                    - **Profit:** $4000 with a probability of 0.3.
+                                    - **Loss:** -$1000 with a probability of 0.7.
+                                    - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
+                                    - **Variance (σ²):** Use the formula σ² = Σ[(x²) * f(x)] - μ².
+                                    - **Standard Deviation (σ):** Take the square root of the variance.
+
+                                    #### Example 2: Portfolio Variance
+                                    For a portfolio distributed across multiple assets:
+                                    1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
+                                    2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
+                                    - Expected Portfolio Return:
+                                        Boom = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+                                        Bust = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+                                    - Portfolio Variance:
+                                        Include the correlation between assets if applicable.
+
+                                    ### Deliverables:
+                                    1. Explain your step-by-step calculations for:
+                                    - **Expected Return** for each asset and the overall portfolio.
+                                    - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
+
+                                    2. Present results in a clear, well-explained format, avoiding tables but providing structured paragraphs with values.
+
+                                    3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
+
+                                    Ensure your calculations are correct, and the explanation is clear and easy to understand for both technical and non-technical audiences.
+                                    """
+
+
+        # AI Model Integration
+        # Table Response :
+        
+        print("Generating AI-based predictions...")
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(task_asset_class_returns)
+        simulated_table_response = markdown_to_text(response.text)
+        print(f"simulated_table_response:\n{simulated_table_response}")
+        # Extract table data
+        extracted_table_data = extract_table_data_from_text(simulated_table_response)
+
+        # Convert to JSON format for frontend
+        asset_predictions_table_data = json.dumps(extracted_table_data, indent=4)
+        print(asset_predictions_table_data)
+        
+        # Calculations Response
+        response = model.generate_content(task_portfolio_variance)
+        simulated_response = markdown_to_text(response.text)
+        
+        # Process the response from LLM
+        html_suggestions = markdown.markdown(simulated_response)
+        # print(f"html_suggestions:\n\n{html_suggestions}")
+        format_suggestions = markdown_to_text(html_suggestions)
+        
+        # Debugging output for validation
+        print("Generated Asset Class Predictions:\n\n", format_suggestions)
+
+        # Response structure
+        response_data = {
+            "message": "Asset Class Predictions Generated Successfully",
+            "asset_predictions_table_data":asset_predictions_table_data,
+            "simulated_response":format_suggestions
+        }
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        print(f"Error in asset_class_predictions: {e}")
+        return jsonify({"message": f"Error predicting asset class returns: {e}"}), 500
+    
+
+def extract_table_data_from_text(text):
+    """
+    Extracts table data from text containing asset class information.
+
+    Args:
+        text (str): The input text containing a table.
+
+    Returns:
+        dict: Extracted table data formatted for JSON or frontend use.
+    """
+    # Define the table headers
+    headers = ["Asset Class", "Best-Case Return (%)", "Worst-Case Return (%)", "Confidence Band (%)", "Explanation"]
+
+    # Regular expression to match table rows
+    row_pattern = re.compile(
+        r"\|\s*(?P<asset_class>.+?)\s*\|\s*"  # Asset Class
+        r"(?P<best_case>-?\d+\.\d+)\s*\|\s*"  # Best-Case Return (%)
+        r"(?P<worst_case>-?\d+\.\d+)\s*\|\s*"  # Worst-Case Return (%)
+        r"(?P<confidence_band>.+?)\s*\|\s*"  # Confidence Band (%)
+        r"(?P<explanation>.+?)\s*\|",  # Explanation
+        re.MULTILINE
+    )
+
+    # Extract rows
+    rows = []
+    for match in row_pattern.finditer(text):
+        rows.append({
+            "Asset Class": match.group("asset_class").strip(),
+            "Best-Case Return (%)": float(match.group("best_case")),
+            "Worst-Case Return (%)": float(match.group("worst_case")),
+            "Confidence Band (%)": match.group("confidence_band").strip(),
+            "Explanation": match.group("explanation").strip()
+        })
+
+    # Return as structured data
+    return {"table_data": rows}
+
+
+
+######################################################################################################################
+    
+
 ######################################################################################################################
 ###################################             Dashboard Analysis ###################################################
 
@@ -8399,6 +10281,115 @@ def fetch_consolidated_portfolio(client_ids):
         return portfolios
 
 
+#################################################################################################################################
+
+# Asset Allocation based on INvestor Profile :
+
+@app.route('/asset_allocation_investor_profile', methods=['POST'])
+def asset_allocation_investor_profile():
+    try:
+        # Fetch client data and validate input
+        clients = request.json.get("data")
+        if not clients or not isinstance(clients, list):
+            return jsonify({"message": "Invalid or missing client data"}), 400
+
+        print("Received client data:", clients)
+
+        # Map client investment personalities
+        client_personality_map = {
+            client["uniqueId"]: client.get("investment_personality", "Unknown")
+            for client in clients if client.get("uniqueId")
+        }
+
+        if not client_personality_map:
+            return jsonify({"message": "No valid client data found"}), 400
+
+        # Fetch consolidated portfolio data for provided clients
+        portfolios = fetch_consolidated_portfolio(list(client_personality_map.keys()))
+        print("Fetched portfolios:", portfolios)
+
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+
+        # Initialize personality-based asset data
+        personality_asset_data = {"Conservative Investor": {}, "Moderate Investor": {}, "Aggressive Investor": {}}
+
+        # Process portfolios by investment personality
+        for client_id, portfolio in portfolios.items():
+            personality = client_personality_map.get(client_id, "Unknown")
+            print(f"Processing client {client_id} with personality {personality}")
+
+            # Ensure portfolio is wrapped in a dictionary
+            if isinstance(portfolio, list):
+                portfolio = {"assets": portfolio}
+
+            # Validate portfolio structure
+            assets = portfolio.get("assets", [])
+            if not isinstance(assets, list) or personality not in personality_asset_data:
+                print(f"Invalid portfolio for client {client_id}: {portfolio}")
+                continue
+
+            # Aggregate investments by asset class for each personality
+            for asset in assets:
+                asset_class = asset.get("assetClass", "Other").strip().capitalize()
+                invested_amount = asset.get("Amount_Invested", 0)
+
+                # Skip invalid or zero investments
+                try:
+                    invested_amount = float(invested_amount)
+                except ValueError:
+                    invested_amount = 0
+
+                if invested_amount <= 0:
+                    continue
+
+                if asset_class not in personality_asset_data[personality]:
+                    personality_asset_data[personality][asset_class] = 0
+
+                personality_asset_data[personality][asset_class] += invested_amount
+
+        print("Aggregated personality asset data:", personality_asset_data)
+
+        # Function to generate pie chart data
+        def generate_pie_chart_data(personality_key):
+            data = personality_asset_data[personality_key]
+            return {
+                "labels": list(data.keys()) if data else ["No Data"],
+                "datasets": [{
+                    "data": list(data.values()) if data else [0],
+                    "label": f"{personality_key} Asset Allocation",
+                    "backgroundColor": ["#FF9999", "#66B2FF", "#FFCC99", "#99FF99", "#CC99FF"]
+                }]
+            }
+
+        # Generate pie chart data for each personality type
+        conservative_pie_chart_data = generate_pie_chart_data("Conservative Investor")
+        moderate_pie_chart_data = generate_pie_chart_data("Moderate Investor")
+        aggressive_pie_chart_data = generate_pie_chart_data("Aggressive Investor")
+
+        # Debugging outputs
+        print("Conservative Pie Chart Data:", conservative_pie_chart_data)
+        print("Moderate Pie Chart Data:", moderate_pie_chart_data)
+        print("Aggressive Pie Chart Data:", aggressive_pie_chart_data)
+
+        # Format the response
+        response = {
+            "message": "Asset Infographics by Investor Profile generated successfully",
+            "conservative_pie_chart_data": conservative_pie_chart_data,
+            "moderate_pie_chart_data": moderate_pie_chart_data,
+            "aggressive_pie_chart_data": aggressive_pie_chart_data,
+            "details": personality_asset_data
+        }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"Error in asset_allocation_investor_profile: {e}")
+        return jsonify({"message": f"Error in asset_allocation_investor_profile: {e}"}), 500
+
+
+
+#################################################################################################################################
 
 # API to get the asset-class infographics :
 
@@ -8450,7 +10441,9 @@ def asset_class_infographics():
                 # Debugging: Print each asset being processed
                 print(f"Processing asset for client {client_id}: {asset}")
 
-                asset_class = asset.get("assetClass", "Other")
+                asset_class = asset.get("assetClass", "Other").capitalize()
+                asset_class = "ETF" if asset_class == "Etf" else asset_class
+
                 if asset_class not in asset_class_data:
                     asset_class_data[asset_class] = {
                         "clients": set(),  # Use a set to prevent duplicate client counts
@@ -8511,6 +10504,7 @@ def get_best_performing_assets_api():
         request_data = request.json
         clients = request_data.get("data")
         asset_class = request_data.get("asset_class")
+        asset_class = "etf" if asset_class == "ETF" else asset_class
         
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
@@ -10088,10 +12082,15 @@ def dashboard_infographics():
         print(f"Error calculating dashboard metrics: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+#################################################################################################################################
 
 
 #################################################################################################################################
 
 # Run the Flask application
-if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0',debug=True)
+
+
+if __name__ == "__main__":
+    app.run(debug=app_config.DEBUG)

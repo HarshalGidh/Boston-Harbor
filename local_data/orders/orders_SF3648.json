@@ -1,0 +1,134 @@
+[
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "Stocks",
+        "Date": "12/24/2024, 07:56:45",
+        "Action": "buy",
+        "Name": "ATA Creativity Global",
+        "Symbol": "AACG",
+        "Units": 800,
+        "UnitPrice": 0.8100000023841858,
+        "TransactionAmount": 648.0000019073486
+    },
+    {
+        "Market": "NYSE",
+        "AssetClass": "Stocks",
+        "Date": "12/24/2024, 07:57:51",
+        "Action": "buy",
+        "Name": "Ares Acquisition Corporation II - Class A",
+        "Symbol": "AACT",
+        "Units": 1000,
+        "UnitPrice": 10.970000267028809,
+        "TransactionAmount": 10970.000267028809
+    },
+    {
+        "Market": "Binance",
+        "AssetClass": "Cryptocurrency",
+        "Date": "12/24/2024, 07:58:20",
+        "Action": "buy",
+        "Name": "NEO",
+        "Symbol": "NEO",
+        "Units": 233,
+        "UnitPrice": 16.530000686645508,
+        "TransactionAmount": 3851.4901599884033
+    },
+    {
+        "Market": "S&P 500",
+        "AssetClass": "Stocks",
+        "Date": "12/24/2024, 10:09:32",
+        "Action": "buy",
+        "Name": "3M",
+        "Symbol": "MMM",
+        "Units": 1,
+        "UnitPrice": 128.97000122070312,
+        "TransactionAmount": 128.97000122070312
+    },
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "etf",
+        "Date": "01/07/2025, 02:39:46",
+        "Action": "buy",
+        "Name": "ADVISORSHARES DORSEY WRIGHT ADR ETF ",
+        "Symbol": "AADR",
+        "Units": 1,
+        "UnitPrice": 71.27999877929688,
+        "TransactionAmount": 71.27999877929688
+    },
+    {
+        "Market": "NASDAQ",
+        "AssetClass": "etf",
+        "Date": "01/07/2025, 02:56:22",
+        "Action": "buy",
+        "Name": "Arch Capital Group Ltd",
+        "Symbol": "ACGLO",
+        "Units": 1,
+        "UnitPrice": 21.93600082397461,
+        "TransactionAmount": 21.93600082397461
+    },
+    {
+        "Market": "S&P 500",
+        "AssetClass": "stocks",
+        "Date": "01/07/2025, 02:57:00",
+        "Action": "buy",
+        "Name": "A. O. Smith",
+        "Symbol": "AOS",
+        "Units": 1,
+        "UnitPrice": 68.9000015258789,
+        "TransactionAmount": 68.9000015258789
+    },
+    {
+        "Market": "Treasury",
+        "AssetClass": "Bonds",
+        "Date": "01/08/2025, 02:07:06",
+        "Action": "buy",
+        "Name": "Treasury Yield 5 Years",
+        "Symbol": "^FVX",
+        "Units": 1,
+        "UnitPrice": 4.47,
+        "TransactionAmount": 4.47
+    },
+    {
+        "Market": "Treasury",
+        "AssetClass": "Bonds",
+        "Date": "01/08/2025, 02:10:57",
+        "Action": "buy",
+        "Name": "CBOE Interest Rate 10 Year T No",
+        "Symbol": "^TNX",
+        "Units": 1,
+        "UnitPrice": 4.68,
+        "TransactionAmount": 4.68
+    },
+    {
+        "Market": "Treasury",
+        "AssetClass": "Bonds",
+        "Date": "01/08/2025, 02:11:38",
+        "Action": "buy",
+        "Name": "Treasury Yield 5 Years",
+        "Symbol": "^FVX",
+        "Units": 1,
+        "UnitPrice": 4.47,
+        "TransactionAmount": 4.47
+    },
+    {
+        "Market": "Treasury",
+        "AssetClass": "Bonds",
+        "Date": "01/08/2025, 02:15:24",
+        "Action": "buy",
+        "Name": "13 WEEK TREASURY BILL",
+        "Symbol": "^IRX",
+        "Units": 1,
+        "UnitPrice": 4.2,
+        "TransactionAmount": 4.2
+    },
+    {
+        "Market": null,
+        "AssetClass": "Commodities",
+        "Date": "01/09/2025, 05:25:20",
+        "Action": "buy",
+        "Name": "Gold",
+        "Symbol": "GC=F",
+        "Units": 4,
+        "UnitPrice": 2682.3,
+        "TransactionAmount": 10729.2
+    }
+]
