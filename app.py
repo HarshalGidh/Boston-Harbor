@@ -87,34 +87,34 @@ from flask import Flask, request, jsonify
 from flask import Flask, request, jsonify, send_file
 import asyncio
 from flask_cors import CORS
-# app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
-
-from config import config
-
-# Load the environment
-env = os.getenv("FLASK_ENV", "development")
-app_config = config[env]
-
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
+# from config import config
+
+# # Load the environment
+# env = os.getenv("FLASK_ENV", "development")
+# app_config = config[env]
+
+# app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": "*"}})
-CORS(app, resources={r"/*": {"origins": [
-    "http://192.168.29.254:51866",
-    "http://wealth-Management.mresult.com"
-]}})
-app.config.from_object(app_config)
+# CORS(app, resources={r"/*": {"origins": [
+#     "http://192.168.29.254:51866",
+#     "http://wealth-Management.mresult.com"
+# ]}})
+# app.config.from_object(app_config)
 
-print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
-print(f"BASE_URL: {os.getenv('BASE_URL')}")
-print(f"DEBUG: {os.getenv('DEBUG')}")
+# print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
+# print(f"BASE_URL: {os.getenv('BASE_URL')}")
+# print(f"DEBUG: {os.getenv('DEBUG')}")
 
-@app.route('/api/endpoint', methods=['GET'])
-def get_data():
-    return {
-        "base_url": app.config['BASE_URL'],
-        "message": f"Running in {env} mode",
-        "debug": app.config['DEBUG']
-    }
+# @app.route('/api/endpoint', methods=['GET'])
+# def get_data():
+#     return {
+#         "base_url": app.config['BASE_URL'],
+#         "message": f"Running in {env} mode",
+#         "debug": app.config['DEBUG']
+#     }
 
 
 # @app.after_request
@@ -5261,14 +5261,27 @@ def analyze_stock():
         # Fetch stock data
         data, formatted_data, avg_close, file_path = get_stock_data(ticker)
         
+        # Company news : {data.get('Top_News')}
+        
         # Create analysis task prompt for LLM
         task_prompt = f"""
         You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
-        Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
-        Company news : {data.get('Top_News')}
+        Analyze the stock performance for the company : {company} ticker : {ticker}. The company's details are as follows:{formatted_data}
+        
         You have enough data available to analyze the stock and no need to say lack of data or context.
+        Nothing is impossible for you so dont say such words for any reason you are the best in predicting stocks and giving the best analysis with whatever data that you have.
 
-        **Company Name:** 
+        **Company Name:** {company}
+        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
+        - Whether the stock is overvalued or undervalued.
+        - Predictions for its performance in the upcoming quarter.
+        - Recommendations for buying, holding, or selling the stock.
+        - Give your views on the KPIs in a table format for the Stock: 
+        Table Heading : Key Performance Indicators (KPIs): (This Should be the Heading)
+        These are the labels in each rows : PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
+        These are the labels for the Columns : KPI	Value	Interpretation
+        These are the values of each KPIs. Give your interpretations for each KPIs
+        (Table Content Information Headers should be same as given below)
         **PE Ratio:** {data.get('PE_Ratio')}
         **EPS:** {data.get('EPS')}
         **Book Value:** {data.get('Book_Value')}
@@ -5279,12 +5292,6 @@ def analyze_stock():
         **Earnings Growth:** {data.get('Earnings_Growth')}
         **Today's Market Performance:** Closing Price - {data.get('Todays_Closing_Price')}, High Price - {data.get('Today_High_Price')}
 
-        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
-        - Whether the stock is overvalued or undervalued.
-        - Predictions for its performance in the upcoming quarter.
-        - Recommendations for buying, holding, or selling the stock.
-        - Give your views on the KPIs in a table format for the Stock:
-        PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
         """
         
         # Generate content using LLM model
@@ -5349,6 +5356,8 @@ def stock_price_predictions(ticker):
             market_conditions = ""
         
         print(market_conditions)
+        
+        next_quarter_dates = get_next_quarter_dates()
 
         # Generate prompt for LLM model
         task = f"""
@@ -5359,8 +5368,9 @@ def stock_price_predictions(ticker):
             - Recent price trends (5-day): {recent_trend:.2f}%
             - Market and economic conditions: {market_conditions}
             - Relevant news: {news}
+            - Next quarter dates: {next_quarter_dates}
 
-            Predict the expected stock prices for the next month (30 days) under these conditions:
+            Predict the expected stock prices for the next quarter (90/92 days) under these conditions:
             1. **Best-Case Scenario** (Optimistic market conditions).
             2. **Worst-Case Scenario** (Pessimistic market conditions).
             3. **Confidence Band** (Range of expected prices with 95% confidence).
@@ -8900,16 +8910,16 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 import warnings
 
-# def check_stationarity(data):
-#     """Placeholder function to check if the series is stationary."""
-#     from statsmodels.tsa.stattools import adfuller
-#     result = adfuller(data)
-#     return result[1] <= 0.05  # p-value <= 0.05 implies stationarity
+
+# def check_stationarity(series):
+#     """Perform ADF test to check stationarity."""
+#     result = adfuller(series)
+#     return result[1] < 0.05  # Stationary if p-value < 0.05
+
+
 
 # def arima_forecast(returns, forecast_days=92):
-#     """
-#     Use ARIMA to forecast future returns with robust error handling.
-#     """
+#     """Use ARIMA to forecast future returns with error handling."""
 #     if not isinstance(returns, pd.Series):
 #         returns = pd.Series(returns)
 
@@ -8918,19 +8928,15 @@ import warnings
 
 #     # Ensure enough data points
 #     if len(returns) < 10:
-#         print("Insufficient data for ARIMA, using mean-based forecast.")
 #         return pd.Series([np.mean(returns)] * forecast_days)
 
-#     # Ensure the index has a frequency for time series modeling
+#     # Ensure the index has a frequency
 #     if returns.index.inferred_freq is None:
-#         returns.index = pd.date_range(start=returns.index[0], periods=len(returns), freq='B')
+#         returns = returns.asfreq('B')  # Business day frequency
 
 #     # Check stationarity and apply differencing if needed
 #     if not check_stationarity(returns):
 #         returns = returns.diff().dropna()
-
-#     # Suppress convergence warnings
-#     warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 #     # ARIMA model with error handling
 #     try:
@@ -8943,16 +8949,13 @@ import warnings
 #         # Fallback: Return constant mean forecast
 #         return pd.Series([np.mean(returns)] * forecast_days)
 
-
 def check_stationarity(series):
-    """Perform ADF test to check stationarity."""
-    result = adfuller(series)
+    """Perform Augmented Dickey-Fuller (ADF) test to check for stationarity."""
+    result = adfuller(series, autolag='AIC')
     return result[1] < 0.05  # Stationary if p-value < 0.05
 
-
-
 def arima_forecast(returns, forecast_days=92):
-    """Use ARIMA to forecast future returns with error handling."""
+    """Use ARIMA to forecast future returns with robust error handling."""
     if not isinstance(returns, pd.Series):
         returns = pd.Series(returns)
 
@@ -8961,11 +8964,12 @@ def arima_forecast(returns, forecast_days=92):
 
     # Ensure enough data points
     if len(returns) < 10:
+        print("[WARNING] Insufficient data for ARIMA. Falling back to mean forecast.")
         return pd.Series([np.mean(returns)] * forecast_days)
 
     # Ensure the index has a frequency
     if returns.index.inferred_freq is None:
-        returns = returns.asfreq('B')  # Business day frequency
+        returns.index = pd.date_range(start=0, periods=len(returns), freq='B')  # Business day frequency
 
     # Check stationarity and apply differencing if needed
     if not check_stationarity(returns):
@@ -8978,9 +8982,20 @@ def arima_forecast(returns, forecast_days=92):
         forecast = model_fit.forecast(steps=forecast_days)
         return forecast
     except Exception as e:
-        print(f"ARIMA failed: {e}")
-        # Fallback: Return constant mean forecast
-        return pd.Series([np.mean(returns)] * forecast_days)
+        print(f"[ERROR] ARIMA failed with default order (1, 1, 1): {e}")
+
+        # Attempt fallback with automatic order selection
+        try:
+            from pmdarima import auto_arima
+            auto_model = auto_arima(returns, seasonal=False, error_action="ignore", suppress_warnings=True)
+            forecast = auto_model.predict(n_periods=forecast_days)
+            return pd.Series(forecast)
+        except Exception as fallback_error:
+            print(f"[FALLBACK ERROR] Auto ARIMA failed: {fallback_error}")
+            # Fallback to mean forecast
+            return pd.Series([np.mean(returns)] * forecast_days)
+
+
 
 
 # 4. Simulate Realistic Fluctuations
@@ -12088,9 +12103,9 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0',debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0',debug=True)
 
 
-if __name__ == "__main__":
-    app.run(debug=app_config.DEBUG)
+# if __name__ == "__main__":
+#     app.run(debug=app_config.DEBUG)
