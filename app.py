@@ -12082,11 +12082,19 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-if __name__ == '__main__':
-    # app.run(host='0.0.0.0',debug=True)
-    app.run(host='0.0.0.0', port=5000, debug=True)
-    # app.run(debug=True,port = 5000)
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0', port=5000, debug=True) # working 
+#     # app.run(host='0.0.0.0', port=0, debug=True)
     
+
+from waitress import serve
+
+if __name__ == "__main__":
+    # Get the port dynamically from the environment variable, default to 5000
+    port = int(os.getenv("PORT", 5000))
+    print(f"Port : {port}")
+    serve(app, host="0.0.0.0", port=port)
+
 
 
 # if __name__ == "__main__":

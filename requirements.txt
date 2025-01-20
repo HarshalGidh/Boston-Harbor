@@ -41,3 +41,4 @@ pmdarima
 yahoo_fin
 markdownify
 prettytable
+waitress
