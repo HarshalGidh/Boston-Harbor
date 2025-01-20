@@ -9302,6 +9302,7 @@ def predict_returns():
 
         # Check for changes in the portfolio
         # if current_portfolio_data == previous_portfolio_data:
+        # if True :
         if current_portfolio_data != previous_portfolio_data:
         
             print("Portfolio data has changed. Updating predictions for next quarter returns.")
@@ -9430,7 +9431,9 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
-                print("\nFound Prediction Line Chart Data \n")
+                print("\nFound Current Quarter Prediction Line Chart Data \n")
+                print(predicted_line_chart_data)
+                print("\n\n")
             except s3.exceptions.NoSuchKey:
                 # Create Prediction Line Chart as it wasn't created before
                 # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
@@ -9522,6 +9525,11 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
         portfolio_news = collect_portfolio_news(portfolio_data)
 
         # Generate date intervals for next quarter
+        current_quarter_last_date = "2025-03-26" #current_quarter[8]
+        last_returns_data = predicted_line_chart_data['total_returns']['percentages']
+
+        print(last_returns_data)
+        print("last date", current_quarter_last_date)
         date_intervals = get_next_quarter_dates()
         next_quarter = get_next_quarter()
 
@@ -9546,8 +9554,9 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
-            You Predictions Should start from where the Current Quarters Predictions Data {predicted_line_chart_data} Ended so that we can have a continous Predcition Line Charts
-
+            You Predictions Should start from where the Current Quarters Predictions Data Returns {predicted_line_chart_data},last returns :{last_returns_data} End date : {current_quarter_last_date} so that we can have a continous Predcition Line Charts having same Returns Predictions.
+            Make sure your First Predictions starts from : {last_returns_data}. Later on you can start giving the Predictions based on your analysis of the data bit make sure to handle the fluctuations.Dont give returns in the same range ensure there is some Fluctuations ups and downs and variances.
+            
            Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
