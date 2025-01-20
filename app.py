@@ -76,6 +76,7 @@ USE_AWS = True  # Set to False to use local storage
 
 # # -------------------------------------End Aws---------------------
 
+#########################################################################################################
 
 
 import boto3
@@ -91,24 +92,24 @@ from flask_cors import CORS
 
 from config import config
 
-# Load the environment
+# Load the environment : working for static :
+# env = os.getenv("FLASK_ENV", "development")
+# app_config = config[env]
+
+# app = Flask(__name__)
+# CORS(app)
+
 env = os.getenv("FLASK_ENV", "development")
+base_url = os.getenv("BASE_URL", "http://localhost:5000")  # Default to localhost if not set
 app_config = config[env]
 
 app = Flask(__name__)
-CORS(app)
+app.config["BASE_URL"] = base_url  # Set base URL for the backend
+CORS(app, resources={r"/*": {"origins": "*"}})
+# CORS(app, resources={r"/*": {"origins": base_url}})
 
-@app.after_request
-def set_cors_headers(response):
-    """
-    Add dynamic CORS headers to the response after every request.
-    """
-    origin = request.headers.get('Origin', '*')  # Extract the Origin header
-    response.headers['Access-Control-Allow-Origin'] = origin  # Dynamically set the allowed origin
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    print(f"Set CORS headers for Origin: {origin}")
-    return response
+print(f"Flask is running in {env} mode with base URL: {base_url}")
+
 
 # CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
@@ -118,24 +119,7 @@ print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
 print(f"BASE_URL: {os.getenv('BASE_URL')}")
 print(f"DEBUG: {os.getenv('DEBUG')}")
 
-@app.route('/api/endpoint', methods=['GET'])
-def get_data():
-    return {
-        "base_url": app.config['BASE_URL'],
-        "message": f"Running in {env} mode",
-        "debug": app.config['DEBUG']
-    }
-
-
-# @app.after_request
-# def add_cors_headers(response):
-#     response.headers.add("Access-Control-Allow-Origin", "http://192.168.29.254:51866")
-#     response.headers.add("Access-Control-Allow-Origin", "http://wealth-Management.mresult.com")
-#     response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-#     response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-#     print("cors aheaders updated ")
-#     return response
-
+#########################################################################################################
 
 # # AWS keys
 aws_access_key = os.getenv('aws_access_key')
@@ -12098,9 +12082,12 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0',debug=True)
+if __name__ == '__main__':
+    # app.run(host='0.0.0.0',debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
+    # app.run(debug=True,port = 5000)
+    
 
 
-if __name__ == "__main__":
-    app.run(debug=app_config.DEBUG)
+# if __name__ == "__main__":
+#     app.run(debug=app_config.DEBUG)
