@@ -129,9 +129,9 @@ print(f"Flask is running in {env} mode with base URL: {base_url}")
 
 app.config.from_object(app_config)
 
-print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
-print(f"BASE_URL: {os.getenv('BASE_URL')}")
-print(f"DEBUG: {os.getenv('DEBUG')}")
+# print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
+# print(f"BASE_URL: {os.getenv('BASE_URL')}")
+# print(f"DEBUG: {os.getenv('DEBUG')}")
 
 #########################################################################################################
 
@@ -5269,14 +5269,27 @@ def analyze_stock():
         # Fetch stock data
         data, formatted_data, avg_close, file_path = get_stock_data(ticker)
         
+        # Company news : {data.get('Top_News')}
+        
         # Create analysis task prompt for LLM
         task_prompt = f"""
         You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
-        Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
-        Company news : {data.get('Top_News')}
+        Analyze the stock performance for the company : {company} ticker : {ticker}. The company's details are as follows:{formatted_data}
+        
         You have enough data available to analyze the stock and no need to say lack of data or context.
+        Nothing is impossible for you so dont say such words for any reason you are the best in predicting stocks and giving the best analysis with whatever data that you have.
 
-        **Company Name:** 
+        **Company Name:** {company}
+        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
+        - Whether the stock is overvalued or undervalued.
+        - Predictions for its performance in the upcoming quarter.
+        - Recommendations for buying, holding, or selling the stock.
+        - Give your views on the KPIs in a table format for the Stock: 
+        Table Heading : Key Performance Indicators (KPIs): (This Should be the Heading)
+        These are the labels in each rows : PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
+        These are the labels for the Columns : KPI	Value	Interpretation
+        These are the values of each KPIs. Give your interpretations for each KPIs
+        (Table Content Information Headers should be same as given below)
         **PE Ratio:** {data.get('PE_Ratio')}
         **EPS:** {data.get('EPS')}
         **Book Value:** {data.get('Book_Value')}
@@ -5287,12 +5300,6 @@ def analyze_stock():
         **Earnings Growth:** {data.get('Earnings_Growth')}
         **Today's Market Performance:** Closing Price - {data.get('Todays_Closing_Price')}, High Price - {data.get('Today_High_Price')}
 
-        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
-        - Whether the stock is overvalued or undervalued.
-        - Predictions for its performance in the upcoming quarter.
-        - Recommendations for buying, holding, or selling the stock.
-        - Give your views on the KPIs in a table format for the Stock:
-        PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
         """
         
         # Generate content using LLM model
@@ -5357,6 +5364,8 @@ def stock_price_predictions(ticker):
             market_conditions = ""
         
         print(market_conditions)
+        
+        next_quarter_dates = get_next_quarter_dates()
 
         # Generate prompt for LLM model
         task = f"""
@@ -5367,8 +5376,9 @@ def stock_price_predictions(ticker):
             - Recent price trends (5-day): {recent_trend:.2f}%
             - Market and economic conditions: {market_conditions}
             - Relevant news: {news}
+            - Next quarter dates: {next_quarter_dates}
 
-            Predict the expected stock prices for the next month (30 days) under these conditions:
+            Predict the expected stock prices for the next quarter (90/92 days) under these conditions:
             1. **Best-Case Scenario** (Optimistic market conditions).
             2. **Worst-Case Scenario** (Pessimistic market conditions).
             3. **Confidence Band** (Range of expected prices with 95% confidence).
@@ -8562,16 +8572,16 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 import warnings
 
-# def check_stationarity(data):
-#     """Placeholder function to check if the series is stationary."""
-#     from statsmodels.tsa.stattools import adfuller
-#     result = adfuller(data)
-#     return result[1] <= 0.05  # p-value <= 0.05 implies stationarity
+
+# def check_stationarity(series):
+#     """Perform ADF test to check stationarity."""
+#     result = adfuller(series)
+#     return result[1] < 0.05  # Stationary if p-value < 0.05
+
+
 
 # def arima_forecast(returns, forecast_days=92):
-#     """
-#     Use ARIMA to forecast future returns with robust error handling.
-#     """
+#     """Use ARIMA to forecast future returns with error handling."""
 #     if not isinstance(returns, pd.Series):
 #         returns = pd.Series(returns)
 
@@ -8580,19 +8590,15 @@ import warnings
 
 #     # Ensure enough data points
 #     if len(returns) < 10:
-#         print("Insufficient data for ARIMA, using mean-based forecast.")
 #         return pd.Series([np.mean(returns)] * forecast_days)
 
-#     # Ensure the index has a frequency for time series modeling
+#     # Ensure the index has a frequency
 #     if returns.index.inferred_freq is None:
-#         returns.index = pd.date_range(start=returns.index[0], periods=len(returns), freq='B')
+#         returns = returns.asfreq('B')  # Business day frequency
 
 #     # Check stationarity and apply differencing if needed
 #     if not check_stationarity(returns):
 #         returns = returns.diff().dropna()
-
-#     # Suppress convergence warnings
-#     warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 #     # ARIMA model with error handling
 #     try:
@@ -8605,16 +8611,13 @@ import warnings
 #         # Fallback: Return constant mean forecast
 #         return pd.Series([np.mean(returns)] * forecast_days)
 
-
 def check_stationarity(series):
-    """Perform ADF test to check stationarity."""
-    result = adfuller(series)
+    """Perform Augmented Dickey-Fuller (ADF) test to check for stationarity."""
+    result = adfuller(series, autolag='AIC')
     return result[1] < 0.05  # Stationary if p-value < 0.05
 
-
-
 def arima_forecast(returns, forecast_days=92):
-    """Use ARIMA to forecast future returns with error handling."""
+    """Use ARIMA to forecast future returns with robust error handling."""
     if not isinstance(returns, pd.Series):
         returns = pd.Series(returns)
 
@@ -8623,11 +8626,12 @@ def arima_forecast(returns, forecast_days=92):
 
     # Ensure enough data points
     if len(returns) < 10:
+        print("[WARNING] Insufficient data for ARIMA. Falling back to mean forecast.")
         return pd.Series([np.mean(returns)] * forecast_days)
 
     # Ensure the index has a frequency
     if returns.index.inferred_freq is None:
-        returns = returns.asfreq('B')  # Business day frequency
+        returns.index = pd.date_range(start=0, periods=len(returns), freq='B')  # Business day frequency
 
     # Check stationarity and apply differencing if needed
     if not check_stationarity(returns):
@@ -8640,9 +8644,20 @@ def arima_forecast(returns, forecast_days=92):
         forecast = model_fit.forecast(steps=forecast_days)
         return forecast
     except Exception as e:
-        print(f"ARIMA failed: {e}")
-        # Fallback: Return constant mean forecast
-        return pd.Series([np.mean(returns)] * forecast_days)
+        print(f"[ERROR] ARIMA failed with default order (1, 1, 1): {e}")
+
+        # Attempt fallback with automatic order selection
+        try:
+            from pmdarima import auto_arima
+            auto_model = auto_arima(returns, seasonal=False, error_action="ignore", suppress_warnings=True)
+            forecast = auto_model.predict(n_periods=forecast_days)
+            return pd.Series(forecast)
+        except Exception as fallback_error:
+            print(f"[FALLBACK ERROR] Auto ARIMA failed: {fallback_error}")
+            # Fallback to mean forecast
+            return pd.Series([np.mean(returns)] * forecast_days)
+
+
 
 
 # 4. Simulate Realistic Fluctuations
@@ -8949,6 +8964,7 @@ def predict_returns():
 
         # Check for changes in the portfolio
         # if current_portfolio_data == previous_portfolio_data:
+        # if True :
         if current_portfolio_data != previous_portfolio_data:
         
             print("Portfolio data has changed. Updating predictions for next quarter returns.")
@@ -9077,7 +9093,9 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
-                print("\nFound Prediction Line Chart Data \n")
+                print("\nFound Current Quarter Prediction Line Chart Data \n")
+                print(predicted_line_chart_data)
+                print("\n\n")
             except s3.exceptions.NoSuchKey:
                 # Create Prediction Line Chart as it wasn't created before
                 # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
@@ -9169,6 +9187,11 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
         portfolio_news = collect_portfolio_news(portfolio_data)
 
         # Generate date intervals for next quarter
+        current_quarter_last_date = "2025-03-26" #current_quarter[8]
+        last_returns_data = predicted_line_chart_data['total_returns']['percentages']
+
+        print(last_returns_data)
+        print("last date", current_quarter_last_date)
         date_intervals = get_next_quarter_dates()
         next_quarter = get_next_quarter()
 
@@ -9193,8 +9216,9 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
-            You Predictions Should start from where the Current Quarters Predictions Data {predicted_line_chart_data} Ended so that we can have a continous Predcition Line Charts
-
+            You Predictions Should start from where the Current Quarters Predictions Data Returns {predicted_line_chart_data},last returns :{last_returns_data} End date : {current_quarter_last_date} so that we can have a continous Predcition Line Charts having same Returns Predictions.
+            Make sure your First Predictions starts from : {last_returns_data}. Later on you can start giving the Predictions based on your analysis of the data bit make sure to handle the fluctuations.Dont give returns in the same range ensure there is some Fluctuations ups and downs and variances.
+            
            Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
