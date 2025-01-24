@@ -1,3 +1,4 @@
+from utils import libraries
 # Function to fetch the latest price
 def fetch_price(ticker):
     """

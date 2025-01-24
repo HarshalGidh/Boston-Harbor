@@ -103,7 +103,21 @@ env = os.getenv("FLASK_ENV", "development")
 base_url = os.getenv("BASE_URL", "http://localhost:5000")  # Default to localhost if not set
 app_config = config[env]
 
-app = Flask(__name__)
+# app = Flask(__name__)
+from flask import Flask, jsonify, request, send_from_directory
+import os
+
+app = Flask(__name__, static_folder="../bostonHarbor/build")
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
+    
+    
 app.config["BASE_URL"] = base_url  # Set base URL for the backend
 CORS(app, resources={r"/*": {"origins": "*"}})
 # CORS(app, resources={r"/*": {"origins": base_url}})
@@ -5815,8 +5829,6 @@ def fetch_all_assets_by_preference(market_name, preference=None):
 
 
 
-
-
 @app.route('/market-assets', methods=['POST'])
 def market_assets():
     try:
@@ -5871,186 +5883,89 @@ def market_assets():
 
 ################################################ Fetch Bonds from Categories #################################################
 
-# def fetch_treasure_bonds():
-# def fetch_treasury_bonds():
-#     """
-#     Fetch bond data (Treasury Yields) from Alpha Vantage.
-#     """
-#     try:
-#         url = f"https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=monthly&maturity=10year&apikey={ALPHA_VANTAGE_API_KEY}"
-#         response = requests.get(url)
 
-#         if response.status_code == 200:
-#             data = response.json()
-#             if "data" in data:
-#                 bonds = []
-#                 for item in data["data"]:
-#                     maturity_date = item.get("maturityDate", "N/A")
-#                     yield_rate = item.get("value", "N/A")
-#                     bonds.append({"name": f"10 Year Treasury", "symbol": "10Y", "yield": yield_rate, "maturity": maturity_date})
+# # Api to fetch bonds :
 
-#                 return bonds
-#             else:
-#                 print("No bond data available.")
-#                 return []
-#         else:
-#             print(f"Alpha Vantage API error: {response.status_code}")
-#             return []
-#     except Exception as e:
-#         print(f"Error fetching bonds: {e}")
-#         return []
-    
-
-# # Fetch Treasury Bonds
-
-def fetch_treasury_bonds():
-    try:
-        url = f"https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=monthly&maturity=10year&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                bonds = []
-                for item in data["data"]:
-                    maturity_date = item.get("maturityDate", "N/A")
-                    yield_rate = item.get("value", "N/A")
-                    bonds.append({
-                        "name": "10 Year Treasury",
-                        "symbol": "10Y",
-                        "yield": yield_rate,
-                        # "maturity": maturity_date
-                    })
-                return bonds
-            else:
-                print("No bond data available.")
-                return []
-        else:
-            print(f"Alpha Vantage API error: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"Error fetching Treasury bonds: {e}")
-        return []
-
-# Fetch Corporate Bonds
-def fetch_corporate_bonds():
-    try:
-        url = f"https://www.alphavantage.co/query?function=CORPORATE_BOND&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                bonds = [
-                    {
-                        "name": item.get("name", "N/A"),
-                        "symbol": item.get("symbol", "N/A"),
-                        "yield": item.get("yield", "N/A"),
-                        "maturity": item.get("maturityDate", "N/A")
-                    }
-                    for item in data["data"]
-                ]
-                return bonds
-            else:
-                print("No corporate bond data available.")
-                return []
-        else:
-            print(f"Alpha Vantage API error: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"Error fetching Corporate bonds: {e}")
-        return []
-
-# Fetch Mortgage-Related Bonds
-def fetch_mortgage_related_bonds():
-    try:
-        url = f"https://www.alphavantage.co/query?function=MORTGAGE_RELATED_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                bonds = [
-                    {
-                        "name": item.get("name", "N/A"),
-                        "symbol": item.get("symbol", "N/A"),
-                        "yield": item.get("yield", "N/A"),
-                        "maturity": item.get("maturityDate", "N/A")
-                    }
-                    for item in data["data"]
-                ]
-                return bonds
-            else:
-                print("No mortgage-related bond data available.")
-                return []
-        else:
-            print(f"Alpha Vantage API error: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"Error fetching Mortgage-Related bonds: {e}")
-        return []
-
-# Fetch Municipal Bonds
-def fetch_municipal_bonds():
-    try:
-        url = f"https://www.alphavantage.co/query?function=MUNICIPAL_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                bonds = [
-                    {
-                        "name": item.get("name", "N/A"),
-                        "symbol": item.get("symbol", "N/A"),
-                        "yield": item.get("yield", "N/A"),
-                        "maturity": item.get("maturityDate", "N/A")
-                    }
-                    for item in data["data"]
-                ]
-                return bonds
-            else:
-                print("No municipal bond data available.")
-                return []
-        else:
-            print(f"Alpha Vantage API error: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"Error fetching Municipal bonds: {e}")
-        return []
-
-
-# Fetch Money Market Bonds
-def fetch_money_market_bonds():
+@app.route('/get-bonds', methods=['POST'])
+def get_bonds():
     """
-    Fetch Money Market bond data from Alpha Vantage.
+    Fetches the List of Bonds for various categories
     """
     try:
-        url = f"https://www.alphavantage.co/query?function=MONEY_MARKET_BONDS&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url)
-
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                bonds = [
-                    {
-                        "name": item.get("name", "N/A"),
-                        "symbol": item.get("symbol", "N/A"),
-                        "yield": item.get("yield", "N/A"),
-                        "maturity": item.get("maturityDate", "N/A")
-                    }
-                    for item in data["data"]
-                ]
-                return bonds
-            else:
-                print("No money market bond data available.")
-                return []
+        data = request.get_json()
+        category = data.get("category", "").lower()
+        treasury_bonds = [
+            {"name":"13 WEEK TREASURY BILL" ,"symbol":"^IRX"},
+            {"name":"Treasury Yield 5 Years" ,"symbol":"^FVX"},
+            {"name":"CBOE Interest Rate 10 Year T No" ,"symbol":"^TNX"},
+            {"name":"Treasury Yield 30 Years" ,"symbol":"^TYX"}
+        ]
+        corporate_bonds = [
+            {"name":"BlackRock High Yield Port Svc","symbol":"BHYSX"},
+            {"name":"American Funds American High-Inc F2","symbol":"AHIFX"},
+            {"name":"PGIM High Yield R6","symbol":"PHYQX"},
+            {"name":"Federated Hermes Instl High Yield Bd IS","symbol":"FIHBX"}
+        ]
+        if category == "treasury":
+            return jsonify({"bonds":treasury_bonds}), 200
+        elif category == "corporate":
+            return jsonify({"bonds":corporate_bonds}), 200
         else:
-            print(f"Alpha Vantage API error: {response.status_code}")
-            return []
+            return jsonify({"message": "Invalid category. Choose between 'treasury' or 'corporate'."}), 400
+            
     except Exception as e:
-        print(f"Error fetching Money Market bonds: {e}")
-        return []
+        print(f"Error in get-bonds API: {e}")
+        return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
+
+
+@app.route('/fetch-bonds', methods=['POST'])
+def fetch_bonds():
+    """
+    Fetches the price of a specific bond using the ticker provided in the request payload.
+    """
+    try:
+        data = request.get_json()
+        category = data.get("category", "").lower()
+
+        if not category:
+            return jsonify({
+                "message": "Ticker not provided in the request.",
+                "price": "N/A"
+            }), 400
+            
+        selected_ticker = data.get("ticker")
+
+        # testing mutual funds :
+        fetch_MutualFunds()
+        
+        # Function to fetch the latest closing price
+        def fetch_price(ticker):
+            try:
+                # Fetch historical data for the bond
+                data = yf.download(ticker, period="1mo", interval="1d")
+                if not data.empty:
+                    # Get the latest closing price
+                    return round(data['Close'].iloc[-1], 2)
+                else:
+                    return "Price not available"
+            except Exception as e:
+                print(f"Error fetching data for ticker {ticker}: {e}")
+                return "Price not available"
+
+        # Fetch price for the selected Bond
+        price = fetch_price(selected_ticker)
+        print(f"Bond price for {selected_ticker}:\n{price}")
+
+        return jsonify({
+            "message": f"Price for {selected_ticker} fetched successfully",
+            "ticker": selected_ticker,
+            "price": price
+        }), 200
+
+    except Exception as e:
+        print(f"Error fetching bond prices: {e}")
+        return jsonify({"message": f"Internal server error: {e}"}), 500
+
 
 ##############################################################################
 
@@ -6141,185 +6056,6 @@ def fetch_money_market_bonds():
 
 ##########################################################################################
 
-# # Api to fetch bonds :
-
-# #V2 : working properly 
-
-@app.route('/get-bonds', methods=['POST'])
-def get_bonds():
-    """
-    Fetches the List of Bonds for various categories
-    """
-    try:
-        data = request.get_json()
-        category = data.get("category", "").lower()
-        treasury_bonds = [
-            {"name":"13 WEEK TREASURY BILL" ,"symbol":"^IRX"},
-            {"name":"Treasury Yield 5 Years" ,"symbol":"^FVX"},
-            {"name":"CBOE Interest Rate 10 Year T No" ,"symbol":"^TNX"},
-            {"name":"Treasury Yield 30 Years" ,"symbol":"^TYX"}
-        ]
-        corporate_bonds = [
-            {"name":"BlackRock High Yield Port Svc","symbol":"BHYSX"},
-            {"name":"American Funds American High-Inc F2","symbol":"AHIFX"},
-            {"name":"PGIM High Yield R6","symbol":"PHYQX"},
-            {"name":"Federated Hermes Instl High Yield Bd IS","symbol":"FIHBX"}
-        ]
-        if category == "treasury":
-            return jsonify({"bonds":treasury_bonds}), 200
-        elif category == "corporate":
-            return jsonify({"bonds":corporate_bonds}), 200
-        else:
-            return jsonify({"message": "Invalid category. Choose between 'treasury' or 'corporate'."}), 400
-            
-    except Exception as e:
-        print(f"Error in get-bonds API: {e}")
-        return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
-
-
-@app.route('/fetch-bonds', methods=['POST'])
-def fetch_bonds():
-    """
-    Fetches the price of a specific bond using the ticker provided in the request payload.
-    """
-    try:
-        data = request.get_json()
-        category = data.get("category", "").lower()
-
-        if not category:
-            return jsonify({
-                "message": "Ticker not provided in the request.",
-                "price": "N/A"
-            }), 400
-            
-        selected_ticker = data.get("ticker")
-
-        # testing mutual funds :
-        fetch_MutualFunds()
-        
-        # Function to fetch the latest closing price
-        def fetch_price(ticker):
-            try:
-                # Fetch historical data for the bond
-                data = yf.download(ticker, period="1mo", interval="1d")
-                if not data.empty:
-                    # Get the latest closing price
-                    return round(data['Close'].iloc[-1], 2)
-                else:
-                    return "Price not available"
-            except Exception as e:
-                print(f"Error fetching data for ticker {ticker}: {e}")
-                return "Price not available"
-
-        # Fetch price for the selected Bond
-        price = fetch_price(selected_ticker)
-        print(f"Bond price for {selected_ticker}:\n{price}")
-
-        return jsonify({
-            "message": f"Price for {selected_ticker} fetched successfully",
-            "ticker": selected_ticker,
-            "price": price
-        }), 200
-
-    except Exception as e:
-        print(f"Error fetching bond prices: {e}")
-        return jsonify({"message": f"Internal server error: {e}"}), 500
-
-# only treasury is working but it gives 10 Y US Tereasury bonds
-
-# def fetch_bonds_from_yahoo(category):
-#     """
-#     Fetch bonds data from Yahoo Finance for a specific category.
-#     Returns a list of bonds for the given category.
-#     """
-#     try:
-#         if category == "money_market":
-#             print("Fetching currencies for money market...")
-#             # currencies = fetch_global_currencies()
-#             # return currencies
-
-#         url = "https://finance.yahoo.com/markets/bonds/"
-#         response = requests.get(url)
-#         if response.status_code != 200:
-#             print(f"Failed to fetch bonds page. Status code: {response.status_code}")
-#             return []
-
-#         soup = BeautifulSoup(response.content, "html.parser")
-
-#         bond_categories = {
-#             "treasury": "Treasury Bonds",
-#             "corporate": "Corporate Bonds",
-#             "municipal": "Municipal Bonds",
-#             "money_market": "Money Market",
-#         }
-
-#         if category not in bond_categories:
-#             print(f"Invalid category: {category}.")
-#             return []
-
-#         section_name = bond_categories[category]
-#         section = soup.find("section", {"aria-label": section_name})
-#         if not section:
-#             print(f"No data found for {section_name}.")
-#             return []
-
-#         table = section.find("table")
-#         if not table:
-#             print(f"No table found for {section_name}.")
-#             return []
-
-#         rows = table.find_all("tr")[1:]  # Skip header row
-#         bonds = []
-#         for row in rows:
-#             cols = row.find_all("td")
-#             if len(cols) < 4:  # Ensure required columns are present
-#                 continue
-#             symbol = cols[0].text.strip()
-#             name = cols[1].text.strip()
-#             price = cols[2].text.strip()
-#             yield_rate = cols[3].text.strip()
-
-#             bonds.append({
-#                 "symbol": symbol,
-#                 "name": name,
-#                 "price": price,
-#                 "yield": yield_rate,
-#             })
-
-#         return bonds
-
-#     except Exception as e:
-#         print(f"Error fetching bonds: {e}")
-#         return []
-
-
-# @app.route('/fetch-bonds', methods=['POST'])
-# def fetch_bonds():
-#     """
-#     API endpoint to fetch bonds data by category.
-#     """
-#     try:
-        # data = request.get_json()
-        # category = data.get("category", "").lower()
-
-#         if not category:
-#             return jsonify({"message": "Category is required."}), 400
-
-#         print(f"Fetching bonds for category: {category}")
-#         bonds = fetch_bonds_from_yahoo(category)
-
-#         if not bonds:
-#             return jsonify({"message": f"No bonds found for category '{category}'."}), 404
-
-#         return jsonify({"category": category, "bonds": bonds}), 200
-
-#     except Exception as e:
-#         print(f"Error in fetch-bonds API: {e}")
-#         return jsonify({"message": f"Internal server error: {e}"}), 500
-
-
-
-
 
 ###################################################### Fetch Commodities #######################################################
 
@@ -6371,74 +6107,6 @@ def fetch_commodities():
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
-# V-1 : working properly for all
-
-# @app.route('/fetch-commodities', methods=['POST'])
-# def fetch_commodities():
-#     """
-#     Fetches the price of specific commodities: WTI Crude, Brent Crude, Gold, Silver, Natural Gas.
-#     """
-#     try:
-#         data = request.get_json()
-#         selected_commodity = data.get("commodity")  # Single commodity or None
-
-#         # Commodity tickers for Yahoo Finance
-#         commodity_tickers = {
-#             "WTI Crude": "CL=F",
-#             "Brent Crude": "BZ=F",
-#             "Gold": "GC=F",
-#             "Silver": "SI=F",
-#             "Natural Gas": "NG=F"
-#         }
-
-#         # Function to fetch the latest closing price
-#         def fetch_price(ticker):
-#             try:
-#                 # Fetch historical data for the commodity
-#                 data = yf.download(ticker, period="1d", interval="1d")
-#                 if not data.empty:
-#                     # Get the latest closing price
-#                     return round(data['Close'].iloc[-1], 2)
-#                 else:
-#                     return "Price not available"
-#             except Exception as e:
-#                 print(f"Error fetching data for ticker {ticker}: {e}")
-#                 return "Price not available"
-
-#         # If a specific commodity is requested
-#         if selected_commodity:
-#             ticker = commodity_tickers[selected_commodity] #commodity_tickers.get(selected_commodity)
-#             print(ticker)
-#             if not ticker:
-#                 return jsonify({
-#                     "message": f"Commodity '{selected_commodity}' not found",
-#                     "prices": {}
-#                 }), 404
-
-#             # Fetch price for the selected commodity
-#             price = fetch_price(ticker)
-#             print(f"Commodity price for {selected_commodity} :\n{price}")
-            
-#             return jsonify({
-#                 "message": f"Price for {selected_commodity} fetched successfully",
-#                 "prices": {price}
-#             }), 200
-
-#         # #Fetch prices for all commodities if no specific one is provided
-#         commodity_prices = {}
-#         for name, ticker in commodity_tickers.items():
-#             commodity_prices[name] = fetch_price(ticker)
-
-#         print("Commodity prices :\n", commodity_prices)
-
-#         return jsonify({
-#             "message": "Commodity prices fetched successfully",
-#             "prices": commodity_prices
-#         }), 200
-
-#     except Exception as e:
-#         print(f"Error fetching commodity prices: {e}")
-#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
@@ -12082,18 +11750,19 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=5000, debug=True) # working 
-#     # app.run(host='0.0.0.0', port=0, debug=True)
+if __name__ == '__main__':
+    # app.run(host='0.0.0.0', port=5000, debug=True) # working 
+    app.run(host='0.0.0.0', port=80, debug=True) # working 
+    # app.run(host='0.0.0.0', port=0, debug=True)
     
 
-from waitress import serve
+# from waitress import serve
 
-if __name__ == "__main__":
-    # Get the port dynamically from the environment variable, default to 5000
-    port = int(os.getenv("PORT", 5000))
-    print(f"Port : {port}")
-    serve(app, host="0.0.0.0", port=port)
+# if __name__ == "__main__":
+#     # Get the port dynamically from the environment variable, default to 5000
+#     port = int(os.getenv("PORT", 5000))
+#     print(f"Port : {port}")
+#     serve(app, host="0.0.0.0", port=port)
 
 
 

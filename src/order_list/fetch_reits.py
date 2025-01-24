@@ -1,3 +1,4 @@
+from utils import libraries
 
 @app.route("/fetch-reits", methods=['POST'])
 def fetch_reits():
