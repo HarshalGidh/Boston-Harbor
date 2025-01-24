@@ -83,31 +83,17 @@ import boto3
 load_dotenv()
 
 from flask import Flask, request, jsonify
-
-# app = Flask(__name__)
-from flask import Flask, request, jsonify, send_file
+from flask import send_file,send_from_directory
 import asyncio
 from flask_cors import CORS
-# app = Flask(__name__)
 
 from config import config
-
-# Load the environment : working for static :
-# env = os.getenv("FLASK_ENV", "development")
-# app_config = config[env]
-
-# app = Flask(__name__)
-# CORS(app)
 
 env = os.getenv("FLASK_ENV", "development")
 base_url = os.getenv("BASE_URL", "http://localhost:5000")  # Default to localhost if not set
 app_config = config[env]
 
-# app = Flask(__name__)
-from flask import Flask, jsonify, request, send_from_directory
-import os
-
-app = Flask(__name__, static_folder="../bostonHarbor/build")
+app = Flask(__name__, static_folder="./build")
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
@@ -120,18 +106,14 @@ def serve_frontend(path):
     
 app.config["BASE_URL"] = base_url  # Set base URL for the backend
 CORS(app, resources={r"/*": {"origins": "*"}})
-# CORS(app, resources={r"/*": {"origins": base_url}})
 
 print(f"Flask is running in {env} mode with base URL: {base_url}")
 
-
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
-
 app.config.from_object(app_config)
 
-# print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
-# print(f"BASE_URL: {os.getenv('BASE_URL')}")
-# print(f"DEBUG: {os.getenv('DEBUG')}")
+print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
+print(f"BASE_URL: {os.getenv('BASE_URL')}")
+print(f"DEBUG: {os.getenv('DEBUG')}")
 
 #########################################################################################################
 
@@ -494,7 +476,7 @@ def send_email(to_email, otp):
  
 # Email verification :
  
-@app.route('/email-verification', methods=['POST'])
+@app.route('/api/email-verification', methods=['POST'])
 def email_verification():
     try:
         email = request.json.get('email')  # Extract email from the request
@@ -504,7 +486,7 @@ def email_verification():
         print(f"Processing email verification for: {email}")
  
         # Generate the sign-up link
-        sign_up_link = f"http://localhost:3000/signUp/{email}"
+        sign_up_link = f"http://wealth-management.mresult.com/signUp/{email}"
  
         # Create the email message
         msg = Message(
@@ -540,7 +522,7 @@ def email_verification():
  
  
  
-@app.route('/verify-otp', methods=['POST'])
+@app.route('/api/verify-otp', methods=['POST'])
 def verify_otp():
     data = request.get_json()
     email = data.get('email')
@@ -560,7 +542,7 @@ def verify_otp():
 
 # 2. Sign Up
 
-@app.route('/sign-up', methods=['POST'])
+@app.route('/api/sign-up', methods=['POST'])
 def sign_up():
     try:
         data = request.get_json()
@@ -600,7 +582,7 @@ def sign_up():
    
 # 3. Sign in :
 
-@app.route('/sign-in', methods=['POST'])
+@app.route('/api/sign-in', methods=['POST'])
 def sign_in():
     try:
         data = request.get_json()
@@ -630,7 +612,7 @@ def sign_in():
 
 import traceback
 
-@app.route('/forgot-password', methods=['POST'])
+@app.route('/api/forgot-password', methods=['POST'])
 def forgot_password():
     try:
         data = request.get_json()
@@ -675,7 +657,7 @@ def forgot_password():
 
 # 5. Reset password :
 
-@app.route('/reset-password', methods=['POST'])
+@app.route('/api/reset-password', methods=['POST'])
 def reset_password():
     try:
         data = request.get_json()
@@ -731,7 +713,7 @@ PROFILE_PHOTOS_DIR = "local_data/profile_photos"
 
 from flask import url_for
 
-@app.route('/advisor_profile', methods=['POST', 'GET'])
+@app.route('/api/advisor_profile', methods=['POST', 'GET'])
 def advisor_profile():
     if request.method == 'GET':
         token = request.headers.get('Authorization')
@@ -752,7 +734,7 @@ def advisor_profile():
                 return jsonify({"message": "User not found"}), 404
 
             # Fetch client data count
-            client_data_url = 'http://localhost:5000/get-all-client-data'
+            client_data_url = 'http://wealth-management.mresult.com/api/get-all-client-data'
             response = requests.get(client_data_url)
 
             client_count = 0
@@ -841,7 +823,7 @@ def advisor_profile():
             return jsonify({"message": "Internal server error"}), 500
 
 
-@app.route('/profile_photos/<filename>', methods=['GET'])
+@app.route('/api/profile_photos/<filename>', methods=['GET'])
 def serve_profile_photo(filename):
     """
     Serve profile photos from the local directory.
@@ -858,7 +840,7 @@ def serve_profile_photo(filename):
 # v-1 :
 import requests
  
-# @app.route('/advisor_profile', methods=['GET'])
+# @app.route('/api/advisor_profile', methods=['GET'])
 # def advisor_profile():
 #     token = request.headers.get('Authorization')
 
@@ -908,7 +890,7 @@ import requests
 
 #  Change Password for Profile
 
-@app.route('/change_password', methods=['POST'])
+@app.route('/api/change_password', methods=['POST'])
 def change_password():
     try:
         data = request.get_json()
@@ -2889,7 +2871,7 @@ CLIENT_DATA_DIR = './client_data'
  
 # # store client data in aws :
  
-@app.route('/submit-client-data', methods=['POST'])
+@app.route('/api/submit-client-data', methods=['POST'])
 def submit_client_data():
     try:
         # Parse JSON payload
@@ -2981,7 +2963,7 @@ def process_is_new_client(client_data):
  
     if client_id:
         try:
-            order_url = 'http://localhost:5000/show_order_list'  # Replace with actual endpoint
+            order_url = 'http://localhost:80/show_order_list'  # Replace with actual endpoint
             response = requests.post(order_url, json={'client_id': client_id})
  
             if response.status_code == 200:
@@ -2999,7 +2981,7 @@ if not os.path.exists(CLIENT_DATA_DIR):
     os.makedirs(CLIENT_DATA_DIR)
  
 # Get client data by client ID
-@app.route('/get-client-data-by-id', methods=['GET'])
+@app.route('/api/get-client-data-by-id', methods=['GET'])
 def get_client_data():
     try:
         # Retrieve client_id from query parameters
@@ -3050,7 +3032,7 @@ LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
  
 # new version :
 
-@app.route('/get-all-client-data', methods=['GET'])
+@app.route('/api/get-all-client-data', methods=['GET'])
 def get_all_client_data():
     try:
         all_data = []
@@ -3106,7 +3088,7 @@ def get_all_client_data():
   
  
 # prev -version: 
-# @app.route('/get-all-client-data', methods=['GET'])
+# @app.route('/api/get-all-client-data', methods=['GET'])
 # def get_all_client_data():
 #     try:
 #         all_data = []
@@ -3155,7 +3137,7 @@ def get_all_client_data():
     
     # old version:
 # # get client data by client id :
-# @app.route('/get-client-data-by-id', methods=['GET'])
+# @app.route('/api/get-client-data-by-id', methods=['GET'])
 # def get_client_data():
 #     try:
 #         # Retrieve client_id from query parameters
@@ -3195,7 +3177,7 @@ CLIENT_DATA_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
 os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 
 
-# @app.route('/submit-client-data', methods=['POST'])
+# @app.route('/api/submit-client-data', methods=['POST'])
 # def submit_client_data():
 #     try:
 #         # Parse JSON payload
@@ -3250,7 +3232,7 @@ os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 #     os.makedirs(CLIENT_DATA_DIR)
 
 # # Get client data by client ID
-# @app.route('/get-client-data-by-id', methods=['GET'])
+# @app.route('/api/get-client-data-by-id', methods=['GET'])
 # def get_client_data():
 #     try:
 #         # Retrieve client_id from query parameters
@@ -3285,7 +3267,7 @@ os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 # import requests  # This is for calling the show_order_list API
  
  
-# @app.route('/get-all-client-data', methods=['GET'])
+# @app.route('/api/get-all-client-data', methods=['GET'])
 # def get_all_client_data():
 #     try:
 #         all_data = []
@@ -3354,7 +3336,7 @@ os.makedirs(PERSONALITY_ASSESSMENT_DIR, exist_ok=True)
 # Personality Assessment using AWS and  Local Storage :
 
 
-@app.route('/get-personality-assessment', methods=['POST'])
+@app.route('/api/get-personality-assessment', methods=['POST'])
 def get_personality_assessment():
     try:
         # Parse incoming request data
@@ -3424,7 +3406,7 @@ def get_personality_assessment():
  
  
  
-# @app.route('/get-personality-assessment', methods=['POST'])
+# @app.route('/api/get-personality-assessment', methods=['POST'])
 # def get_client_data_by_id():
 #     try:
 #         # Parse incoming request data
@@ -3455,7 +3437,7 @@ def get_personality_assessment():
 
 # # api for generating suggestions with client id using AWS :  
 
-@app.route('/investor-personality-assessment', methods=['POST'])
+@app.route('/api/investor-personality-assessment', methods=['POST'])
 def investor_personality_assessment():
     try:
         # Parse incoming request data
@@ -3612,7 +3594,7 @@ def handle_local_storage(client_id, assessment_data, personality):
  
  
 
-# @app.route('/investor-personality-assessment', methods=['POST'])
+# @app.route('/api/investor-personality-assessment', methods=['POST'])
 # def investor_personality_assessment():
 #     try:
 #         # Parse incoming data
@@ -3679,7 +3661,7 @@ def handle_local_storage(client_id, assessment_data, personality):
 
 ##############################################################################################################
  
-# @app.route('/personality-assessment', methods=['POST'])
+# @app.route('/api/personality-assessment', methods=['POST'])
 # def personality_selected():
 #     try:
 #         # Parse incoming data
@@ -4724,7 +4706,7 @@ def extract_visualization_data_from_text(text):
 
 # # api for generating suggestions with client id :
 
-@app.route('/personality-assessment', methods=['POST'])
+@app.route('/api/personality-assessment', methods=['POST'])
 def personality_selected():
     try:
         data = request.json
@@ -4842,7 +4824,7 @@ def save_file_to_folder(file_storage, destination_folder):
 
 # #Working for both the methods :
 # generate_suggestions by taking files as i/p :
-@app.route('/generate-investment-suggestions', methods=['POST'])
+@app.route('/api/generate-investment-suggestions', methods=['POST'])
 def generate_investment_suggestions():
     try:
         assessment_file = request.files['assessmentFile']
@@ -5251,7 +5233,7 @@ from flask import jsonify, send_file, make_response
 
 
 
-@app.route('/analyze_stock', methods=['POST'])
+@app.route('/api/analyze_stock', methods=['POST'])
 def analyze_stock():
     """
     Generate thorough stock analysis using LLM based on company details, market news, and performance.
@@ -5269,27 +5251,14 @@ def analyze_stock():
         # Fetch stock data
         data, formatted_data, avg_close, file_path = get_stock_data(ticker)
         
-        # Company news : {data.get('Top_News')}
-        
         # Create analysis task prompt for LLM
         task_prompt = f"""
         You are a Stock Market Expert with in-depth knowledge of stock market trends and patterns.
-        Analyze the stock performance for the company : {company} ticker : {ticker}. The company's details are as follows:{formatted_data}
-        
+        Analyze the stock performance for {ticker}. The company's details are as follows:{formatted_data}
+        Company news : {data.get('Top_News')}
         You have enough data available to analyze the stock and no need to say lack of data or context.
-        Nothing is impossible for you so dont say such words for any reason you are the best in predicting stocks and giving the best analysis with whatever data that you have.
 
-        **Company Name:** {company}
-        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
-        - Whether the stock is overvalued or undervalued.
-        - Predictions for its performance in the upcoming quarter.
-        - Recommendations for buying, holding, or selling the stock.
-        - Give your views on the KPIs in a table format for the Stock: 
-        Table Heading : Key Performance Indicators (KPIs): (This Should be the Heading)
-        These are the labels in each rows : PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
-        These are the labels for the Columns : KPI	Value	Interpretation
-        These are the values of each KPIs. Give your interpretations for each KPIs
-        (Table Content Information Headers should be same as given below)
+        **Company Name:** 
         **PE Ratio:** {data.get('PE_Ratio')}
         **EPS:** {data.get('EPS')}
         **Book Value:** {data.get('Book_Value')}
@@ -5300,6 +5269,12 @@ def analyze_stock():
         **Earnings Growth:** {data.get('Earnings_Growth')}
         **Today's Market Performance:** Closing Price - {data.get('Todays_Closing_Price')}, High Price - {data.get('Today_High_Price')}
 
+        Evaluate the company's income statement, balance sheet, and cash flow. Provide insights into:
+        - Whether the stock is overvalued or undervalued.
+        - Predictions for its performance in the upcoming quarter.
+        - Recommendations for buying, holding, or selling the stock.
+        - Give your views on the KPIs in a table format for the Stock:
+        PE, EPS, Book Value, ROE, ROCE, Revenue Growth (CAGR), Earnings Growth
         """
         
         # Generate content using LLM model
@@ -5364,8 +5339,6 @@ def stock_price_predictions(ticker):
             market_conditions = ""
         
         print(market_conditions)
-        
-        next_quarter_dates = get_next_quarter_dates()
 
         # Generate prompt for LLM model
         task = f"""
@@ -5376,9 +5349,8 @@ def stock_price_predictions(ticker):
             - Recent price trends (5-day): {recent_trend:.2f}%
             - Market and economic conditions: {market_conditions}
             - Relevant news: {news}
-            - Next quarter dates: {next_quarter_dates}
 
-            Predict the expected stock prices for the next quarter (90/92 days) under these conditions:
+            Predict the expected stock prices for the next month (30 days) under these conditions:
             1. **Best-Case Scenario** (Optimistic market conditions).
             2. **Worst-Case Scenario** (Pessimistic market conditions).
             3. **Confidence Band** (Range of expected prices with 95% confidence).
@@ -5517,7 +5489,7 @@ def get_default_market_conditions():
 ################################################################################
 # v-1 :
 
-# @app.route('/analyze_stock', methods=['POST'])
+# @app.route('/api/analyze_stock', methods=['POST'])
 # def analyze_stock():
 #     try:
 #         ticker = request.json.get('ticker')
@@ -5839,7 +5811,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
 
 
 
-@app.route('/market-assets', methods=['POST'])
+@app.route('/api/market-assets', methods=['POST'])
 def market_assets():
     try:
         data = request.get_json()
@@ -5896,7 +5868,7 @@ def market_assets():
 
 # # Api to fetch bonds :
 
-@app.route('/get-bonds', methods=['POST'])
+@app.route('/api/get-bonds', methods=['POST'])
 def get_bonds():
     """
     Fetches the List of Bonds for various categories
@@ -5928,7 +5900,7 @@ def get_bonds():
         return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
 
 
-@app.route('/fetch-bonds', methods=['POST'])
+@app.route('/api/fetch-bonds', methods=['POST'])
 def fetch_bonds():
     """
     Fetches the price of a specific bond using the ticker provided in the request payload.
@@ -6029,7 +6001,7 @@ def fetch_bonds():
 #         return []
 
 # # Flask API Route
-# # @app.route('/fetch-global-currencies', methods=['GET'])
+# # @app.route('/api/fetch-global-currencies', methods=['GET'])
 # def fetch_global_currencies():
 #     """
 #     API to fetch all global currencies and their exchange rates.
@@ -6073,7 +6045,7 @@ def fetch_bonds():
 # API to Fetch commodity data :
 
 # #V2 : working properly 
-@app.route('/fetch-commodities', methods=['POST'])
+@app.route('/api/fetch-commodities', methods=['POST'])
 def fetch_commodities():
     """
     Fetches the price of a specific commodity using the ticker provided in the request payload.
@@ -6121,7 +6093,7 @@ def fetch_commodities():
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
 # v-2 :
-@app.route('/crypto-assets', methods=['POST'])
+@app.route('/api/crypto-assets', methods=['POST'])
 def fetch_cryptos_from_exchange():
     """
     Fetch the list of cryptocurrencies available on a given exchange.
@@ -6237,7 +6209,7 @@ FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
 
 # v-2 :best version
 
-@app.route("/fetch-reits", methods=['POST'])
+@app.route("/api/fetch-reits", methods=['POST'])
 def fetch_reits():
     try:
         # AWS key for the REIT list
@@ -6295,7 +6267,7 @@ def fetch_reits():
         logging.error(f"Error fetching REITs from Finnhub: {e}")
         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
 
-@app.route("/get-reit-price", methods=['POST'])
+@app.route("/api/get-reit-price", methods=['POST'])
 def get_reit_price():
     try:
         # Ensure Content-Type is application/json
@@ -6411,7 +6383,7 @@ def fetch_mutual_funds_from_yahoo():
         return []
 
 # Endpoint to fetch mutual funds
-@app.route('/fetch-MutualFunds', methods=['POST'])
+@app.route('/api/fetch-MutualFunds', methods=['POST'])
 def fetch_MutualFunds():
     """
     Fetch and return mutual funds and their details.
@@ -6495,7 +6467,7 @@ def fetch_MutualFunds():
 #         return {}
 
 # # Endpoint to fetch mutual funds
-# # @app.route('/fetch-MutualFunds', methods=['GET'])
+# # @app.route('/api/fetch-MutualFunds', methods=['GET'])
 # def fetch_MutualFunds():
 #     """
 #     Fetch and return mutual funds and their details.
@@ -6524,7 +6496,7 @@ def fetch_MutualFunds():
 ####################################################################################
 # Fetch Current Stock Price :
 
-@app.route('/current_stock_price', methods=['POST'])
+@app.route('/api/current_stock_price', methods=['POST'])
 def current_stock_price():
     try:
         ticker = request.json.get('ticker')
@@ -6556,7 +6528,7 @@ def current_stock_price():
         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
 
-@app.route('/dividend_yield', methods=['POST'])
+@app.route('/api/dividend_yield', methods=['POST'])
 def dividend_yield():
     
     ticker_name = request.json.get('ticker')
@@ -6626,7 +6598,7 @@ def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_va
 
 LOCAL_STORAGE_PATH = "data/orders/"
 
-# @app.route('/order_placed', methods=['POST'])
+# @app.route('/api/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
 #         # Extract data from the request
@@ -6786,7 +6758,7 @@ LOCAL_STORAGE_PATH = "data/orders/"
 
 # new version :
 
-@app.route('/order_placed', methods=['POST'])
+@app.route('/api/order_placed', methods=['POST'])
 def order_placed():
     try:
         # Extract data from the request
@@ -6865,7 +6837,7 @@ def order_placed():
  
 
 # ## Using AWS to Show Order :
-@app.route('/show_order_list', methods=['POST'])
+@app.route('/api/show_order_list', methods=['POST'])
 def show_order_list():
     try:
         # Get client_id from the request
@@ -6922,7 +6894,7 @@ def show_order_list():
     
 # Updated Show Order List for Local Storage :
 
-# @app.route('/show_order_list', methods=['POST'])
+# @app.route('/api/show_order_list', methods=['POST'])
 # def show_order_list():
 #     try:
 #         # Get client_id from the request
@@ -6963,12 +6935,95 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-@app.route('/portfolio', methods=['POST'])
-def portfolio():
+###########################################################################################################
+# Automatic Daily Portfolio Data Updation Code
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, time, timedelta
+import pytz
+import logging
+
+# Scheduler configuration
+scheduler = BackgroundScheduler(timezone="US/Eastern")  # 4 PM US Eastern time
+logging.basicConfig(level=logging.INFO)
+
+def fetch_all_client_ids():
+    try:
+        all_data = []
+ 
+        if USE_AWS:
+            # AWS Logic
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_data = file_response['Body'].read().decode('utf-8')
+                        data_json = json.loads(file_data)
+ 
+                        # Do not overwrite isNewClient flag if updated elsewhere
+                        if 'isNewClient' not in data_json:
+                            data_json['isNewClient'] = True  # Default to True if missing
+                       
+                        all_data.append(data_json)
+                    except Exception as e:
+                        print(f"Error reading file {obj['Key']}: {e}")
+                        continue
+            else:
+                return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+ 
+        else:
+            # Local Storage Logic
+            for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+                    with open(file_path, 'r') as f:
+                        client_data = json.load(f)
+ 
+                        # Do not overwrite isNewClient flag if updated elsewhere
+                        if 'isNewClient' not in client_data:
+                            client_data['isNewClient'] = True  # Default to True if missing
+                       
+                        all_data.append(client_data)
+ 
+            if not all_data:
+                return jsonify({'message': 'No client data found in local storage.'}), 404
+ 
+        # Return combined data
+        return all_data
+ 
+    except Exception as e:
+        print(f"Error occurred while retrieving data: {e}")
+        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+
+# Reusable function to fetch and process portfolios
+def update_portfolio_and_changes():
+    try:
+        logging.info("Running scheduled portfolio update...")
+
+        # Get a list of client IDs (assuming a function or database fetch)
+        all_client_ids = fetch_all_client_ids()  # Implement this based on your database or file storage
+
+        for client_id in all_client_ids:
+            logging.info(f"Processing portfolio for client_id: {client_id}")
+
+            # Reuse the portfolio function logic
+            client_portfolio_response = portfolio_update_logic(client_id)
+
+            if client_portfolio_response["status"] == "success":
+                logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+            else:
+                logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+    except Exception as e:
+        logging.error(f"Error during scheduled portfolio update: {e}")
+
+# Function to encapsulate the portfolio update logic (extracted from the API)
+def portfolio_update_logic(client_id):
     try:
         # Extract client ID and current date
-        client_id = request.json.get('client_id')
-        curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+        curr_date = datetime.now().strftime('%Y-%m-%d')
 
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -7132,15 +7187,223 @@ def portfolio():
             "portfolio_data": portfolio_data,
         }
         
-        return jsonify(portfolio_response), 200
+        return {"status": "success", 
+                "message": "Portfolio updated successfully",
+                "portfolio_response":portfolio_response,
+                "daily_changes":daily_changes,
+                }
+        # return jsonify(portfolio_response), 200
 
     except Exception as e:
         logging.error(f"Error in portfolio: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
+# Schedule the task at 4 PM US time daily
+scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
+scheduler.start()
+
+# Flask app for manual API calls
+@app.route('/api/portfolio', methods=['POST'])
+def portfolio():
+    try:
+        client_id = request.json.get('client_id')
+        client_portfolio_response = portfolio_update_logic(client_id)
+
+        if client_portfolio_response["status"] == "success":
+            logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+        else:
+            logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+        return jsonify(client_portfolio_response["portfolio_response"]),200
+    except Exception as e:
+        logging.error(f"Error in portfolio: {e}")
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+###########################################################################################################
+
+# previous logic :
+
+# @app.route('/api/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         # Extract client ID and current date
+#         client_id = request.json.get('client_id')
+#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load client orders
+#         if USE_AWS:
+#             # Load orders from AWS S3
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info(f"Fetched orders for client_id: {client_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             except Exception as e:
+#                 logging.error(f"Error fetching orders from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching orders: {e}"}), 500
+#         else:
+#             # Load orders from local storage
+#             order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+#             if not os.path.exists(order_file_path):
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             with open(order_file_path, 'r') as file:
+#                 client_orders = json.load(file)
+
+#         # Initialize portfolio data and metrics
+#         portfolio_data = []
+#         portfolio_current_value = 0
+#         porfolio_daily_change = 0
+#         portfolio_investment_gain_loss = 0
+
+#         # Load or initialize daily changes
+#         if USE_AWS:
+#             daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 daily_changes = {}
+#             except Exception as e:
+#                 logging.error(f"Error fetching daily changes from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+#         else:
+#             daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     daily_changes = json.load(file)
+#             else:
+#                 daily_changes = {}
+
+#         # Process client orders
+#         for order in client_orders:
+#             asset_class = order.get('AssetClass', 'N/A')
+#             name = order.get('Name', 'N/A')
+#             symbol = order.get('Symbol', 'N/A')
+#             units = order.get('Units', 0)
+#             bought_price = order.get('UnitPrice', 0)
+#             transaction_amount = order.get('TransactionAmount', 0)
+
+#             # Fetch current stock price
+#             def fetch_current_stock_price(ticker):
+#                 stock = yf.Ticker(ticker)
+#                 try:
+#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
+#                     return current_price
+#                 except Exception as e:
+#                     logging.error(f"Error fetching stock price for {ticker}: {e}")
+#                     return 0
+
+#             current_price = fetch_current_stock_price(symbol)
+#             diff_price = current_price - bought_price
+#             daily_price_change = diff_price
+#             daily_value_change = daily_price_change * units
+#             current_value = current_price * units
+
+#             # Calculate investment gain/loss and other metrics
+#             investment_gain_loss = diff_price * units
+#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+
+#             # Append data to portfolio
+#             portfolio_data.append({
+#                 "assetClass": asset_class,
+#                 "name": name,
+#                 "symbol": symbol,
+#                 "Quantity": units,
+#                 "Delayed_Price": current_price,
+#                 "current_value": current_value,
+#                 "Daily_Price_Change": daily_price_change,
+#                 "Daily_Value_Change": daily_value_change,
+#                 "Amount_Invested_per_Unit": bought_price,
+#                 "Amount_Invested": transaction_amount,
+#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+#                 "Investment_Gain_or_Loss": investment_gain_loss,
+#                 "Time_Held": order.get('Date', 'N/A'),
+#             })
+
+#             # Update portfolio metrics
+#             portfolio_current_value += current_value
+#             porfolio_daily_change += daily_price_change
+#             portfolio_investment_gain_loss += investment_gain_loss
+
+#         # Calculate daily change percentages
+#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+
+#         # Update daily changes for the current date
+#         daily_changes[curr_date] = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#         }
+
+#         # Save daily changes and portfolio data
+#         if USE_AWS:
+#             # Save daily changes to AWS
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=daily_changes_key,
+#                     Body=json.dumps(daily_changes),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving daily changes to AWS: {e}")
+#                 return jsonify({"message": f"Error saving daily changes: {e}"}), 500
+
+#             # Save portfolio data to AWS
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=portfolio_key,
+#                     Body=json.dumps(portfolio_data),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving portfolio data to AWS: {e}")
+#                 return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+#         else:
+#             # Save daily changes locally
+#             with open(daily_changes_file, 'w') as file:
+#                 json.dump(daily_changes, file, indent=4)
+
+#             # Save portfolio data locally
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             with open(portfolio_file_path, 'w') as file:
+#                 json.dump(portfolio_data, file, indent=4)
+
+#         # Response data
+#         portfolio_response = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#             "daily_changes": daily_changes,
+#             "portfolio_data": portfolio_data,
+#         }
+        
+#         return jsonify(portfolio_response), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
 # Updated Portfolio List using Local Storage :
-@app.route('/download_excel', methods=['GET'])
+@app.route('/api/download_excel', methods=['GET'])
 def download_excel():
     file_path = request.args.get('file_path')
     if os.path.exists(file_path):
@@ -7205,7 +7468,7 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-@app.route('/analyze_portfolio', methods=['POST'])
+@app.route('/api/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
         # Retrieve the requested asset type and other input data
@@ -7354,7 +7617,7 @@ def analyze_portfolio():
 
 # generate riskometer data :
     
-@app.route('/client_riskometer_data',methods =['POST'])
+@app.route('/api/client_riskometer_data',methods =['POST'])
 def generate_client_riskometer_data():
    
     try:
@@ -7449,7 +7712,7 @@ def generate_client_riskometer_data():
 
 #    #Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
 
-@app.route('/calculate_portfolio_risk_ratio',methods=['POST'])
+@app.route('/api/calculate_portfolio_risk_ratio',methods=['POST'])
 def calculate_portfolio_risk_ratio():
     
     try:
@@ -7694,7 +7957,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 
 # test version :
 
-# @app.route('/actual_vs_predicted', methods=['POST'])
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
 # def actual_vs_predicted():
 #     try:
 #         # Retrieve client ID and current portfolio daily change
@@ -7849,7 +8112,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 # v-2 : Very Fast and Also checks changes in Portfolio :
 # Best Version of actual_vs_predicted
 
-@app.route('/actual_vs_predicted', methods=['POST'])
+@app.route('/api/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
     try:
         # Retrieve client ID and current portfolio daily change
@@ -8032,16 +8295,22 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         print(f"Current Quarter: {current_quarter}")
 
         confidence_data = []
-
-        # Process each asset in the portfolio
+        FORECAST_DAYS = 92
+        
+        # Process each asset in the portfolio :
+        
         for asset in portfolio_data:
+            print(f"Processing asset: {asset['symbol']}")
+
             ticker = asset.get("symbol")
             if not ticker or ticker == "N/A":
+                print(f"Skipping invalid ticker: {ticker}")
                 continue
 
             # Fetch historical returns
             historical_returns = fetch_historical_returns(ticker)
             if historical_returns.empty:
+                print(f"No data for {ticker}, assigning default values.")
                 asset["volatility"] = 0.8
                 asset["sharpe_ratio"] = 0.7
                 asset["beta"] = 0.5
@@ -8049,12 +8318,33 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 asset["simulated_returns"] = [0] * FORECAST_DAYS
                 continue
 
-            # Metrics Calculation
-            asset["volatility"] = compute_volatility(historical_returns)
-            asset["sharpe_ratio"] = compute_sharpe_ratio(historical_returns)
-            asset["beta"] = compute_beta(historical_returns, market_returns)
-            asset["forecasted_returns"] = arima_forecast(historical_returns).tolist()
-            asset["simulated_returns"] = simulate_fluctuations(asset["forecasted_returns"][0], asset["volatility"])
+            try:
+                # Calculate metrics
+                asset["volatility"] = compute_volatility(historical_returns)
+                asset["sharpe_ratio"] = compute_sharpe_ratio(historical_returns)
+
+                # Fetch market returns (S&P 500)
+                market_returns = fetch_historical_returns("^GSPC")
+                asset["beta"] = compute_beta(historical_returns, market_returns)
+
+                # Forecast returns using ARIMA
+                historical_returns = ensure_frequency(historical_returns)
+                asset["forecasted_returns"] = arima_forecast(historical_returns, forecast_days=FORECAST_DAYS).tolist()
+
+                # Simulate fluctuations
+                asset["simulated_returns"] = simulate_fluctuations(
+                    base_value=asset["forecasted_returns"][0],
+                    volatility=asset["volatility"],
+                    days=FORECAST_DAYS
+                )
+
+            except Exception as e:
+                print(f"Error processing metrics for {ticker}: {e}")
+                asset["volatility"] = 0.8
+                asset["sharpe_ratio"] = 0.7
+                asset["beta"] = 0.5
+                asset["forecasted_returns"] = [0] * FORECAST_DAYS
+                asset["simulated_returns"] = [0] * FORECAST_DAYS
             
         # Load client financial data
         if USE_AWS:
@@ -8177,7 +8467,11 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
             3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
 
-            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You may refer to the daily returns so far {raw_daily_changes_data}.
+            
+            5. Try to Capture all the Actual Returns {unique_daily_changes} in your Predictions Range for the actual data dates time interval as many actual data points are available if any and match your predictions with the actual data for the available dates but don't predict constant return there must be real Fluctuations.
+            
+            6. Try to be very accurate and maintain a Proper Real Returns Range based on the Real Fluctuations seen so far.
 
             
             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
@@ -8187,7 +8481,8 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
             - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
             - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
-            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions.
+            - Capture all the Actual Returns in your predictions returns range for that time interval whose data is/if available and Predict Returns that is in expected Range of these Returns for the current quarter.
 
             Example of simulated_response = 
             ### Response Format:
@@ -8341,7 +8636,7 @@ def get_current_quarter_dates():
 
 # Actual vs Predicted Endpoint : Original Code :
 
-# @app.route('/actual_vs_predicted', methods=['POST'])
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
 # def actual_vs_predicted():
 #     try:
 #         # Retrieve client ID and current portfolio daily change
@@ -8518,29 +8813,152 @@ CLIENT_SUMMARY_DIR =  "client_data/client_data" #"client_summary/"
 # #1. Fetch historical returns for the past 3 months
 import yfinance as yf
 
-def fetch_historical_returns(ticker, period='3mo'):
-    """Fetch historical returns using yfinance."""
-    stock = yf.Ticker(ticker)
-    data = stock.history(period=period)
-    data['returns'] = data['Close'].pct_change()
-
-    # Clean the data: Drop NaN, inf, or -inf values
-    data = data.dropna(subset=['returns'])
-    data = data.replace([np.inf, -np.inf], np.nan).dropna()
-
-    # Ensure index frequency for ARIMA
-    if data.index.inferred_freq is None:
-        data = data.asfreq('B', method='pad')  # Business day frequency
-
-    return data['returns']
-
-
-# 2. Add Quantitative Metrics :
+import warnings
 import numpy as np
+import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+import random
+
+
+# Suppress convergence warnings
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+def fetch_historical_returns(ticker, periods=None):
+    """Fetch historical returns for a given ticker using yfinance with fallbacks."""
+    if periods is None:
+        periods = ["3mo", "1mo", "1w", "5d"]
+
+    for period in periods:
+        try:
+            data = yf.download(ticker, period=period)
+            if data.empty:
+                print(f"No data found for ticker {ticker} with period {period}.")
+                continue
+
+            # Calculate daily returns
+            data['returns'] = data['Adj Close'].pct_change().dropna()
+
+            # Clean data
+            data = data.replace([np.inf, -np.inf], np.nan).dropna(subset=['returns'])
+
+            # Ensure frequency
+            data['returns'] = ensure_frequency(data['returns'])
+
+            print(f"Successfully fetched data for {ticker} with period {period}.")
+            return data['returns']
+        except Exception as e:
+            print(f"Error fetching data for {ticker} with period {period}: {e}")
+
+    print(f"All periods failed for ticker {ticker}. Returning empty data.")
+    return pd.Series()
+
+
+
+def check_stationarity(series):
+    """Perform ADF test to check stationarity."""
+    try:
+        # Drop NaN and infinite values
+        series = series.replace([np.inf, -np.inf], np.nan).dropna()
+
+        # Ensure there are enough data points for the test
+        if len(series) < 10:
+            print("Insufficient data for ADF test.")
+            return False
+
+        result = adfuller(series)
+        return result[1] < 0.05  # Stationary if p-value < 0.05
+    except Exception as e:
+        print(f"Error in ADF test: {e}")
+        return False
+
+def ensure_frequency(series, freq='B'):
+    """Ensure the series has a consistent frequency."""
+    if not isinstance(series.index, pd.DatetimeIndex):
+        print("Index is not a DatetimeIndex.")
+        return series
+
+    if series.index.inferred_freq is None:
+        print("No frequency detected, setting frequency to:", freq)
+        series = series.asfreq(freq, method='pad')  # Fill missing dates
+    return series
+
+def arima_forecast(returns, forecast_days=92):
+    """Use ARIMA to forecast future returns with robust error handling."""
+    try:
+        if not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+
+        # Clean data
+        returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+        # Ensure enough data points
+        if len(returns) < 10:
+            print("Insufficient data for ARIMA, returning mean forecast.")
+            return pd.Series([np.mean(returns)] * forecast_days)
+
+        # Ensure index frequency
+        returns = ensure_frequency(returns)
+
+        # Check stationarity
+        if not check_stationarity(returns):
+            returns = returns.diff().dropna()
+
+        # Suppress warnings and fit ARIMA
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+        model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+        model_fit = model.fit()
+
+        # Forecast future returns
+        forecast = model_fit.forecast(steps=forecast_days)
+        return forecast
+    except Exception as e:
+        print(f"ARIMA failed: {e}")
+        return pd.Series([np.mean(returns)] * forecast_days)
+
+
+# def arima_forecast(returns, forecast_days=92):
+#     """Use ARIMA to forecast future returns with error handling."""
+#     try:
+#         # Ensure returns are a pandas Series
+#         if not isinstance(returns, pd.Series):
+#             returns = pd.Series(returns)
+
+#         # Clean data
+#         returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+#         # Ensure enough data points
+#         if len(returns) < 10:
+#             print("Insufficient data for ARIMA. Returning mean forecast.")
+#             return pd.Series([np.mean(returns)] * forecast_days)
+
+#         # Ensure the index has a frequency
+#         if returns.index.inferred_freq is None:
+#             returns = returns.asfreq('B')  # Business day frequency
+
+#         # Check stationarity and apply differencing if needed
+#         if not check_stationarity(returns):
+#             returns = returns.diff().dropna()
+
+#         # Fit ARIMA model
+#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+#         model_fit = model.fit()
+
+#         # Forecast future returns
+#         forecast = model_fit.forecast(steps=forecast_days)
+#         return forecast
+
+#     except Exception as e:
+#         print(f"ARIMA failed: {e}")
+#         # Fallback: Return constant mean forecast
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
 
 def compute_volatility(returns):
     """Calculate standard deviation of returns (volatility)."""
     return np.std(returns)
+
 
 def compute_sharpe_ratio(returns, risk_free_rate=0.0):
     """Calculate Sharpe Ratio (risk-adjusted return)."""
@@ -8548,133 +8966,52 @@ def compute_sharpe_ratio(returns, risk_free_rate=0.0):
     std_dev = np.std(returns)
     return (mean_return - risk_free_rate) / std_dev if std_dev != 0 else 0
 
-
 def compute_beta(asset_returns, market_returns):
     """Calculate Beta (sensitivity to market)."""
-    # Align lengths of asset_returns and market_returns
-    min_length = min(len(asset_returns), len(market_returns))
-    asset_returns = asset_returns.iloc[-min_length:]
-    market_returns = market_returns.iloc[-min_length:]
-
-    # Calculate covariance and beta
-    covariance = np.cov(asset_returns, market_returns)[0][1]
-    market_variance = np.var(market_returns)
-    return covariance / market_variance if market_variance != 0 else 0
-
-
-# # Fetch market index returns (S&P 500)
-# market_returns = fetch_historical_returns('^GSPC')
-
-
-# 3. Add ARIMA Forecasting for Returns
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.tools.sm_exceptions import ConvergenceWarning
-import warnings
-
-
-# def check_stationarity(series):
-#     """Perform ADF test to check stationarity."""
-#     result = adfuller(series)
-#     return result[1] < 0.05  # Stationary if p-value < 0.05
-
-
-
-# def arima_forecast(returns, forecast_days=92):
-#     """Use ARIMA to forecast future returns with error handling."""
-#     if not isinstance(returns, pd.Series):
-#         returns = pd.Series(returns)
-
-#     # Clean data
-#     returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-
-#     # Ensure enough data points
-#     if len(returns) < 10:
-#         return pd.Series([np.mean(returns)] * forecast_days)
-
-#     # Ensure the index has a frequency
-#     if returns.index.inferred_freq is None:
-#         returns = returns.asfreq('B')  # Business day frequency
-
-#     # Check stationarity and apply differencing if needed
-#     if not check_stationarity(returns):
-#         returns = returns.diff().dropna()
-
-#     # ARIMA model with error handling
-#     try:
-#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
-#         model_fit = model.fit()
-#         forecast = model_fit.forecast(steps=forecast_days)
-#         return forecast
-#     except Exception as e:
-#         print(f"ARIMA failed: {e}")
-#         # Fallback: Return constant mean forecast
-#         return pd.Series([np.mean(returns)] * forecast_days)
-
-def check_stationarity(series):
-    """Perform Augmented Dickey-Fuller (ADF) test to check for stationarity."""
-    result = adfuller(series, autolag='AIC')
-    return result[1] < 0.05  # Stationary if p-value < 0.05
-
-def arima_forecast(returns, forecast_days=92):
-    """Use ARIMA to forecast future returns with robust error handling."""
-    if not isinstance(returns, pd.Series):
-        returns = pd.Series(returns)
-
-    # Clean data
-    returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-
-    # Ensure enough data points
-    if len(returns) < 10:
-        print("[WARNING] Insufficient data for ARIMA. Falling back to mean forecast.")
-        return pd.Series([np.mean(returns)] * forecast_days)
-
-    # Ensure the index has a frequency
-    if returns.index.inferred_freq is None:
-        returns.index = pd.date_range(start=0, periods=len(returns), freq='B')  # Business day frequency
-
-    # Check stationarity and apply differencing if needed
-    if not check_stationarity(returns):
-        returns = returns.diff().dropna()
-
-    # ARIMA model with error handling
     try:
-        model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
-        model_fit = model.fit()
-        forecast = model_fit.forecast(steps=forecast_days)
-        return forecast
+        if market_returns.empty:
+            print("Market returns not available, defaulting beta to 1.")
+            return 1
+
+        # Align lengths of asset_returns and market_returns
+        min_length = min(len(asset_returns), len(market_returns))
+        asset_returns = asset_returns.iloc[-min_length:]
+        market_returns = market_returns.iloc[-min_length:]
+
+        # Calculate covariance and beta
+        covariance = np.cov(asset_returns, market_returns)[0][1]
+        market_variance = np.var(market_returns)
+        return covariance / market_variance if market_variance != 0 else 0
     except Exception as e:
-        print(f"[ERROR] ARIMA failed with default order (1, 1, 1): {e}")
-
-        # Attempt fallback with automatic order selection
-        try:
-            from pmdarima import auto_arima
-            auto_model = auto_arima(returns, seasonal=False, error_action="ignore", suppress_warnings=True)
-            forecast = auto_model.predict(n_periods=forecast_days)
-            return pd.Series(forecast)
-        except Exception as fallback_error:
-            print(f"[FALLBACK ERROR] Auto ARIMA failed: {fallback_error}")
-            # Fallback to mean forecast
-            return pd.Series([np.mean(returns)] * forecast_days)
+        print(f"Error computing beta: {e}")
+        return 1  # Default beta
 
 
+# def compute_beta(asset_returns, market_returns):
+#     """Calculate Beta (sensitivity to market)."""
+#     try:
+#         # Align lengths of asset_returns and market_returns
+#         min_length = min(len(asset_returns), len(market_returns))
+#         asset_returns = asset_returns.iloc[-min_length:]
+#         market_returns = market_returns.iloc[-min_length:]
+
+#         # Calculate covariance and beta
+#         covariance = np.cov(asset_returns, market_returns)[0][1]
+#         market_variance = np.var(market_returns)
+#         return covariance / market_variance if market_variance != 0 else 0
+#     except Exception as e:
+#         print(f"Error calculating beta: {e}")
+#         return 0
 
 
-# 4. Simulate Realistic Fluctuations
-import random
-
-def adf_test(returns):
-    """Perform stationarity test."""
-    result = adfuller(returns)
-    return "Stationary" if result[1] < 0.05 else "Non-Stationary"
-
-def simulate_fluctuations(base_value, volatility, days=30):
-    """Simulate fluctuations based on volatility."""
+def simulate_fluctuations(base_value, volatility, days=92):
+    """Simulate realistic fluctuations based on volatility."""
     simulated = [base_value]
     for _ in range(1, days):
         noise = random.uniform(-volatility, volatility)
         simulated.append(simulated[-1] * (1 + noise))
     return simulated
+
 
 
 # 5. Validate Predictions
@@ -8902,7 +9239,7 @@ def plot_refined_data(refined_data):
 # Final Predict Returns for Next Quarter :
 
 # v-2 :
-@app.route('/predict_returns', methods=['POST'])
+@app.route('/api/predict_returns', methods=['POST'])
 def predict_returns():
     try:
         # Retrieve client and portfolio details
@@ -8964,7 +9301,6 @@ def predict_returns():
 
         # Check for changes in the portfolio
         # if current_portfolio_data == previous_portfolio_data:
-        # if True :
         if current_portfolio_data != previous_portfolio_data:
         
             print("Portfolio data has changed. Updating predictions for next quarter returns.")
@@ -9062,7 +9398,7 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             print(sharpe_ratio)
             beta = compute_beta(historical_returns, market_returns)
             print(beta)
-            stationarity = adf_test(historical_returns)
+            stationarity = check_stationarity(historical_returns)
             print(stationarity)
 
             # Forecasting
@@ -9093,9 +9429,7 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=predicted_s3_key)
                 predicted_line_chart_data = json.loads(response['Body'].read().decode('utf-8'))
-                print("\nFound Current Quarter Prediction Line Chart Data \n")
-                print(predicted_line_chart_data)
-                print("\n\n")
+                print("\nFound Prediction Line Chart Data \n")
             except s3.exceptions.NoSuchKey:
                 # Create Prediction Line Chart as it wasn't created before
                 # predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
@@ -9187,11 +9521,6 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
         portfolio_news = collect_portfolio_news(portfolio_data)
 
         # Generate date intervals for next quarter
-        current_quarter_last_date = "2025-03-26" #current_quarter[8]
-        last_returns_data = predicted_line_chart_data['total_returns']['percentages']
-
-        print(last_returns_data)
-        print("last date", current_quarter_last_date)
         date_intervals = get_next_quarter_dates()
         next_quarter = get_next_quarter()
 
@@ -9216,9 +9545,8 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Predict the expected returns (in percentages and dollar amounts) for the overall portfolio at the following dates:
             {date_intervals}
-            You Predictions Should start from where the Current Quarters Predictions Data Returns {predicted_line_chart_data},last returns :{last_returns_data} End date : {current_quarter_last_date} so that we can have a continous Predcition Line Charts having same Returns Predictions.
-            Make sure your First Predictions starts from : {last_returns_data}. Later on you can start giving the Predictions based on your analysis of the data bit make sure to handle the fluctuations.Dont give returns in the same range ensure there is some Fluctuations ups and downs and variances.
-            
+            You Predictions Should start from where the Current Quarters Predictions Data {predicted_line_chart_data} Ended so that we can have a continous Predcition Line Charts
+
            Predict the portfolio's **daily returns** in the next quarter(3 months). Include:
             1. **Best-Case Scenario** (High returns under favorable conditions).
             2. **Worst-Case Scenario** (Low returns under unfavorable conditions).
@@ -9514,7 +9842,7 @@ def calculate_predicted_returns_by_asset_class(portfolio_data, funds, investor_p
 
 
 
-@app.route('/asset_class_predictions', methods=['POST'])
+@app.route('/api/asset_class_predictions', methods=['POST'])
 def asset_class_predictions():
     try:
         # Fetch client and portfolio data
@@ -9789,7 +10117,7 @@ def get_top_low_portfolios(insights):
 
 #  # Best version :
 
-@app.route('/get_top_low_performers', methods=['POST'])
+@app.route('/api/get_top_low_performers', methods=['POST'])
 def get_top_low_performers_api():
     try:
         # Fetch all clients' financial data
@@ -9971,7 +10299,7 @@ def fetch_consolidated_portfolio(client_ids):
 
 # Asset Allocation based on INvestor Profile :
 
-@app.route('/asset_allocation_investor_profile', methods=['POST'])
+@app.route('/api/asset_allocation_investor_profile', methods=['POST'])
 def asset_allocation_investor_profile():
     try:
         # Fetch client data and validate input
@@ -10081,7 +10409,7 @@ def asset_allocation_investor_profile():
 
 # Best Version :
 
-@app.route('/asset_class_infographics', methods=['POST'])
+@app.route('/api/asset_class_infographics', methods=['POST'])
 def asset_class_infographics():
     try:
         # Fetch all clients' financial data
@@ -10183,7 +10511,7 @@ def asset_class_infographics():
 
 # Best Version :
 
-@app.route('/get_best_performing_assets', methods=['POST'])
+@app.route('/api/get_best_performing_assets', methods=['POST'])
 def get_best_performing_assets_api():
     try:
         # Fetch all clients' financial data
@@ -10329,7 +10657,7 @@ def fetch_portfolios(client_ids):
 
 #  # v-4 : More insights and metrics :
 
-@app.route('/analyze_dashboard', methods=['POST'])
+@app.route('/api/analyze_dashboard', methods=['POST'])
 def analyze_dashboard():
     try:
         # Fetch all clients' financial data
@@ -11698,7 +12026,7 @@ def plot_recommendations_impact(before, after):
 
 # with api :
 
-@app.route('/dashboard_infographics', methods=['POST'])
+@app.route('/api/dashboard_infographics', methods=['POST'])
 def dashboard_infographics():
 # def dashboard_infographics(clients):
     try:
@@ -11774,19 +12102,19 @@ def dashboard_infographics():
 #################################################################################################################################
 
 # Run the Flask application
-if __name__ == '__main__':
-    # app.run(host='0.0.0.0', port=5000, debug=True) # working 
-    app.run(host='0.0.0.0', port=80, debug=True) # working 
-    # app.run(host='0.0.0.0', port=0, debug=True)
+# if __name__ == '__main__':
+#     # app.run(host='0.0.0.0', port=5000, debug=True) # working 
+#     app.run(host='0.0.0.0', port=80, debug=True) # working 
+#     # app.run(host='0.0.0.0', port=0, debug=True)
     
 
-# from waitress import serve
+from waitress import serve
 
-# if __name__ == "__main__":
-#     # Get the port dynamically from the environment variable, default to 5000
-#     port = int(os.getenv("PORT", 5000))
-#     print(f"Port : {port}")
-#     serve(app, host="0.0.0.0", port=port)
+if __name__ == "__main__":
+    # Get the port dynamically from the environment variable, default to 5000
+    port = int(os.getenv("PORT", 5000))
+    print(f"Port : {port}")
+    serve(app, host="0.0.0.0", port=80)
 
 
 

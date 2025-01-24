@@ -42,3 +42,4 @@ yahoo_fin
 markdownify
 prettytable
 waitress
+apscheduler
