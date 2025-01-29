@@ -486,7 +486,7 @@ def email_verification():
         print(f"Processing email verification for: {email}")
  
         # Generate the sign-up link
-        sign_up_link = f"http://wealth-management.mresult.com/signUp/{email}"
+        sign_up_link = f"http://wealth-management.mresult.net/signUp/{email}"
  
         # Create the email message
         msg = Message(
@@ -606,7 +606,40 @@ def sign_in():
     except Exception as e:
         print(f"Error during sign-in: {e}")
         return jsonify({"message": "Internal server error"}), 500
-      
+
+
+# from flask_jwt_extended import create_access_token
+
+# @app.route('/api/sign-in', methods=['POST'])
+# def sign_in():
+#     try:
+#         # Parse input data
+#         data = request.get_json()
+#         email = data.get('email')
+#         password = data.get('password')
+
+#         # Validate input
+#         if not all([email, password]):
+#             return jsonify({"message": "Email and password are required"}), 400
+
+#         # Verify user credentials
+#         user_data = load_user_data(email)  # Replace with your function to load user details
+#         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
+#             return jsonify({"message": "Invalid email or password"}), 401
+
+#         # Create JWT token
+#         token = create_access_token(identity=email)  # `identity` will be stored as the `sub` claim
+
+#         # Return the token
+#         return jsonify({
+#             "message": "Sign in successful",
+#             "token": token
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error during sign-in: {e}")
+#         return jsonify({"message": "Internal server error"}), 500
+
 
 #  # 4. Forgot Password
 
@@ -734,7 +767,7 @@ def advisor_profile():
                 return jsonify({"message": "User not found"}), 404
 
             # Fetch client data count
-            client_data_url = 'http://wealth-management.mresult.com/api/get-all-client-data'
+            client_data_url = 'http://wealth-management.mresult.net/api/get-all-client-data'
             response = requests.get(client_data_url)
 
             client_count = 0
@@ -2953,6 +2986,7 @@ def submit_client_data():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
+
  
 def process_is_new_client(client_data):
     """
@@ -3029,6 +3063,132 @@ def get_client_data():
 
 # Local Folder Path
 LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
+
+# working code of Compartmentalization :
+
+# from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity 
+
+# # JWT Configuration
+# app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")  # Required
+# app.config['JWT_TOKEN_LOCATION'] = ['headers']    # Look for tokens in headers
+# app.config['JWT_HEADER_NAME'] = 'Authorization'   # Default is 'Authorization'
+# app.config['JWT_HEADER_TYPE'] = 'Bearer'          # Default is 'Bearer'
+
+# # Initialize the JWT manager
+# jwt = JWTManager(app)
+
+# @app.route('/api/submit-client-data', methods=['POST'])
+# @jwt_required()  # Requires the user to be logged in
+# def submit_client_data():
+#     try:
+#         # Get the logged-in user's email from the JWT token
+#         email = get_jwt_identity()
+ 
+#         # Parse JSON payload
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+ 
+#         # Extract client details
+#         client_name = data.get('clientDetail', {}).get('clientName')
+#         unique_id = data.get('uniqueId')
+ 
+#         if not client_name or not unique_id:
+#             return jsonify({'message': 'Client name and unique ID are required'}), 400
+ 
+#         print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
+ 
+#         # Add the user's email to the data
+#         data['submittedBy'] = email
+ 
+#         # Save to AWS or local storage as before
+#         if USE_AWS:
+#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except s3.exceptions.NoSuchKey:
+#                 existing_data = {}
+#                 is_update = False
+ 
+#             if is_update:
+#                 existing_data.update(data)
+#                 data_to_save = existing_data
+#             else:
+#                 data_to_save = data
+ 
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=s3_key,
+#                 Body=json.dumps(data_to_save),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 existing_data.update(data)
+#                 is_update = True
+#             else:
+#                 existing_data = data
+#                 is_update = False
+ 
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
+ 
+#         action = "updated" if is_update else "created"
+#         return jsonify({
+#             'message': f'Client data successfully {action}.',
+#             'uniqueId': unique_id
+#         }), 200
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+# @app.route('/api/get-all-client-data', methods=['GET'])
+# @jwt_required()  # Requires the user to be logged in
+# def get_all_client_data():
+#     try:
+#         email = get_jwt_identity()  # Get the logged-in user's email
+#         all_data = []
+ 
+#         if USE_AWS:
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
+ 
+#                         if data_json.get('submittedBy') == email:
+#                             all_data.append(data_json)
+#                     except Exception as e:
+#                         print(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#         else:
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
+#                         if client_data.get('submittedBy') == email:
+#                             all_data.append(client_data)
+ 
+#         if not all_data:
+#             return jsonify({'message': 'No client data found for this user.'}), 404
+ 
+#         return jsonify({
+#             'message': 'Client data retrieved successfully.',
+#             'data': all_data
+#         }), 200
+#     except Exception as e:
+#         print(f"Error occurred while retrieving data: {e}")
+#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+     
  
 # new version :
 
@@ -3086,87 +3246,7 @@ def get_all_client_data():
         print(f"Error occurred while retrieving data: {e}")
         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
   
- 
-# prev -version: 
-# @app.route('/api/get-all-client-data', methods=['GET'])
-# def get_all_client_data():
-#     try:
-#         all_data = []
- 
-#         if USE_AWS:
-#             # AWS Logic
-#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-#             if 'Contents' in response:
-#                 for obj in response['Contents']:
-#                     try:
-#                         file_key = obj['Key']
-#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                         file_data = file_response['Body'].read().decode('utf-8')
-#                         data_json = json.loads(file_data)
- 
-#                         # Add isNewClient flag
-#                         # process_is_new_client(data_json)
-#                         all_data.append(data_json)
-#                     except Exception as e:
-#                         print(f"Error reading file {obj['Key']}: {e}")
-#                         continue
-#             else:
-#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
- 
-#         else:
-#             # Local Storage Logic
-#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-#                 if filename.endswith(".json"):
-#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-#                     with open(file_path, 'r') as f:
-#                         client_data = json.load(f)
-#                         # process_is_new_client(client_data)
-#                         all_data.append(client_data)
- 
-#             if not all_data:
-#                 return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-#         # Return combined data
-#         return jsonify({
-#             'message': 'All client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
- 
-#     except Exception as e:
-#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-    
-    # old version:
-# # get client data by client id :
-# @app.route('/api/get-client-data-by-id', methods=['GET'])
-# def get_client_data():
-#     try:
-#         # Retrieve client_id from query parameters
-#         client_id = request.args.get('client_id')
-        
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
-#         # Define the S3 key for the object
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-
-#         # Retrieve the object from S3
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             # Decode and parse the JSON data
-#             client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
-#             return jsonify({
-#                 'message': 'Client data retrieved successfully.',
-#                 'data': client_data
-#             }), 200
-#         except s3.exceptions.NoSuchKey:
-#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-#         except Exception as e:
-#             return jsonify({'message': f"Error retrieving data: {e}"}), 500
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 #################################################################################################################################
 # storing client data using local storage :
@@ -3176,148 +3256,6 @@ CLIENT_DATA_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
 # Ensure directories exist
 os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 
-
-# @app.route('/api/submit-client-data', methods=['POST'])
-# def submit_client_data():
-#     try:
-#         # Parse JSON payload
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
-
-#         # Extract client details
-#         client_name = data.get('clientDetail', {}).get('clientName')
-#         unique_id = data.get('uniqueId')
-
-#         if not client_name or not unique_id:
-#             return jsonify({'message': 'Client name and unique ID are required'}), 400
-
-#         print(f"Processing data for client: {client_name}, ID: {unique_id}")
-
-#         # Define the file path for local storage
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
-
-#         # Check if the client data already exists
-#         if os.path.exists(file_path):
-#             with open(file_path, 'r') as f:
-#                 existing_data = json.load(f)
-#             existing_data.update(data)  # Merge the new data
-#             is_update = True
-#         else:
-#             existing_data = data  # New data
-#             is_update = False
-
-#         # Save the data to local storage
-#         with open(file_path, 'w') as f:
-#             json.dump(existing_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-#         print(f"Client data successfully {action} for unique ID: {unique_id}")
-
-#         return jsonify({
-#             'message': f'Client data successfully {action}.',
-#             'uniqueId': unique_id
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
-
-# # Define the directory where client data is stored
-# CLIENT_DATA_DIR = './client_data/'
-# CLIENT_SUMMARY_DIR = os.path.join(CLIENT_DATA_DIR, "client_data")
-
-# # Ensure the directory exists
-# if not os.path.exists(CLIENT_DATA_DIR):
-#     os.makedirs(CLIENT_DATA_DIR)
-
-# # Get client data by client ID
-# @app.route('/api/get-client-data-by-id', methods=['GET'])
-# def get_client_data():
-#     try:
-#         # Retrieve client_id from query parameters
-#         client_id = request.args.get('client_id')
-
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
-
-#         # Define the file path for the client data
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
-
-#         # Check if the file exists and retrieve the data
-#         if not os.path.exists(file_path):
-#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-
-#         with open(file_path, 'r') as f:
-#             client_data = json.load(f)
-
-#         return jsonify({
-#             'message': 'Client data retrieved successfully.',
-#             'data': client_data
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
-
-# import os
-# import json
-# from flask import Flask, jsonify
-# import requests  # This is for calling the show_order_list API
- 
- 
-# @app.route('/api/get-all-client-data', methods=['GET'])
-# def get_all_client_data():
-#     try:
-#         all_data = []
-#         client_data_folder = './client_data/client_data'
- 
-#         # Iterate over all JSON files in the client data folder
-#         for filename in os.listdir(client_data_folder):
-#             if filename.endswith(".json"):
-#                 file_path = os.path.join(client_data_folder, filename)
-               
-#                 # Load client data
-#                 with open(file_path, 'r') as f:
-#                     client_data = json.load(f)
-#                     client_id = client_data.get("uniqueId")
- 
-#                     # Default value for isNewClient
-#                     client_data["isNewClient"] = True
- 
-#                     # Check if the client has orders by calling /show_order_list API
-#                     if client_id:
-#                         # Make a request to /show_order_list API to check if orders exist
-#                         order_url = f'http://localhost:5000/show_order_list'  # Adjust to your actual endpoint
-#                         response = requests.post(order_url, json={'client_id': client_id})
- 
-#                         if response.status_code == 200:
-#                             orders = response.json().get("transaction_data", [])
-#                             # If orders exist, set isNewClient to False
-#                             if len(orders) > 0:
-#                                 client_data["isNewClient"] = False
-#                         else:
-#                             # If no orders, set isNewClient to True
-#                             client_data["isNewClient"] = True
- 
-#                     # Append the client data to the result list
-#                     all_data.append(client_data)
- 
-#         # Handle case when no client data is found
-#         if not all_data:
-#             return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-#         # Return all client data
-#         return jsonify({
-#             'message': 'All client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
- 
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred while retrieving data: {e}"}), 500
-    
-# investment assessment using Local Storage :
 
 import os
 import json
@@ -6949,66 +6887,98 @@ logging.basicConfig(level=logging.INFO)
 
 def fetch_all_client_ids():
     try:
-        all_data = []
- 
+        client_ids = []
+
         if USE_AWS:
-            # AWS Logic
+            # Fetch client IDs from AWS S3
             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
             if 'Contents' in response:
                 for obj in response['Contents']:
-                    try:
-                        file_key = obj['Key']
-                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                        file_data = file_response['Body'].read().decode('utf-8')
-                        data_json = json.loads(file_data)
- 
-                        # Do not overwrite isNewClient flag if updated elsewhere
-                        if 'isNewClient' not in data_json:
-                            data_json['isNewClient'] = True  # Default to True if missing
-                       
-                        all_data.append(data_json)
-                    except Exception as e:
-                        print(f"Error reading file {obj['Key']}: {e}")
-                        continue
-            else:
-                return jsonify({'message': 'No client data found in S3 bucket.'}), 404
- 
+                    file_key = obj['Key']
+                    if file_key.endswith(".json"):
+                        client_id = file_key.split('/')[-1].replace(".json", "")  # Extract client ID
+                        client_ids.append(client_id)
         else:
-            # Local Storage Logic
+            # Fetch client IDs from local storage
             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
                 if filename.endswith(".json"):
-                    file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-                    with open(file_path, 'r') as f:
-                        client_data = json.load(f)
- 
-                        # Do not overwrite isNewClient flag if updated elsewhere
-                        if 'isNewClient' not in client_data:
-                            client_data['isNewClient'] = True  # Default to True if missing
-                       
-                        all_data.append(client_data)
- 
-            if not all_data:
-                return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-        # Return combined data
-        return all_data
- 
-    except Exception as e:
-        print(f"Error occurred while retrieving data: {e}")
-        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+                    client_id = filename.replace(".json", "")  # Extract client ID
+                    client_ids.append(client_id)
 
-# Reusable function to fetch and process portfolios
+        return client_ids
+
+    except Exception as e:
+        logging.error(f"Error occurred while retrieving client IDs: {e}")
+        return []
+
+
+# prev :
+# def fetch_all_client_ids():
+#     try:
+#         all_data = []
+ 
+#         if USE_AWS:
+#             # AWS Logic
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
+ 
+#                         # Do not overwrite isNewClient flag if updated elsewhere
+#                         if 'isNewClient' not in data_json:
+#                             data_json['isNewClient'] = True  # Default to True if missing
+                       
+#                         all_data.append(data_json)
+#                     except Exception as e:
+#                         print(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#             else:
+#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+ 
+#         else:
+#             # Local Storage Logic
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
+ 
+#                         # Do not overwrite isNewClient flag if updated elsewhere
+#                         if 'isNewClient' not in client_data:
+#                             client_data['isNewClient'] = True  # Default to True if missing
+                       
+#                         all_data.append(client_data)
+ 
+#             if not all_data:
+#                 return jsonify({'message': 'No client data found in local storage.'}), 404
+ 
+#         # Return combined data
+#         return all_data
+ 
+#     except Exception as e:
+#         print(f"Error occurred while retrieving data: {e}")
+#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+
+# # Reusable function to fetch and process portfolios
 def update_portfolio_and_changes():
     try:
         logging.info("Running scheduled portfolio update...")
 
-        # Get a list of client IDs (assuming a function or database fetch)
-        all_client_ids = fetch_all_client_ids()  # Implement this based on your database or file storage
+        # Get all client IDs
+        all_client_ids = fetch_all_client_ids()
+        logging.info(f"Fetched {len(all_client_ids)} client IDs for portfolio updates.")
 
-        for client_id in all_client_ids:
+        for client_data in all_client_ids:
+            client_id = client_data.get("uniqueId")
+            if not client_id:
+                logging.warning(f"Skipping client without uniqueId: {client_data}")
+                continue
+
             logging.info(f"Processing portfolio for client_id: {client_id}")
-
-            # Reuse the portfolio function logic
             client_portfolio_response = portfolio_update_logic(client_id)
 
             if client_portfolio_response["status"] == "success":
@@ -7019,11 +6989,34 @@ def update_portfolio_and_changes():
     except Exception as e:
         logging.error(f"Error during scheduled portfolio update: {e}")
 
+# def update_portfolio_and_changes():
+#     try:
+#         logging.info("Running scheduled portfolio update...")
+
+#         # Get a list of client IDs (assuming a function or database fetch)
+#         all_client_ids = fetch_all_client_ids()  # Implement this based on your database or file storage
+
+#         for client_id in all_client_ids:
+#             logging.info(f"Processing portfolio for client_id: {client_id}")
+
+#             # Reuse the portfolio function logic
+#             client_portfolio_response = portfolio_update_logic(client_id)
+
+#             if client_portfolio_response["status"] == "success":
+#                 logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#             else:
+#                 logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+#     except Exception as e:
+#         logging.error(f"Error during scheduled portfolio update: {e}")
+
 # Function to encapsulate the portfolio update logic (extracted from the API)
 def portfolio_update_logic(client_id):
     try:
+        logging.info(f"Starting portfolio update for client_id: {client_id}")
         # Extract client ID and current date
         curr_date = datetime.now().strftime('%Y-%m-%d')
+        logging.info(f"Current Date: {curr_date}")
 
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -7036,6 +7029,7 @@ def portfolio_update_logic(client_id):
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
                 logging.info(f"Fetched orders for client_id: {client_id}")
+                logging.info(f"Fetched {len(client_orders)} orders for client_id: {client_id}")
             except s3.exceptions.NoSuchKey:
                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
             except Exception as e:
@@ -7049,7 +7043,10 @@ def portfolio_update_logic(client_id):
             with open(order_file_path, 'r') as file:
                 client_orders = json.load(file)
 
-        # Initialize portfolio data and metrics
+        # Log portfolio metrics
+        logging.info(f"Updating portfolio for {len(client_orders)} orders.")
+        
+        # Initialize portfolio data and 
         portfolio_data = []
         portfolio_current_value = 0
         porfolio_daily_change = 0
@@ -7200,7 +7197,9 @@ def portfolio_update_logic(client_id):
 
 
 # Schedule the task at 4 PM US time daily
-scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
+# scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
+scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0, id="daily_portfolio_update")
+logging.info("Scheduler started. Portfolio updates scheduled at 4 PM US Eastern Time.")
 scheduler.start()
 
 # Flask app for manual API calls
@@ -7208,6 +7207,9 @@ scheduler.start()
 def portfolio():
     try:
         client_id = request.json.get('client_id')
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
         client_portfolio_response = portfolio_update_logic(client_id)
 
         if client_portfolio_response["status"] == "success":
@@ -10657,23 +10659,32 @@ def fetch_portfolios(client_ids):
 
 #  # v-4 : More insights and metrics :
 
+import time  
+
+
 @app.route('/api/analyze_dashboard', methods=['POST'])
 def analyze_dashboard():
     try:
+        start_time = time.time()  # Track time
         # Fetch all clients' financial data
+        logging.info("🔹 Received request for dashboard analysis")
+        
         clients = request.json.get("data")
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
+        
+        logging.info(f"🔹 Processing {len(clients)} clients")
 
         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
         if not client_ids:
             return jsonify({"message": "No valid client IDs found in the request"}), 400
-
-        # call infographics for testing purposes :
-        # dashboard_infographics(clients)
         
         # Fetch portfolios for all clients in bulk
+        # Step 1: Fetch all portfolios
+        logging.info("🔹 Fetching portfolios...")
+        start_fetch_time = time.time()
         portfolios = fetch_portfolios(client_ids)
+        logging.info(f"✅ Portfolios fetched in {time.time() - start_fetch_time:.2f} seconds")
 
         insights = []
         performance_list = []
@@ -10687,6 +10698,10 @@ def analyze_dashboard():
                 continue
 
             # Load client financial data (from AWS or local based on USE_AWS)
+            logging.info(f"🔹 Processing client: {client_id}")
+
+            # Step 2: Fetch Client Data
+            start_client_fetch = time.time()
             if USE_AWS:
                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
                 try:
@@ -10708,9 +10723,16 @@ def analyze_dashboard():
                 continue
 
             # Get portfolio data from the fetched portfolios
+            logging.info(f"✅ Client data fetched for {client_id} in {time.time() - start_client_fetch:.2f} seconds")
+
+            # Step 3: Process Portfolio Data
+            start_portfolio_processing = time.time()
             portfolio_data = portfolios.get(client_id, [])
+            logging.info(f"✅ Processed portfolio for {client_id} in {time.time() - start_portfolio_processing:.2f} seconds")
 
             # Safely parse assets and liabilities
+            # Step 4: Analyze Portfolio Performance
+            start_analysis = time.time()
             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
             net_worth = assets - liabilities
@@ -10939,71 +10961,84 @@ def analyze_dashboard():
                 "stress_test_results": stress_test_results,
                 "rebalancing_recommendations": rebalancing_recommendations
             })
-
-            # Generate insights using Gemini LLM
-            task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
-                    Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
-                    - Total Assets: ${assets}
-                    - Total Liabilities: ${liabilities}
-                    - Net Worth: ${net_worth}
-                    - Investment Personality: {investment_personality}
-                    - Retirement Age Goal: {retirement_age}
-                    - Retirement Goal: {retirement_goals}
-                    - Client Income: {client_income}
-                    - Financial Goals: {financial_goals}
-                    - Funds: {funds}
-                    - Invested Amount: ${invested_amount}
-                    - Available Funds: ${available_funds}
-                    - Current Portfolio Value: ${portfolio_current_value}
-                    - Portfolio Daily Change: ${portfolio_daily_change}
-                    - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
-                    - Portfolio Returns: ${portfolio_investment_gain_loss}
-                    - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
-                    - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
-                    - Best Performing Asset Class: {high_asset_class}
-                    - Best Performing Asset: {portfolio_data}
-                    - Asset Allocation (Breakdown): {asset_allocation}
-                    - Total Allocation: ${total_allocation}
-                    - Sharpe Ratio: {sharpe_ratio}
-                    - Volatility: {volatility}%
-                    - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
-                    - Liquid Assets: ${liquid_assets}
-                    - Liquidity Ratio: {liquidity_ratio}%
-                    - Savings Ratio: {savings_rate}%
-                    - Liability Monthly Payments: ${liability_monthly_payments}
-                    - Insurance Monthly Premiums: ${insurance_monthly_premiums}
-                    - Monthly Expenses: ${monthly_expenses}
-                    - Progress to Goals Score: {progress_to_goals_score} 
-                    - Stress Test Results: {stress_test_results}
-                    - Rebalancing Recommendations: {rebalancing_recommendations}
-
-                    Provide detailed insights into:
-                    1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
-                    2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
-                    3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
-                    4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
-                    5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
-                    6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
-                    7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
-                    8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
-
-                    Generate specific insights for the client on:
-                    - How their portfolio aligns with their stated investment personality.
-                    - Strategies to improve diversification, liquidity, and overall portfolio health.
-                    - Long-term viability of their financial plan given current metrics.
-                    """
-
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(task)
-            insights_text = markdown.markdown(response.text)
-
-            # Append insights
+            
             insights.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
-                "insights": insights_text,
                 "net_worth": net_worth,
+                "performance_list":performance_list
             })
+            
+            logging.info(f"✅ Completed financial analysis for {client_id} in {time.time() - start_analysis:.2f} seconds")
+
+            # Generate insights using Gemini LLM
+            
+            # task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
+            #         Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+            #         - Total Assets: ${assets}
+            #         - Total Liabilities: ${liabilities}
+            #         - Net Worth: ${net_worth}
+            #         - Investment Personality: {investment_personality}
+            #         - Retirement Age Goal: {retirement_age}
+            #         - Retirement Goal: {retirement_goals}
+            #         - Client Income: {client_income}
+            #         - Financial Goals: {financial_goals}
+            #         - Funds: {funds}
+            #         - Invested Amount: ${invested_amount}
+            #         - Available Funds: ${available_funds}
+            #         - Current Portfolio Value: ${portfolio_current_value}
+            #         - Portfolio Daily Change: ${portfolio_daily_change}
+            #         - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
+            #         - Portfolio Returns: ${portfolio_investment_gain_loss}
+            #         - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
+            #         - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
+            #         - Best Performing Asset Class: {high_asset_class}
+            #         - Best Performing Asset: {portfolio_data}
+            #         - Asset Allocation (Breakdown): {asset_allocation}
+            #         - Total Allocation: ${total_allocation}
+            #         - Sharpe Ratio: {sharpe_ratio}
+            #         - Volatility: {volatility}%
+            #         - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
+            #         - Liquid Assets: ${liquid_assets}
+            #         - Liquidity Ratio: {liquidity_ratio}%
+            #         - Savings Ratio: {savings_rate}%
+            #         - Liability Monthly Payments: ${liability_monthly_payments}
+            #         - Insurance Monthly Premiums: ${insurance_monthly_premiums}
+            #         - Monthly Expenses: ${monthly_expenses}
+            #         - Progress to Goals Score: {progress_to_goals_score} 
+            #         - Stress Test Results: {stress_test_results}
+            #         - Rebalancing Recommendations: {rebalancing_recommendations}
+
+            #         Provide detailed insights into:
+            #         1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
+            #         2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
+            #         3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
+            #         4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
+            #         5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
+            #         6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
+            #         7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
+            #         8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
+
+            #         Generate specific insights for the client on:
+            #         - How their portfolio aligns with their stated investment personality.
+            #         - Strategies to improve diversification, liquidity, and overall portfolio health.
+            #         - Long-term viability of their financial plan given current metrics.
+            #         """
+
+            # model = genai.GenerativeModel("gemini-1.5-flash")
+            # response = model.generate_content(task)
+            # insights_text = markdown.markdown(response.text)
+
+            # Append insights
+            # insights.append({
+            #     "client_id": client_id,
+            #     "client_name": client_data["clientDetail"]["clientName"],
+            #     "insights": insights_text,
+            #     "net_worth": net_worth,
+            # })
+            
+        total_time = time.time() - start_time
+        logging.info(f"✅ All Dashboard Clients analysis completed in {total_time:.2f} seconds")
 
         # Analyze the Dashboard:
         assets = sum(map(lambda x: x["net_worth"], insights))
@@ -11020,8 +11055,176 @@ def analyze_dashboard():
 
         curr_date = datetime.now()
         
+        # task = f"""
+        #     You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
+        #     Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
+        #     The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
+            
+        #     ### Formatting Guidelines:
+        #     1. Use **bolded section headings** to clearly delineate sections of the report.
+        #     2. Organize information into structured categories such as **Insights**, **Comparative Analysis**, **Recommendations**, and **Key Metrics**.
+        #     3. Avoid raw table syntax like '|---|---|', and instead use visually separated sections.
+        #     4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
+        #     5. Use readable percentages, dollar values, and ratios where applicable.
+        #     6. The report should have a **summary section** at the end with actionable next steps.
+        #     7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
+        #     8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+        #     9. Include all the Sections mentioned below in the report.
+            
+        #     ### Dashboard Insights and Performance Analysis
+
+        #     Date : {curr_date}
+            
+        #     #### **Key Deliverables**:
+        #     Refer to the insights here: {insights}.
+        #     Provide a **clear, structured, and actionable report** covering the following areas:
+
+        #     ---
+
+        #     ### 1. **Top Performing Clients**
+        #     - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
+        #     - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
+        #     - Best-performing assets and asset classes.
+        #     - Strategies or characteristics that contributed to their success.
+        #     - Provide actionable recommendations to replicate successful strategies for other clients.
+            
+        #     ---
+
+        #     ### 2. **Low Performing Clients**
+        #     - Identify and Examine weaknesses among low-performing clients ({low_performers}):
+        #     - Common gaps in their financial profiles, such as:
+        #         - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
+        #         - Over-reliance on volatile or underperforming assets.
+        #         - Insufficient Emergency Funds
+        #         - Misaligned Risk Tolerance and Portfolio Composition
+        #         - High Monthly Expenses and Low Savings Rates
+        #     - Poor Goal Alignment or Misaligned Risk Tolerance.
+        #     - Suggest actionable improvements:
+        #     - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
+        #     - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
+        #     - Rebalancing Recommendations for Portfolios to address underperforming areas.
+
+        #     ---
+
+        #     ### 3. **Comparative Analysis of Clients**
+        #     - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
+        #     - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
+        #     - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
+        #     - Common Trends and Development for both.
+        #     - Provide insights into successful strategies and common pitfalls to avoid.  
+        #     - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
+        #     - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
+
+        #     ---
+
+        #     ### 4. **Stress Testing Results**
+        #     - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
+        #     - Analyze:
+        #     - Portfolio Resilience Rankings for all clients.
+        #     - Potential Financial Impacts on Net Worth and Liquidity.
+        #     - Provide actionable steps to strengthen and fortify portfolios against future risks.
+
+        #     ---
+
+        #     ### 5. **Rebalancing Recommendations**
+        #     - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
+        #     - Address over-concentration in certain asset classes or sectors.
+        #     - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
+        #     - Align portfolios with client financial goals and risk profiles.
+        #     - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
+
+        #     ---
+
+        #     ### 6. **Asset Allocation Trends**
+        #     - Analyze trends in asset allocation across all clients:
+        #     - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
+        #     - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
+
+        #     ---
+
+        #     ### 7. **Goal Achievement Progress**
+        #     - Assess the progress of client goals ({client_goal_progress}):
+        #     - Evaluate how many :
+        #         - Goals Achieved(we need to determine that it wont be mentioned direclty),
+        #         - Goals on Track(including an estimate of when the goal will be achieved for most clients),
+        #         - Goals at Risk of Delay.
+        #         - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
+        #     - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
+
+        #     ---
+
+        #     ### 8. **Risk and Diversification Metrics**
+        #     - Calculate and Evaluate:
+        #     - Diversification Scores (Average and Individual Client Scores).
+        #     - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
+        #     - Liquidity Ratios and Emergency Fund Coverage.
+        #     - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
+
+        #     ---
+
+        #     ### 9. **Common Patterns and Trends**
+        #     - Identify patterns among top-performing clients:
+        #     - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
+        #     - Highlight patterns among low-performing clients:
+        #     - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+        #     - Provide actionable insights to address vulnerabilities and capitalize on strengths.
+
+        #     ---
+
+        #     ### 10. **Goal-Based Insights**
+        #     - How many goals have been achieved, are on track, or at risk?
+        #     - Suggest steps to:
+        #     - Accelerate progress for at-risk goals.
+        #     - Adjust timelines for unreachable goals.
+
+        #     ---
+
+        #     ### 11. **Most Gaining and Losing Assets**
+        #     - Highlight the **most gaining** and **most losing assets** for:
+        #     - Individual Clients.
+        #     - Across all portfolios.
+        #     - Recommend strategies to leverage high-performing assets or mitigate losses.
+
+        #     ---
+            
+        #     ### 12. **Longest and Shortest Investment Periods**
+        #     - Identify clients with the:
+        #     - Longest Investment Period and its impact on performance.
+        #     - Shortest Investment Period and how it reflects their strategies.
+
+        #     ---
+
+        #     ### 13. **Overall Portfolio Management Score**
+        #     - Assign a score out of 100 for the Wealth Manager based on:
+        #     - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
+        #     - Provide reasons for the score and actionable steps for improvement.
+
+        #     ---
+
+        #     ### 14. **Custom Recommendations**
+        #     - Identify and Suggest specific investment opportunities including:
+        #     - Low-risk alternatives like Bonds, ETFs, or Index Funds.
+        #     - High-potential sectors based on current market trends.
+        #     - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
+
+        #     ---
+            
+        #     ### 15. **Actionable Summary**
+        #     - Provide key insights, recommendations, and patterns to help the Wealth Manager:
+        #     - Improve portfolio performance.
+        #     - Align client portfolios with financial goals and market trends.
+        #     - Strengthen risk management and diversification.
+
+        #     #### **Note**:
+        #     Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
+        #     Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
+        #     Use all the provided data to generate meaningful and actionable insights.
+        #     Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
+        #     """
+        
+        # new :
         task = f"""
-            You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
+            You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management.
             Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
             The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
             
@@ -11032,161 +11235,140 @@ def analyze_dashboard():
             4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
             5. Use readable percentages, dollar values, and ratios where applicable.
             6. The report should have a **summary section** at the end with actionable next steps.
-            7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
-            8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
-            9. Include all the Sections mentioned below in the report.
+            7. Avoid redundancy and ensure recommendations are clearly highlighted without repetition.
+            8. Use numbered headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+            9. Ensure all the sections mentioned below are included.
             
             ### Dashboard Insights and Performance Analysis
 
-            Date : {curr_date}
+            **Date:** {curr_date}
             
             #### **Key Deliverables**:
-            Refer to the insights here: {insights}.
-            Provide a **clear, structured, and actionable report** covering the following areas:
+            Insights reference: {insights}
+            Provide a **structured and actionable report** covering:
 
             ---
-
+            
             ### 1. **Top Performing Clients**
-            - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
-            - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
-            - Best-performing assets and asset classes.
-            - Strategies or characteristics that contributed to their success.
-            - Provide actionable recommendations to replicate successful strategies for other clients.
+            - Identify and analyze top-performing clients ({top_performers}):
+              - **Net Worth, Liquidity Ratios, Asset Allocation, Monthly Expenses, Savings Rates, Risk Metrics** (Sharpe Ratio, Volatility)
+              - **Best-performing assets and asset classes**
+              - **Key strategies contributing to success**
+            - Provide actionable recommendations to replicate success for other clients.
             
             ---
-
+            
             ### 2. **Low Performing Clients**
-            - Identify and Examine weaknesses among low-performing clients ({low_performers}):
-            - Common gaps in their financial profiles, such as:
-                - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
-                - Over-reliance on volatile or underperforming assets.
-                - Insufficient Emergency Funds
-                - Misaligned Risk Tolerance and Portfolio Composition
-                - High Monthly Expenses and Low Savings Rates
-            - Poor Goal Alignment or Misaligned Risk Tolerance.
-            - Suggest actionable improvements:
-            - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
-            - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
-            - Rebalancing Recommendations for Portfolios to address underperforming areas.
-
+            - Identify weaknesses among low-performing clients ({low_performers}):
+              - **Common financial issues:** High Debt-to-Asset Ratios, Low Diversification, Over-reliance on volatile assets, Insufficient Emergency Funds
+              - **Expense reduction opportunities**: Identify avoidable expenses.
+              - **Misaligned Risk Tolerance & Goal Alignment**
+            - Actionable recommendations:
+              - Debt management plans
+              - Portfolio rebalancing strategies
+              - Ways to improve savings and reduce expenses
+            
             ---
-
+            
             ### 3. **Comparative Analysis of Clients**
-            - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
-            - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
-            - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
-            - Common Trends and Development for both.
-            - Provide insights into successful strategies and common pitfalls to avoid.  
-            - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
-            - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
-
+            - Compare top-performing and low-performing clients:
+              - **Portfolio Characteristics:** Asset Allocation, Financial Situation, Monthly Expenses, Savings Patterns, Risk Metrics
+              - **Common trends and vulnerabilities**
+              - **Strategies to uplift low performers using insights from top performers**
+            
             ---
-
+            
             ### 4. **Stress Testing Results**
-            - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
-            - Analyze:
-            - Portfolio Resilience Rankings for all clients.
-            - Potential Financial Impacts on Net Worth and Liquidity.
-            - Provide actionable steps to strengthen and fortify portfolios against future risks.
-
+            - Simulate market downturn scenarios (e.g., recession, inflation spikes) using {stress_test_results}.
+            - **Portfolio Resilience Rankings**
+            - **Potential Financial Impacts on Net Worth and Liquidity**
+            - **Actionable steps to strengthen portfolios against risks**
+            
             ---
-
+            
             ### 5. **Rebalancing Recommendations**
-            - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
-            - Address over-concentration in certain asset classes or sectors.
-            - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
-            - Align portfolios with client financial goals and risk profiles.
-            - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
-
+            - Tailored portfolio adjustments ({client_rebalancing_recommendations}):
+              - Address over-concentration in specific sectors.
+              - Highlight underweighted sectors (e.g., Bonds, Real Estate).
+              - Align portfolios with financial goals and risk profiles.
+            
             ---
-
+            
             ### 6. **Asset Allocation Trends**
-            - Analyze trends in asset allocation across all clients:
-            - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
-            - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
-
+            - Trends in asset allocation across all clients:
+              - **Dominant asset classes** (Cryptocurrency, Stocks, Bonds, etc.) and associated risks/returns.
+              - **Opportunities to optimize allocations based on market conditions**.
+            
             ---
-
+            
             ### 7. **Goal Achievement Progress**
-            - Assess the progress of client goals ({client_goal_progress}):
-            - Evaluate how many :
-                - Goals Achieved(we need to determine that it wont be mentioned direclty),
-                - Goals on Track(including an estimate of when the goal will be achieved for most clients),
-                - Goals at Risk of Delay.
-                - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
-            - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
-
+            - Assess client goal progress ({client_goal_progress}):
+              - Goals Achieved, On Track, At Risk, or Unreachable.
+              - **Estimated timeline adjustments for at-risk goals**.
+            - **Steps to accelerate progress or adjust target years**.
+            
             ---
-
+            
             ### 8. **Risk and Diversification Metrics**
-            - Calculate and Evaluate:
-            - Diversification Scores (Average and Individual Client Scores).
-            - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
-            - Liquidity Ratios and Emergency Fund Coverage.
-            - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
-
+            - Evaluate:
+              - **Diversification Scores** (Client & Portfolio Level)
+              - **Risk Metrics (Sharpe Ratios, Portfolio Volatility)**
+              - **Liquidity Ratios and Emergency Fund Coverage**
+            - **Actionable strategies to enhance diversification & risk management**.
+            
             ---
-
+            
             ### 9. **Common Patterns and Trends**
-            - Identify patterns among top-performing clients:
-            - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
-            - Highlight patterns among low-performing clients:
-            - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
-            - Provide actionable insights to address vulnerabilities and capitalize on strengths.
-
-            ---
-
-            ### 10. **Goal-Based Insights**
-            - How many goals have been achieved, are on track, or at risk?
-            - Suggest steps to:
-            - Accelerate progress for at-risk goals.
-            - Adjust timelines for unreachable goals.
-
-            ---
-
-            ### 11. **Most Gaining and Losing Assets**
-            - Highlight the **most gaining** and **most losing assets** for:
-            - Individual Clients.
-            - Across all portfolios.
-            - Recommend strategies to leverage high-performing assets or mitigate losses.
-
+            - **Top performers:** Traits such as High Liquidity, Diversified Portfolios, Strong Savings Habits.
+            - **Low performers:** High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+            - **Insights to address vulnerabilities & capitalize on strengths.**
+            
             ---
             
-            ### 12. **Longest and Shortest Investment Periods**
-            - Identify clients with the:
-            - Longest Investment Period and its impact on performance.
-            - Shortest Investment Period and how it reflects their strategies.
-
-            ---
-
-            ### 13. **Overall Portfolio Management Score**
-            - Assign a score out of 100 for the Wealth Manager based on:
-            - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
-            - Provide reasons for the score and actionable steps for improvement.
-
-            ---
-
-            ### 14. **Custom Recommendations**
-            - Identify and Suggest specific investment opportunities including:
-            - Low-risk alternatives like Bonds, ETFs, or Index Funds.
-            - High-potential sectors based on current market trends.
-            - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
-
+            ### 10. **Most Gaining and Losing Assets**
+            - **Highlight top gaining & losing assets** for:
+              - Individual clients
+              - Across all portfolios
+            - **Recommendations to leverage high-performing assets & mitigate losses**.
+            
             ---
             
-            ### 15. **Actionable Summary**
-            - Provide key insights, recommendations, and patterns to help the Wealth Manager:
-            - Improve portfolio performance.
-            - Align client portfolios with financial goals and market trends.
-            - Strengthen risk management and diversification.
-
+            ### 11. **Investment Time Periods**
+            - Identify clients with:
+              - **Longest investment periods** and their impact on performance.
+              - **Shortest investment periods** and their portfolio strategy.
+            
+            ---
+            
+            ### 12. **Overall Portfolio Management Score**
+            - Assign a score (out of 100) based on:
+              - **Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.**
+            - **Provide reasoning and actionable improvement steps**.
+            
+            ---
+            
+            ### 13. **Custom Investment Recommendations**
+            - Identify investment opportunities including:
+              - Low-risk options: Bonds, ETFs, Index Funds
+              - High-potential sectors based on market trends
+            - **Tailored strategies for high-net-worth & low-performing clients**.
+            
+            ---
+            
+            ### 14. **Actionable Summary**
+            - **Key insights and recommendations** to help the Wealth Manager:
+              - Improve portfolio performance.
+              - Align client portfolios with financial goals & market trends.
+              - Strengthen risk management & diversification.
+            
             #### **Note**:
-            Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
-            Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
-            Use all the provided data to generate meaningful and actionable insights.
-            Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
+            Ensure the report is structured, clear, and comprehensive.
+            Avoid stating "insufficient data." Use all provided data to generate meaningful, actionable insights.
+            Remove redundancy and ensure clarity for efficient decision-making.
             """
 
+
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(task)
         dashboard_analysis = markdown_to_text_new(response.text)
         # Process the response from LLM
@@ -11194,6 +11376,10 @@ def analyze_dashboard():
         print(html_suggestions)
         dashboard_suggestions = markdown_to_text_new(html_suggestions)
         print(dashboard_suggestions)
+        
+        total_insights_time = time.time() - total_time
+        logging.info(f"✅ Dashboard analysis completed in {total_insights_time:.2f} seconds")
+
         # Return the response
         return jsonify({
             "message": "Dashboard Analysis generated successfully",
@@ -11205,6 +11391,559 @@ def analyze_dashboard():
     except Exception as e:
         print(f"Error in analyzing dashboard: {e}")
         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
+
+
+# Previous Version : Takes long Processing Time :
+
+# @app.route('/api/analyze_dashboard', methods=['POST'])
+# def analyze_dashboard():
+#     try:
+#         start_time = time.time()  # Track time
+#         # Fetch all clients' financial data
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found in the request"}), 400
+
+#         # call infographics for testing purposes :
+#         # dashboard_infographics(clients)
+        
+#         # Fetch portfolios for all clients in bulk
+#         portfolios = fetch_portfolios(client_ids)
+
+#         insights = []
+#         performance_list = []
+#         stress_test_results = []
+#         client_goal_progress = {}
+#         client_rebalancing_recommendations = {}
+        
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id or client_id not in portfolios:
+#                 continue
+
+#             # Load client financial data (from AWS or local based on USE_AWS)
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     continue
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     continue
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
+
+#             # Ensure funds are numeric
+#             funds = float(client_data.get("investmentAmount", 0) or 0)
+#             if funds <= 0:
+#                 continue
+
+#             # Get portfolio data from the fetched portfolios
+#             portfolio_data = portfolios.get(client_id, [])
+
+#             # Safely parse assets and liabilities
+#             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#             net_worth = assets - liabilities
+            
+#             # Savings Rate
+#             annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#             savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+#             print(f"Savings Rate :{savings_rate}")
+            
+#             # Calculate Monthly Expenses
+#             liability_monthly_payments = sum(
+#                 float(client_data["myLiabilities"][key].get("mortgageMonthly", 0) or 0)
+#                 for key in client_data["myLiabilities"]
+#                 if "Monthly" in client_data["myLiabilities"][key]
+#             )
+
+#             insurance_monthly_premiums = sum(
+#                 float(client_data["insuranceCoverage"][key].get("monthlyPayLIClient", 0) or 0)
+#                 for key in client_data["insuranceCoverage"]
+#                 if "monthlyPayLIClient" in client_data["insuranceCoverage"][key]
+#             )
+
+#             # Monthly Expenses = Liabilities + Insurance - Savings (Investments)
+#             monthly_expenses = liability_monthly_payments + insurance_monthly_premiums
+
+#             # Use monthly expenses for emergency fund coverage calculation
+#             emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#             # Additional Metrics
+#             debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+#             retirement_age = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+#             retirement_goals = client_data.get("retirementGoal", "Unknown")
+#             # print(f"Retirement Goal :\n{retirement_goals}")
+#             financial_goals = client_data.get("goalFields","Unknown")
+#             # print(f"Financial goals :\n{financial_goals}")
+#             client_income = client_data.get("incomeFields","Unknown")
+#             # print(f"Client income :\n{client_income}")
+
+#             invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
+#             available_funds = funds - invested_amount
+
+#             # Initialize variables to calculate portfolio-level metrics
+#             portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#             portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#             portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+            
+#             if portfolio_current_value != 0:
+#                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+#                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#             else:
+#                 portfolio_daily_change_perc = 0
+#                 portfolio_investment_gain_loss_perc = 0
+            
+#             # Calculate portfolio time held
+#             time_held_values = []
+#             for asset in portfolio_data:
+#                 time_held_str = asset.get("Time_Held", "")
+#                 if time_held_str:
+#                     try:
+#                         # Adjusted format string for American date format (MM/DD/YYYY)
+#                         time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
+#                         time_held_values.append(time_held_dt)
+#                     except ValueError as ve:
+#                         print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
+
+#             if time_held_values:
+#                 oldest_time_held = min(time_held_values)
+#                 portfolio_time_held = (datetime.now() - oldest_time_held).days
+#                 # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
+#             else:
+#                 portfolio_time_held = 0
+#                 print("No valid Time_Held data found in portfolio.")
+
+#             # print(f"Portfolio Time Held: {portfolio_time_held} days")
+            
+#             # Calculate high asset class
+#             asset_class_returns = {}
+#             for asset in portfolio_data:
+#                 asset_class = asset.get("assetClass", "Unknown")
+#                 asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+#                 if asset_class != "Unknown":
+#                     asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+#                 else:
+#                     print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+#             # Log asset_class_returns for debugging
+#             # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+#             # Find the asset class with the highest return
+#             if asset_class_returns:
+#                 high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+#             else:
+#                 high_asset_class = "Unknown"
+                
+#             # Asset Allocation
+#             asset_allocation = {}
+#             for asset in portfolio_data:
+#                 asset_class = asset.get("assetClass", "Other")
+#                 allocation = float(asset.get("Amount_Invested", 0))
+#                 asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+#             total_allocation = sum(asset_allocation.values())
+#             asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
+            
+#             # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
+            
+#             # Risk-reward metrics
+#             sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
+#             volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
+#             volatility = volatility if volatility > 0 else volatility * (-1)
+#             # print(f"sharpe ratio :{sharpe_ratio}")
+            
+#             # Diversification analysis
+#             diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
+#             # print(f"Diversification Score :{diversification_score}")
+            
+#             # Stress Testing
+#             stress_scenarios = ["recession", "high inflation", "market crash"]
+#             stress_test_result = {
+#                 "client_id": client_id,
+#                 "scenarios": {}
+#             }
+#             for scenario in stress_scenarios:
+#                 factor = {
+#                     "recession": -0.2,
+#                     "high inflation": -0.15,
+#                     "market crash": -0.3
+#                 }.get(scenario, -0.1)
+#                 stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
+#                 stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
+#             stress_test_results.append(stress_test_result)
+            
+#             print(f"Stress Test Results : {stress_test_results}")
+
+            
+#             # Liquidity analysis :
+            
+#             # Extract assets and liabilities data
+#             assets_labels = client_data["assetsDatasets"]["labels"]
+#             assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+#             liabilities_data = client_data["liabilityDatasets"]["datasets"][0]["data"]
+
+#             # Map liquid asset categories
+#             liquid_asset_categories = [
+#                 "Cash/bank accounts",
+#                 "Brokerage/non-qualified accounts",
+#                 "529 Plans",
+#                 "Roth IRA, Roth 401(k)"
+#             ]
+
+#             # Calculate liquid assets
+#             liquid_assets = sum(
+#                 float(assets_data[i] or 0)
+#                 for i, label in enumerate(assets_labels)
+#                 if label in liquid_asset_categories
+#             )
+
+#             # Calculate total liabilities
+#             total_liabilities = sum(float(liability or 0) for liability in liabilities_data)
+
+#             # Calculate liquidity ratio
+#             liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+            
+#             print(f"Liquid assets :{liquid_assets}")
+#             print(f"Liquidity Ratio :{liquidity_ratio}")
+
+#             # Progress Towards Financial Goals
+#             progress_to_goals_score = {}
+#             if isinstance(financial_goals, list):
+#                 for goal in financial_goals:
+#                     try:
+#                         goal_cost = float(goal.get("cost", 0) or 0)  # Convert cost to float
+#                     except ValueError:
+#                         goal_cost = 0  # Fallback if cost is invalid
+
+#                     progress = (net_worth / goal_cost) * 100 if goal_cost > 0 else 0
+#                     progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
+#                     print(f"Progress to goals score :\n{progress_to_goals_score}")    
+#             else:
+#                 print("Financial goals are not in the expected format.")
+            
+#             client_goal_progress[client_id] = progress_to_goals_score
+            
+#             # Recommendations
+#             rebalancing_recommendations = []
+#             for asset_class, percentage in asset_allocation.items():
+#                 if percentage > 50:
+#                     rebalancing_recommendations.append(f"Reduce allocation in {asset_class} to improve diversification.")
+
+#             client_rebalancing_recommendations[client_id] = rebalancing_recommendations
+            
+#             # Append to performance list
+#             performance_list.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "retirement_goals" : retirement_goals,
+#                 "retirement_age" : retirement_age,
+#                 "financial_goals" : financial_goals,
+#                 "client_income" : client_income,
+#                 "assets": assets,
+#                 "liabilities": liabilities,
+#                 "net_worth": net_worth,
+#                 "funds": funds,
+#                 "available_funds": available_funds,
+#                 "invested_amount": invested_amount,
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#                 "high_asset_class":high_asset_class,
+#                 "portfolio_time_held" : portfolio_time_held ,
+#                 "asset_allocation":asset_allocation,
+#                 "total_allocation":total_allocation,
+#                 "sharpe_ratio": sharpe_ratio,
+#                 "savings_ratio":savings_rate,
+#                 "Liability Monthly Payments":liability_monthly_payments,
+#                 "Insurance Monthly Premiums": insurance_monthly_premiums,
+#                 "Calculated Monthly Expenses": monthly_expenses,
+#                 "Emergency Funds Coverage":emergency_fund_coverage,
+#                 "Debt To Asset Ratio": debt_to_asset_ratio,
+#                 "volatility": volatility,
+#                 "diversification_score": diversification_score,
+#                 "liquidity_ratio": liquidity_ratio,
+#                 "progress_to_goals_score": progress_to_goals_score,
+#                 "stress_test_results": stress_test_results,
+#                 "rebalancing_recommendations": rebalancing_recommendations
+#             })
+
+#             # Generate insights using Gemini LLM
+#             task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
+#                     Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+#                     - Total Assets: ${assets}
+#                     - Total Liabilities: ${liabilities}
+#                     - Net Worth: ${net_worth}
+#                     - Investment Personality: {investment_personality}
+#                     - Retirement Age Goal: {retirement_age}
+#                     - Retirement Goal: {retirement_goals}
+#                     - Client Income: {client_income}
+#                     - Financial Goals: {financial_goals}
+#                     - Funds: {funds}
+#                     - Invested Amount: ${invested_amount}
+#                     - Available Funds: ${available_funds}
+#                     - Current Portfolio Value: ${portfolio_current_value}
+#                     - Portfolio Daily Change: ${portfolio_daily_change}
+#                     - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
+#                     - Portfolio Returns: ${portfolio_investment_gain_loss}
+#                     - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
+#                     - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
+#                     - Best Performing Asset Class: {high_asset_class}
+#                     - Best Performing Asset: {portfolio_data}
+#                     - Asset Allocation (Breakdown): {asset_allocation}
+#                     - Total Allocation: ${total_allocation}
+#                     - Sharpe Ratio: {sharpe_ratio}
+#                     - Volatility: {volatility}%
+#                     - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
+#                     - Liquid Assets: ${liquid_assets}
+#                     - Liquidity Ratio: {liquidity_ratio}%
+#                     - Savings Ratio: {savings_rate}%
+#                     - Liability Monthly Payments: ${liability_monthly_payments}
+#                     - Insurance Monthly Premiums: ${insurance_monthly_premiums}
+#                     - Monthly Expenses: ${monthly_expenses}
+#                     - Progress to Goals Score: {progress_to_goals_score} 
+#                     - Stress Test Results: {stress_test_results}
+#                     - Rebalancing Recommendations: {rebalancing_recommendations}
+
+#                     Provide detailed insights into:
+#                     1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
+#                     2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
+#                     3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
+#                     4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
+#                     5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
+#                     6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
+#                     7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
+#                     8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
+
+#                     Generate specific insights for the client on:
+#                     - How their portfolio aligns with their stated investment personality.
+#                     - Strategies to improve diversification, liquidity, and overall portfolio health.
+#                     - Long-term viability of their financial plan given current metrics.
+#                     """
+
+#             model = genai.GenerativeModel("gemini-1.5-flash")
+#             response = model.generate_content(task)
+#             insights_text = markdown.markdown(response.text)
+
+#             # Append insights
+#             insights.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "insights": insights_text,
+#                 "net_worth": net_worth,
+#             })
+
+#         # Analyze the Dashboard:
+#         assets = sum(map(lambda x: x["net_worth"], insights))
+#         liabilities = sum(map(lambda x: x["net_worth"], insights))
+#         net_worth = assets - liabilities
+#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
+#         top_client_id = insights[0]["client_id"]
+#         top_client_name = insights[0]["client_name"]
+
+#         # Identify top and low performers
+#         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+#         top_performers = performance_list[:10]
+#         low_performers = performance_list[-10:]
+
+#         curr_date = datetime.now()
+        
+#         task = f"""
+#             You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
+#             Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
+#             The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
+            
+#             ### Formatting Guidelines:
+#             1. Use **bolded section headings** to clearly delineate sections of the report.
+#             2. Organize information into structured categories such as **Insights**, **Comparative Analysis**, **Recommendations**, and **Key Metrics**.
+#             3. Avoid raw table syntax like '|---|---|', and instead use visually separated sections.
+#             4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
+#             5. Use readable percentages, dollar values, and ratios where applicable.
+#             6. The report should have a **summary section** at the end with actionable next steps.
+#             7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
+#             8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+#             9. Include all the Sections mentioned below in the report.
+            
+#             ### Dashboard Insights and Performance Analysis
+
+#             Date : {curr_date}
+            
+#             #### **Key Deliverables**:
+#             Refer to the insights here: {insights}.
+#             Provide a **clear, structured, and actionable report** covering the following areas:
+
+#             ---
+
+#             ### 1. **Top Performing Clients**
+#             - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
+#             - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
+#             - Best-performing assets and asset classes.
+#             - Strategies or characteristics that contributed to their success.
+#             - Provide actionable recommendations to replicate successful strategies for other clients.
+            
+#             ---
+
+#             ### 2. **Low Performing Clients**
+#             - Identify and Examine weaknesses among low-performing clients ({low_performers}):
+#             - Common gaps in their financial profiles, such as:
+#                 - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
+#                 - Over-reliance on volatile or underperforming assets.
+#                 - Insufficient Emergency Funds
+#                 - Misaligned Risk Tolerance and Portfolio Composition
+#                 - High Monthly Expenses and Low Savings Rates
+#             - Poor Goal Alignment or Misaligned Risk Tolerance.
+#             - Suggest actionable improvements:
+#             - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
+#             - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
+#             - Rebalancing Recommendations for Portfolios to address underperforming areas.
+
+#             ---
+
+#             ### 3. **Comparative Analysis of Clients**
+#             - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
+#             - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
+#             - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
+#             - Common Trends and Development for both.
+#             - Provide insights into successful strategies and common pitfalls to avoid.  
+#             - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
+#             - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
+
+#             ---
+
+#             ### 4. **Stress Testing Results**
+#             - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
+#             - Analyze:
+#             - Portfolio Resilience Rankings for all clients.
+#             - Potential Financial Impacts on Net Worth and Liquidity.
+#             - Provide actionable steps to strengthen and fortify portfolios against future risks.
+
+#             ---
+
+#             ### 5. **Rebalancing Recommendations**
+#             - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
+#             - Address over-concentration in certain asset classes or sectors.
+#             - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
+#             - Align portfolios with client financial goals and risk profiles.
+#             - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
+
+#             ---
+
+#             ### 6. **Asset Allocation Trends**
+#             - Analyze trends in asset allocation across all clients:
+#             - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
+#             - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
+
+#             ---
+
+#             ### 7. **Goal Achievement Progress**
+#             - Assess the progress of client goals ({client_goal_progress}):
+#             - Evaluate how many :
+#                 - Goals Achieved(we need to determine that it wont be mentioned direclty),
+#                 - Goals on Track(including an estimate of when the goal will be achieved for most clients),
+#                 - Goals at Risk of Delay.
+#                 - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
+#             - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
+
+#             ---
+
+#             ### 8. **Risk and Diversification Metrics**
+#             - Calculate and Evaluate:
+#             - Diversification Scores (Average and Individual Client Scores).
+#             - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
+#             - Liquidity Ratios and Emergency Fund Coverage.
+#             - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
+
+#             ---
+
+#             ### 9. **Common Patterns and Trends**
+#             - Identify patterns among top-performing clients:
+#             - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
+#             - Highlight patterns among low-performing clients:
+#             - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+#             - Provide actionable insights to address vulnerabilities and capitalize on strengths.
+
+#             ---
+
+#             ### 10. **Goal-Based Insights**
+#             - How many goals have been achieved, are on track, or at risk?
+#             - Suggest steps to:
+#             - Accelerate progress for at-risk goals.
+#             - Adjust timelines for unreachable goals.
+
+#             ---
+
+#             ### 11. **Most Gaining and Losing Assets**
+#             - Highlight the **most gaining** and **most losing assets** for:
+#             - Individual Clients.
+#             - Across all portfolios.
+#             - Recommend strategies to leverage high-performing assets or mitigate losses.
+
+#             ---
+            
+#             ### 12. **Longest and Shortest Investment Periods**
+#             - Identify clients with the:
+#             - Longest Investment Period and its impact on performance.
+#             - Shortest Investment Period and how it reflects their strategies.
+
+#             ---
+
+#             ### 13. **Overall Portfolio Management Score**
+#             - Assign a score out of 100 for the Wealth Manager based on:
+#             - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
+#             - Provide reasons for the score and actionable steps for improvement.
+
+#             ---
+
+#             ### 14. **Custom Recommendations**
+#             - Identify and Suggest specific investment opportunities including:
+#             - Low-risk alternatives like Bonds, ETFs, or Index Funds.
+#             - High-potential sectors based on current market trends.
+#             - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
+
+#             ---
+            
+#             ### 15. **Actionable Summary**
+#             - Provide key insights, recommendations, and patterns to help the Wealth Manager:
+#             - Improve portfolio performance.
+#             - Align client portfolios with financial goals and market trends.
+#             - Strengthen risk management and diversification.
+
+#             #### **Note**:
+#             Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
+#             Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
+#             Use all the provided data to generate meaningful and actionable insights.
+#             Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
+#             """
+
+#         response = model.generate_content(task)
+#         dashboard_analysis = markdown_to_text_new(response.text)
+#         # Process the response from LLM
+#         html_suggestions = markdown.markdown(dashboard_analysis)
+#         print(html_suggestions)
+#         dashboard_suggestions = markdown_to_text_new(html_suggestions)
+#         print(dashboard_suggestions)
+#         # Return the response
+#         return jsonify({
+#             "message": "Dashboard Analysis generated successfully",
+#             "dashboard_analysis": dashboard_suggestions,
+#             "performance": insights,
+#             "performance_list": performance_list
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in analyzing dashboard: {e}")
+#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
 
 def markdown_to_text_new(md):
@@ -12114,7 +12853,7 @@ if __name__ == "__main__":
     # Get the port dynamically from the environment variable, default to 5000
     port = int(os.getenv("PORT", 5000))
     print(f"Port : {port}")
-    serve(app, host="0.0.0.0", port=80)
+    serve(app, host="0.0.0.0", port=5000)
 
 
 
