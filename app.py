@@ -297,61 +297,6 @@ from datetime import datetime, timedelta,timezone
 
 bcrypt = Bcrypt(app)
 
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') # 'your_email@gmail.com'
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
-
-mail = Mail(app)
-
-# In-memory storage for email and OTP (for simplicity)
-otp_store = {}
-
-# API Endpoints
-from flask import Flask, request, jsonify
-import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-# Replace with your email credentials
-EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
-EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
-
- 
-# Local storage paths
-LOCAL_STORAGE_PATH = "local_storage"
-os.makedirs(LOCAL_STORAGE_PATH, exist_ok=True)
-# otp_store = {}
- 
-# def load_from_local(filepath):
-#     try:
-#         if not os.path.exists(filepath):
-#             return None
-#         with open(filepath, 'r') as file:
-#             return json.load(file)
-#     except Exception as e:
-#         print(f"Error loading file: {e}")
-#         return None
-   
-# def save_to_local(data, filepath):
-#     try:
-#         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-#         with open(filepath, 'w') as file:
-#             json.dump(data, file)
-#         print(f"Data saved at {filepath}")  # Debug log
-#     except Exception as e:
-#         print(f"Error saving file: {e}")  # Debug log
-#         raise
- 
- 
-# def delete_from_local(filename):
-    # file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
-    # if os.path.exists(file_path):
-    #     os.remove(file_path)
-       
 # Using AWS and Local Storage :
 
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
@@ -428,10 +373,10 @@ def save_user_data(data, email):
 def load_user_data(email):
     if USE_AWS:
         filename = f"{signUp_user_folder}{email}.json"
-        return load_from_aws(filename)
+        return load_from_aws(filename) or {} # Fixed returning None
     else:
         filename = f"users/{email}.json"
-        return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename))
+        return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename)) or {} # Fixed returning None
  
 def delete_user_data(email):
     if USE_AWS:
@@ -446,9 +391,187 @@ def delete_user_data(email):
         filename = f"users/{email}.json"
         delete_from_local(filename)
 
+# # ✅ Function to Send Email using Office 365 SMTP
+# import ssl
+# import urllib.request
+
+# import smtplib
+# import ssl
+# import os
+# from flask import Flask, request, jsonify
+# from flask_mail import Mail, Message
+# from email.mime.multipart import MIMEMultipart
+# from email.mime.text import MIMEText
+
+# # ✅ Office 365 SMTP Configuration
+# SMTP_SERVER = "smtp.office365.com"
+# SMTP_PORT = 587
+
+# # ✅ Get email credentials securely from environment variables
+# support_email = os.getenv("support_email", "wealth-mgmt-support@mresult.net")
+# support_password = os.getenv("support_password")  # Must be set in environment variables
+
+# app.config['MAIL_SERVER'] = SMTP_SERVER
+# app.config['MAIL_PORT'] = SMTP_PORT
+# app.config['MAIL_USE_TLS'] = True
+# app.config['MAIL_USERNAME'] = support_email
+# app.config['MAIL_PASSWORD'] = support_password
+
+# mail = Mail(app)
+
+# # ✅ Function to Send Email using Office 365 SMTP
+# def send_email(to_email, subject, body):
+#     try:
+#         # Ensure credentials are set
+#         if not support_email or not support_password:
+#             print("❌ Email credentials are missing! Set environment variables `SUPPORT_EMAIL` and `SUPPORT_PASSWORD`.")
+#             return False
+
+#         # ✅ Construct the email message
+#         msg = MIMEMultipart()
+#         msg["From"] = support_email
+#         msg["To"] = to_email
+#         msg["Subject"] = subject
+#         msg.attach(MIMEText(body, "plain"))
+
+#         # ✅ Create a secure connection with TLS 1.2
+#         context = ssl.create_default_context()
+
+#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+#             server.ehlo()  # Identify ourselves to the SMTP server
+#             server.starttls(context=context)  # Secure the connection
+#             server.ehlo()  # Re-identify after securing the connection
+#             server.login(support_email, support_password)  # Login to SMTP server
+#             server.sendmail(support_email, to_email, msg.as_string())  # Send email
+
+#         print(f"✅ Email sent successfully to {to_email}")
+#         return True
+
+#     except smtplib.SMTPAuthenticationError:
+#         print("❌ Authentication Error: Check your username, password, or Office 365 security settings.")
+#     except smtplib.SMTPException as e:
+#         print(f"❌ SMTP Error: {e}")
+#     except Exception as e:
+#         print(f"❌ General Error: {e}")
+#     return False
+
+# # ✅ Email Verification API
+# @app.route('/api/email-verification', methods=['POST'])
+# def email_verification():
+#     try:
+#         email = request.json.get('email')
+#         url = request.json.get('url', 'http://wealth-management.mresult.net')
+
+#         if not email:
+#             return jsonify({"message": "Email is required"}), 400
+
+#         print(f"Processing email verification for: {email}")
+
+#         # ✅ Generate the sign-up link
+#         sign_up_link = f"{url}/signUp/{email}"
+
+#         # ✅ Construct email message
+#         msg = Message(
+#             "Sign-Up Link - Verify Your Email",
+#             sender=support_email,
+#             recipients=[email]
+#         )
+#         msg.body = (
+#             f"Dear User,\n\n"
+#             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
+#             f"Click the link below to finish setting up your account:\n"
+#             f"{sign_up_link}\n\n"
+#             f"Thank you for choosing us.\n\n"
+#         )
+
+#         print(f"Sending email to: {email}\nContent: {msg.body}")
+
+#         # ✅ Send Email Using Flask-Mail & Backup SMTP
+#         mail.send(msg)  # Using Flask-Mail
+#         send_email(email, "Sign-Up Link - Verify Your Email", msg.body)  # Backup SMTP
+
+#         print("✅ Email sent successfully.")
+#         return jsonify({"message": "Sign-up link sent successfully"}), 200
+
+#     except Exception as e:
+#         print(f"❌ Error sending email: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+#################################################################################################
+
+# Email verification :
  
+# @app.route('/api/email-verification', methods=['POST'])
+# def email_verification():
+#     try:
+#         email = request.json.get('email')  # Extract email from the request
+#         url = request.json.get('url','http://wealth-management.mresult.net')
+#         if not email:
+#             return jsonify({"message": "Email is required"}), 400
+
+#         print(f"Processing email verification for: {email}")
+
+#         # Generate the sign-up link
+#         sign_up_link = f"{url}/signUp/{email}"
+        
+#         # sign_up_link = f"http://wealth-management.mresult.net/signUp/{email}"
+
+#         # Create the email message
+#         msg = Message(
+#             "Sign-Up Link - Verify Your Email",
+#             sender=app.config['support_email'],  # Use correct sender email
+#             recipients=[email]
+#         )
+#         msg.body = (
+#             f"Dear User,\n\n"
+#             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
+#             f"Click the link below to finish setting up your account:\n"
+#             f"{sign_up_link}\n\n"
+#             f"Thank you for choosing us.\n\n"
+#         )
+#         print(f"Sending email to: {email}\nContent: {msg.body}")
+       
+#         # Send the email
+#         mail.send(msg)
+#         send_email(email, "Sign-Up Link - Verify Your Email", msg.body)
+#         print("Email sent successfully.")
+
+#         return jsonify({"message": "Sign-up link sent successfully"}), 200
+
+#     except Exception as e:
+#         print(f"Error sending email: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+#####################################################################################################
+
+# Email configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') # 'your_email@gmail.com'
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
+
+mail = Mail(app)
+print(f"Mail object: {mail}")
+
+# In-memory storage for email and OTP (for simplicity)
+otp_store = {}
+
+# API Endpoints
+from flask import Flask, request, jsonify
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# Replace with your email credentials
+EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
+EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
+
+# Previous Wroking Code with Personal Email Id : 
 def send_email(to_email, otp):
     try:
+        print(f"to_email{to_email}")
         # Validate email format
         if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
             print(f"Invalid email address: {to_email}")
@@ -480,13 +603,14 @@ def send_email(to_email, otp):
 def email_verification():
     try:
         email = request.json.get('email')  # Extract email from the request
+        url = request.json.get('url','https://wealth-management.mresult.net')
         if not email:
             return jsonify({"message": "Email is required"}), 400
  
         print(f"Processing email verification for: {email}")
  
         # Generate the sign-up link
-        sign_up_link = f"http://wealth-management.mresult.net/signUp/{email}"
+        sign_up_link = f"{url}/signUp/{email}"
  
         # Create the email message
         msg = Message(
@@ -494,6 +618,10 @@ def email_verification():
             sender="your_email@gmail.com",
             recipients=[email]
         )
+        
+        # add check whether the email is valid and verified :
+        # do hash or make otp for the email and then send the link 
+        
         msg.body = (
             f"Dear User,\n\n"
             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
@@ -501,25 +629,21 @@ def email_verification():
             f"{sign_up_link}\n\n"
             f"Thank you for choosing us.\n\n"
         )
-        # msg.body = (
-        #     f"Hello,\n\n"
-        #     f"Your email has been successfully verified. Use the following link to complete your sign-up process:\n\n"
-        #     f"{sign_up_link}\n\n"
-        #     f"If you did not request this verification, please ignore this email.\n\n"
-        #     f"Thank you."
-        # )
+       
         print(f"Sending email to: {email}\nContent: {msg.body}")
        
         # Send the email
+        
         mail.send(msg)
         print("Email sent successfully.")
- 
+        
+        # if incorrect email sent then send incorrect or email address not found message :
+        
         return jsonify({"message": "Sign-up link sent successfully"}), 200
  
     except Exception as e:
         print(f"Error sending email: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
- 
  
  
 @app.route('/api/verify-otp', methods=['POST'])
@@ -582,63 +706,63 @@ def sign_up():
    
 # 3. Sign in :
 
-@app.route('/api/sign-in', methods=['POST'])
-def sign_in():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
- 
-        if not all([email, password]):
-            return jsonify({"message": "Email and password are required"}), 400
- 
-        user_data = load_user_data(email)
-        if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
-            return jsonify({"message": "Invalid email or password"}), 401
- 
-        token = jwt.encode(
-            {"email": email, "exp": datetime.utcnow() + timedelta(hours=5)},
-            app.config['JWT_SECRET_KEY'],
-            algorithm="HS256"
-        )
- 
-        return jsonify({"message": "Sign in successful", "token": token}), 200
-    except Exception as e:
-        print(f"Error during sign-in: {e}")
-        return jsonify({"message": "Internal server error"}), 500
-
-
-# from flask_jwt_extended import create_access_token
-
 # @app.route('/api/sign-in', methods=['POST'])
 # def sign_in():
 #     try:
-#         # Parse input data
 #         data = request.get_json()
 #         email = data.get('email')
 #         password = data.get('password')
-
-#         # Validate input
+ 
 #         if not all([email, password]):
 #             return jsonify({"message": "Email and password are required"}), 400
-
-#         # Verify user credentials
-#         user_data = load_user_data(email)  # Replace with your function to load user details
+ 
+#         user_data = load_user_data(email)
 #         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
 #             return jsonify({"message": "Invalid email or password"}), 401
-
-#         # Create JWT token
-#         token = create_access_token(identity=email)  # `identity` will be stored as the `sub` claim
-
-#         # Return the token
-#         return jsonify({
-#             "message": "Sign in successful",
-#             "token": token
-#         }), 200
-
+ 
+#         token = jwt.encode(
+#             {"email": email, "exp": datetime.utcnow() + timedelta(hours=5)},
+#             app.config['JWT_SECRET_KEY'],
+#             algorithm="HS256"
+#         )
+ 
+#         return jsonify({"message": "Sign in successful", "token": token}), 200
 #     except Exception as e:
 #         print(f"Error during sign-in: {e}")
 #         return jsonify({"message": "Internal server error"}), 500
+
+
+from flask_jwt_extended import create_access_token
+
+@app.route('/api/sign-in', methods=['POST'])
+def sign_in():
+    try:
+        # Parse input data
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        # Validate input
+        if not all([email, password]):
+            return jsonify({"message": "Email and password are required"}), 400
+
+        # Verify user credentials
+        user_data = load_user_data(email)  # Replace with your function to load user details
+        if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
+            return jsonify({"message": "Invalid email or password"}), 401
+
+        # Create JWT token
+        token = create_access_token(identity=email)  # `identity` will be stored as the `sub` claim
+
+        # Return the token
+        return jsonify({
+            "message": "Sign in successful",
+            "token": token
+        }), 200
+
+    except Exception as e:
+        print(f"Error during sign-in: {e}")
+        return jsonify({"message": "Internal server error"}), 500
 
 
 #  # 4. Forgot Password
@@ -767,7 +891,9 @@ def advisor_profile():
                 return jsonify({"message": "User not found"}), 404
 
             # Fetch client data count
-            client_data_url = 'http://wealth-management.mresult.net/api/get-all-client-data'
+            url = request.json.get('url','http://wealth-management.mresult.net') # payload method
+            client_data_url = f'{url}/api/get-all-client-data'
+            # client_data_url = 'http://wealth-management.mresult.net/api/get-all-client-data'
             response = requests.get(client_data_url)
 
             client_count = 0
@@ -2904,88 +3030,88 @@ CLIENT_DATA_DIR = './client_data'
  
 # # store client data in aws :
  
-@app.route('/api/submit-client-data', methods=['POST'])
-def submit_client_data():
-    try:
-        # Parse JSON payload
-        data = request.get_json()
-        if not data:
-            return jsonify({'message': 'Invalid or missing request payload'}), 400
+# @app.route('/api/submit-client-data', methods=['POST'])
+# def submit_client_data():
+#     try:
+#         # Parse JSON payload
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
  
-        # Extract client details
-        client_name = data.get('clientDetail', {}).get('clientName')
-        unique_id = data.get('uniqueId')
+#         # Extract client details
+#         client_name = data.get('clientDetail', {}).get('clientName')
+#         unique_id = data.get('uniqueId')
  
-        if not client_name or not unique_id:
-            return jsonify({'message': 'Client name and unique ID are required'}), 400
+#         if not client_name or not unique_id:
+#             return jsonify({'message': 'Client name and unique ID are required'}), 400
  
-        print(f"Processing data for client: {client_name}, ID: {unique_id}")
+#         print(f"Processing data for client: {client_name}, ID: {unique_id}")
  
-        if USE_AWS:
-            # AWS Logic
-            s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
-            try:
-                # Check if the client data already exists in S3
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-                existing_data = json.loads(response['Body'].read().decode('utf-8'))
-                is_update = True
-                print(f"Existing data found for unique ID: {unique_id}")
-            except s3.exceptions.NoSuchKey:
-                existing_data = {}
-                is_update = False
-                print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
+#         if USE_AWS:
+#             # AWS Logic
+#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
+#             try:
+#                 # Check if the client data already exists in S3
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#                 print(f"Existing data found for unique ID: {unique_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 existing_data = {}
+#                 is_update = False
+#                 print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
  
-            # Merge or replace the existing data
-            if is_update:
-                existing_data.update(data)
-                data_to_save = existing_data
-            else:
-                data_to_save = data
+#             # Merge or replace the existing data
+#             if is_update:
+#                 existing_data.update(data)
+#                 data_to_save = existing_data
+#             else:
+#                 data_to_save = data
  
-            # Save to S3
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=s3_key,
-                    Body=json.dumps(data_to_save),
-                    ContentType="application/json"
-                )
-                action = "updated" if is_update else "created"
-                print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
-            except Exception as s3_error:
-                logging.error(f"Error uploading data to S3: {s3_error}")
-                return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
+#             # Save to S3
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=s3_key,
+#                     Body=json.dumps(data_to_save),
+#                     ContentType="application/json"
+#                 )
+#                 action = "updated" if is_update else "created"
+#                 print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
+#             except Exception as s3_error:
+#                 logging.error(f"Error uploading data to S3: {s3_error}")
+#                 return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
  
-        else:
-            # Local Storage Logic
-            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
+#         else:
+#             # Local Storage Logic
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
  
-            # Check if the client data already exists
-            if os.path.exists(file_path):
-                with open(file_path, 'r') as f:
-                    existing_data = json.load(f)
-                existing_data.update(data)  # Merge the new data
-                is_update = True
-            else:
-                existing_data = data  # New data
-                is_update = False
+#             # Check if the client data already exists
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 existing_data.update(data)  # Merge the new data
+#                 is_update = True
+#             else:
+#                 existing_data = data  # New data
+#                 is_update = False
  
-            # Save the data to local storage
-            with open(file_path, 'w') as f:
-                json.dump(existing_data, f, indent=4)
+#             # Save the data to local storage
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
  
-            action = "updated" if is_update else "created"
-            print(f"Client data successfully {action} for unique ID: {unique_id}")
+#             action = "updated" if is_update else "created"
+#             print(f"Client data successfully {action} for unique ID: {unique_id}")
  
-        # Return a success response
-        return jsonify({
-            'message': f'Client data successfully {action}.',
-            'uniqueId': unique_id
-        }), 200
+#         # Return a success response
+#         return jsonify({
+#             'message': f'Client data successfully {action}.',
+#             'uniqueId': unique_id
+#         }), 200
  
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-        return jsonify({'message': f"An error occurred: {e}"}), 500
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
  
 def process_is_new_client(client_data):
@@ -3014,49 +3140,51 @@ def process_is_new_client(client_data):
 if not os.path.exists(CLIENT_DATA_DIR):
     os.makedirs(CLIENT_DATA_DIR)
  
-# Get client data by client ID
-@app.route('/api/get-client-data-by-id', methods=['GET'])
-def get_client_data():
-    try:
-        # Retrieve client_id from query parameters
-        client_id = request.args.get('client_id')
+# Get client data by client ID : 
+
+# prev 
+# @app.route('/api/get-client-data-by-id', methods=['GET'])
+# def get_client_data():
+#     try:
+#         # Retrieve client_id from query parameters
+#         client_id = request.args.get('client_id')
  
-        # Validate the client_id
-        if not client_id:
-            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
  
-        if USE_AWS:
-            # AWS Logic
-            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-            try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-                client_data = json.loads(response['Body'].read().decode('utf-8'))
-                return jsonify({
-                    'message': 'Client data retrieved successfully.',
-                    'data': client_data
-                }), 200
-            except s3.exceptions.NoSuchKey:
-                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-            except Exception as e:
-                return jsonify({'message': f"Error retrieving data: {e}"}), 500
-        else:
-            # Local Storage Logic
-            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+#         if USE_AWS:
+#             # AWS Logic
+#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 return jsonify({
+#                     'message': 'Client data retrieved successfully.',
+#                     'data': client_data
+#                 }), 200
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+#             except Exception as e:
+#                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
+#         else:
+#             # Local Storage Logic
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
  
-            # Check if the file exists and retrieve the data
-            if not os.path.exists(file_path):
-                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+#             # Check if the file exists and retrieve the data
+#             if not os.path.exists(file_path):
+#                 return jsonify({'message': 'Client data not found for the given client_id.'}), 404
  
-            with open(file_path, 'r') as f:
-                client_data = json.load(f)
+#             with open(file_path, 'r') as f:
+#                 client_data = json.load(f)
  
-            return jsonify({
-                'message': 'Client data retrieved successfully.',
-                'data': client_data
-            }), 200
+#             return jsonify({
+#                 'message': 'Client data retrieved successfully.',
+#                 'data': client_data
+#             }), 200
  
-    except Exception as e:
-        return jsonify({'message': f"An error occurred: {e}"}), 500
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
   
  
 # # get all client data :
@@ -3066,16 +3194,244 @@ LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
 
 # working code of Compartmentalization :
 
-# from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity 
+# v-2 :
 
-# # JWT Configuration
-# app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")  # Required
-# app.config['JWT_TOKEN_LOCATION'] = ['headers']    # Look for tokens in headers
-# app.config['JWT_HEADER_NAME'] = 'Authorization'   # Default is 'Authorization'
-# app.config['JWT_HEADER_TYPE'] = 'Bearer'          # Default is 'Bearer'
+from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity, get_jwt
 
-# # Initialize the JWT manager
-# jwt = JWTManager(app)
+
+# ✅ JWT Configuration
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secure-secret-key")  # Secure secret key
+app.config['JWT_TOKEN_LOCATION'] = ['headers']  # Ensure tokens are read from headers
+app.config['JWT_HEADER_NAME'] = 'Authorization'  # Default is 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'  # Default is 'Bearer'
+
+# ✅ Initialize JWT Manager
+jwt = JWTManager(app)
+
+# 🔹 Define Super Admin Emails
+SUPER_ADMIN_EMAILS = ["wealth-mgmt-admin@mresult.net"]
+ORGANIZATION_ADMIN_EMAILS = []
+
+# ✅ Function to Extract User Details from JWT
+@jwt_required(optional=True)
+def get_user_details():
+    """Extracts email, role, and organization from JWT token."""
+    user_identity = get_jwt_identity()  # Get user email (None if missing)
+    claims = get_jwt() if user_identity else {}  # Get JWT claims (empty if missing)
+
+    if user_identity in SUPER_ADMIN_EMAILS:
+        role = "super_admin"
+        organization = None  # Super admin sees all data
+     # elif user_identity in ORGANIZATION_ADMIN_EMAILS:
+        # organization = claims.get("organization", None)
+        # role = f"{organization}_admin"
+    else:
+        role = claims.get("role", "user")  # Default to 'user'
+        organization = claims.get("organization", None)
+
+    return user_identity, role, organization
+
+# new :
+
+@app.route('/api/get-client-data-by-id', methods=['GET'])
+@jwt_required()
+def get_client_data():
+    try:
+        # Retrieve client_id from query parameters
+        client_id = request.args.get('client_id')
+
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+        # Get user details (email, role, organization)
+        email, role, organization = get_user_details()
+
+        print(f"User {email} with role {role} is requesting client data for {client_id}")
+
+        if USE_AWS:
+            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+
+                # Role-Based Access Control
+                if role == "super_admin":
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+                
+                if role == "admin" and client_data.get('organization') == organization:
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+
+                if role == "user" and client_data.get('submittedBy') == email:
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+                
+                return jsonify({'message': 'Unauthorized access to this client data.'}), 403
+
+            except s3.exceptions.NoSuchKey:
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            except Exception as e:
+                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+        
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+            
+            if not os.path.exists(file_path):
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            
+            with open(file_path, 'r') as f:
+                client_data = json.load(f)
+            
+            # Role-Based Access Control
+            if role == "super_admin":
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+            
+            if role == "admin" and client_data.get('organization') == organization:
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+
+            if role == "user" and client_data.get('submittedBy') == email:
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+            
+            return jsonify({'message': 'Unauthorized access to this client data.'}), 403
+
+    except Exception as e:
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+    
+    
+# ✅ Submit Client Data (Super Admin & Admin Can Submit, Users Can Add Own)
+@app.route('/api/submit-client-data', methods=['POST'])
+@jwt_required()
+def submit_client_data():
+    try:
+        email, role, organization = get_user_details()
+
+        # Parse JSON Payload
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+        client_name = data.get('clientDetail', {}).get('clientName')
+        unique_id = data.get('uniqueId')
+        client_org = data.get('organization')
+
+        if not client_name or not unique_id:
+            return jsonify({'message': 'Client name and unique ID are required'}), 400
+
+        print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
+
+        # 🔹 Assign Organization Field
+        if role == "super_admin":
+            data['organization'] = client_org or "Unassigned"
+        else:
+            data['organization'] = organization  # Assign to the admin's organization
+
+        data['submittedBy'] = email  # Track who submitted it
+
+        # 🔹 Save Data to AWS S3 or Local Storage
+        if USE_AWS:
+            s3_key = f"{client_summary_folder}client-data/{unique_id}.json" 
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
+
+            existing_data.update(data)
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=s3_key,
+                Body=json.dumps(existing_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{unique_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                existing_data.update(data)
+                is_update = True
+            else:
+                existing_data = data
+                is_update = False
+
+            with open(file_path, 'w') as f:
+                json.dump(existing_data, f, indent=4)
+
+        action = "updated" if is_update else "created"
+        return jsonify({'message': f'Client data successfully {action}.', 'uniqueId': unique_id}), 200
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+# ✅ Get All Client Data Based on Role
+@app.route('/api/get-all-client-data', methods=['GET'])
+@jwt_required()
+def get_all_client_data():
+    try:
+        email, role, organization = get_user_details()
+        all_data = []
+
+        if USE_AWS:
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_data = file_response['Body'].read().decode('utf-8')
+                        data_json = json.loads(file_data)
+                        
+                        # Do not overwrite isNewClient flag if updated elsewhere
+                        if 'isNewClient' not in data_json:
+                            data_json['isNewClient'] = True  # Default to True if missing
+
+                        # 🔹 Super Admin: Access All Data
+                        if role == "super_admin":
+                            all_data.append(data_json)
+
+                        # 🔹 Admin: Access Data Only for Their Organization
+                        elif role == "admin" and data_json.get('organization') == organization:
+                            all_data.append(data_json)
+
+                        # 🔹 User: Access Only Their Submitted Data
+                        elif role == "user" and data_json.get('submittedBy') == email:
+                            all_data.append(data_json)
+
+                    except Exception as e:
+                        print(f"Error reading file {obj['Key']}: {e}")
+                        continue
+        else:
+            for filename in os.listdir(CLIENT_DATA_DIR):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                    with open(file_path, 'r') as f:
+                        client_data = json.load(f)
+
+                        if role == "super_admin":
+                            all_data.append(client_data)
+
+                        elif role == "admin" and client_data.get('organization') == organization:
+                            all_data.append(client_data)
+
+                        elif role == "user" and client_data.get('submittedBy') == email:
+                            all_data.append(client_data)
+
+        if not all_data:
+            return jsonify({'message': 'No client data found for this user.'}), 404
+
+        return jsonify({'message': 'Client data retrieved successfully.', 'data': all_data}), 200
+
+    except Exception as e:
+        print(f"Error occurred while retrieving data: {e}")
+        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+
+
+
+# v-1 of compartmentalization:
 
 # @app.route('/api/submit-client-data', methods=['POST'])
 # @jwt_required()  # Requires the user to be logged in
@@ -3098,8 +3454,8 @@ LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
  
 #         print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
  
-#         # Add the user's email to the data
-#         data['submittedBy'] = email
+        # # Add the user's email to the data
+        # data['submittedBy'] = email
  
 #         # Save to AWS or local storage as before
 #         if USE_AWS:
@@ -3189,62 +3545,62 @@ LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
 #         print(f"Error occurred while retrieving data: {e}")
 #         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
      
- 
+###################################################################################################### 
 # new version :
 
-@app.route('/api/get-all-client-data', methods=['GET'])
-def get_all_client_data():
-    try:
-        all_data = []
+# @app.route('/api/get-all-client-data', methods=['GET'])
+# def get_all_client_data():
+#     try:
+#         all_data = []
  
-        if USE_AWS:
-            # AWS Logic
-            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-            if 'Contents' in response:
-                for obj in response['Contents']:
-                    try:
-                        file_key = obj['Key']
-                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                        file_data = file_response['Body'].read().decode('utf-8')
-                        data_json = json.loads(file_data)
+#         if USE_AWS:
+#             # AWS Logic
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
  
-                        # Do not overwrite isNewClient flag if updated elsewhere
-                        if 'isNewClient' not in data_json:
-                            data_json['isNewClient'] = True  # Default to True if missing
+                        # # Do not overwrite isNewClient flag if updated elsewhere
+                        # if 'isNewClient' not in data_json:
+                        #     data_json['isNewClient'] = True  # Default to True if missing
                        
-                        all_data.append(data_json)
-                    except Exception as e:
-                        print(f"Error reading file {obj['Key']}: {e}")
-                        continue
-            else:
-                return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+#                         all_data.append(data_json)
+#                     except Exception as e:
+#                         print(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#             else:
+#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
  
-        else:
-            # Local Storage Logic
-            for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-                if filename.endswith(".json"):
-                    file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-                    with open(file_path, 'r') as f:
-                        client_data = json.load(f)
+#         else:
+#             # Local Storage Logic
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
  
-                        # Do not overwrite isNewClient flag if updated elsewhere
-                        if 'isNewClient' not in client_data:
-                            client_data['isNewClient'] = True  # Default to True if missing
+#                         # Do not overwrite isNewClient flag if updated elsewhere
+#                         if 'isNewClient' not in client_data:
+#                             client_data['isNewClient'] = True  # Default to True if missing
                        
-                        all_data.append(client_data)
+#                         all_data.append(client_data)
  
-            if not all_data:
-                return jsonify({'message': 'No client data found in local storage.'}), 404
+#             if not all_data:
+#                 return jsonify({'message': 'No client data found in local storage.'}), 404
  
-        # Return combined data
-        return jsonify({
-            'message': 'All client data retrieved successfully.',
-            'data': all_data
-        }), 200
+#         # Return combined data
+#         return jsonify({
+#             'message': 'All client data retrieved successfully.',
+#             'data': all_data
+#         }), 200
  
-    except Exception as e:
-        print(f"Error occurred while retrieving data: {e}")
-        return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+#     except Exception as e:
+#         print(f"Error occurred while retrieving data: {e}")
+#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
   
 
 
