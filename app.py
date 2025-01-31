@@ -151,7 +151,8 @@ def list_s3_keys(bucket_name, prefix=""):
         print(f"Error listing objects in S3: {e}")
 
 # Call the function
-# list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
+# list_s3_keys(S3_BUCKET_NAME, signUp_user_folder) 
+# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
 # list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
 # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 
@@ -238,7 +239,9 @@ def list_s3_keys(bucket_name, prefix=""):
 # FILE_KEY = "order_list_folder/SF3648_orders.json" 
 
 # FILE_KEY = "order_list_folder/SF3648_orders.json" 
+# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
 
+# FILE_KEY = "client_summary_folder/client-data/CM5657.json"
 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
@@ -263,6 +266,8 @@ def list_s3_keys(bucket_name, prefix=""):
 # # Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
+
+# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
 # # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 # list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
 
@@ -606,7 +611,11 @@ def email_verification():
         url = request.json.get('url','https://wealth-management.mresult.net')
         if not email:
             return jsonify({"message": "Email is required"}), 400
- 
+        
+        #  Check if Email Domain is Valid (MX Lookup)
+        if not is_valid_email_domain(email):
+            return jsonify({"message": "Invalid email address, please enter a valid email"}), 400
+
         print(f"Processing email verification for: {email}")
  
         # Generate the sign-up link
@@ -620,11 +629,14 @@ def email_verification():
         )
         
         # add check whether the email is valid and verified :
-        # do hash or make otp for the email and then send the link 
+        otp = generate_otp()
+        otp_store[email] = otp
+        print(f"Generated OTP for {email}: {otp}")
         
         msg.body = (
             f"Dear User,\n\n"
             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
+            f"Your OTP for verification is: {otp}\n\n"
             f"Click the link below to finish setting up your account:\n"
             f"{sign_up_link}\n\n"
             f"Thank you for choosing us.\n\n"
@@ -637,31 +649,43 @@ def email_verification():
         mail.send(msg)
         print("Email sent successfully.")
         
-        # if incorrect email sent then send incorrect or email address not found message :
-        
-        return jsonify({"message": "Sign-up link sent successfully"}), 200
+        otp_store[email] = otp
+        otps = otp_store[email]
+        print(f"otp store : {otps}")
+        return jsonify({"message": "Sign-up link and OTP sent successfully", "otp": otp}), 200
+        # return jsonify({"message": "Sign-up link sent successfully"}), 200
  
     except Exception as e:
         print(f"Error sending email: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
- 
- 
-@app.route('/api/verify-otp', methods=['POST'])
-def verify_otp():
-    data = request.get_json()
-    email = data.get('email')
-    otp = data.get('otp')
- 
-    if not email or not otp:
-        return jsonify({"error": "Email and OTP are required"}), 400
- 
-    if otp_store.get(email) == int(otp):
-        del otp_store[email]
-        return jsonify({"message": "Email verified successfully!"}), 200
-    else:
-        return jsonify({"error": "Invalid OTP"}), 400
- 
 
+
+# 🔹 Function to Validate Email Domain (MX Record Lookup)
+import dns.resolver  # For checking email domain validity
+
+def is_valid_email_domain(email):
+    """Checks if the domain of the email has valid MX records."""
+    try:
+        domain = email.split('@')[1]  # Extract domain from email
+        dns.resolver.resolve(domain, 'MX')  # Check MX records
+        return True
+    except dns.resolver.NoAnswer:
+        return False  # No MX record found
+    except dns.resolver.NXDOMAIN:
+        return False  # Domain does not exist
+    except Exception as e:
+        print(f"DNS lookup error for {email}: {e}")
+        return False  # Other DNS errors
+ 
+# Function to Generate OTP
+import string
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+# def generate_otp(length=6):
+#     """Generates a random OTP of given length."""
+#     return ''.join(random.choices(string.digits, k=length))
 
 
 # 2. Sign Up
@@ -676,10 +700,11 @@ def sign_up():
         email = data.get('email')
         password = data.get('password')
         confirm_password = data.get('confirm_password')
+        otp = data.get('otp')
         first_name = data.get('first_name')
         last_name = data.get('last_name')
  
-        if not all([email, password, confirm_password, first_name, last_name]):
+        if not all([email, password,otp, confirm_password, first_name, last_name]):
             return jsonify({"message": "All fields are required"}), 400
  
         if password != confirm_password:
@@ -687,6 +712,20 @@ def sign_up():
  
         if load_user_data(email):
             return jsonify({"message": "User already exists"}), 400
+        
+        print(type(otp))
+        # Validate OTP
+        if otp_store[email] == str(otp):  # OTP and user input should both be strings
+            del otp_store[email]
+            print("OTP verified successfully!")
+        else:
+            return jsonify({"message": "Invalid OTP"}), 400
+        
+        # if otp_store.get(email) == int(otp):
+        #     del otp_store[email]
+        #     print("OTP verified successfully!")
+        # else:
+        #     return jsonify({"error": "Invalid OTP"}), 400
  
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         user_data = {
@@ -859,49 +898,44 @@ def reset_password():
  
 # ------------------------- With Bearer ------------------------------
 
-# v-2 : update profile photo :
+# v-2 
 
-import base64
+from flask import Flask, request, jsonify, send_from_directory, url_for
+from flask_jwt_extended import jwt_required, get_jwt_identity, JWTManager
 from werkzeug.utils import secure_filename
-from flask import send_from_directory
+from flask_mail import Mail, Message
+import base64
 
-# Directory to store profile photos
 PROFILE_PHOTOS_DIR = "local_data/profile_photos"
 
-from flask import url_for
-
+# ✅ GET/POST Advisor Profile Endpoint
 @app.route('/api/advisor_profile', methods=['POST', 'GET'])
+@jwt_required()  # Requires a valid JWT
 def advisor_profile():
-    if request.method == 'GET':
-        token = request.headers.get('Authorization')
+    try:
+        email = get_jwt_identity()  # Extract email from JWT Token
+        user_data = load_user_data(email)
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
 
-        if not token:
-            return jsonify({"message": "Token is missing"}), 401
+        url = request.args.get('url', 'http://wealth-management.mresult.net')
+        print(f"URL : {url}")
 
-        try:
-            token = token.split(" ")[1] if token.startswith("Bearer ") else None
-            if not token:
-                return jsonify({"message": "Invalid token format"}), 401
-
-            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            email = decoded_token.get('email')
-
-            user_data = load_user_data(email)
-            if not user_data:
-                return jsonify({"message": "User not found"}), 404
-
-            # Fetch client data count
-            url = request.json.get('url','http://wealth-management.mresult.net') # payload method
+        # ✅ Handle GET Request (Retrieve Profile)
+        if request.method == 'GET':
+            # ✅ Fetch client data count (With Auth Token)
             client_data_url = f'{url}/api/get-all-client-data'
-            # client_data_url = 'http://wealth-management.mresult.net/api/get-all-client-data'
-            response = requests.get(client_data_url)
+            token = request.headers.get("Authorization")  # Extract token from headers
+            
+            headers = {"Authorization": token}  # Attach token to request
+            response = requests.get(client_data_url, headers=headers)  # Make Authenticated Request
 
             client_count = 0
             if response.status_code == 200:
                 client_list = response.json().get('data', [])
                 client_count = len(client_list)
 
-            # Generate URL for profile photo
+            # ✅ Generate URL for profile photo
             filename = f"{email}_profile.jpeg"
             profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
 
@@ -915,78 +949,43 @@ def advisor_profile():
 
             return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-        except Exception as e:
-            print(f"Error retrieving profile: {e}")
-            return jsonify({"message": "Internal server error"}), 500
-
-    if request.method == 'POST':
-        try:
-            token = request.headers.get('Authorization')
-
-            if not token:
-                return jsonify({"message": "Token is missing"}), 401
-
-            token = token.split(" ")[1] if token.startswith("Bearer ") else None
-            if not token:
-                return jsonify({"message": "Invalid token format"}), 401
-
-            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            email = decoded_token.get('email')
-
-            user_data = load_user_data(email)
-            if not user_data:
-                return jsonify({"message": "User not found"}), 404
-
-            # Check if the request has the 'profile_photo' field
+        # ✅ Handle POST Request (Upload Profile Photo)
+        if request.method == 'POST':
             data = request.get_json()
             if not data or 'profile_photo' not in data:
                 return jsonify({"message": "Profile photo is missing"}), 400
 
-            # Decode the base64 image
+            # ✅ Decode the base64 image
             profile_photo = data['profile_photo']
-            file_extension = "jpg"  # Default file extension
+            file_extension = "jpg"
             if profile_photo.startswith("data:image/"):
                 file_extension = profile_photo.split(";")[0].split("/")[-1]
 
             image_data = profile_photo.split(",")[1]
             image_bytes = base64.b64decode(image_data)
 
-            # Save the file locally
+            # ✅ Save the file
             filename = f"{email}_profile.{file_extension}"
             file_path = os.path.join(PROFILE_PHOTOS_DIR, filename)
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
 
-            # Generate the profile photo URL
+            # ✅ Generate profile photo URL
             profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
 
-            # Update user's profile with the new image URL
+            # ✅ Update user data
             user_data["profile_photo_url"] = profile_photo_url
-            save_user_data(email, user_data)  # Save updated user data back to storage
+            save_user_data(email, user_data)
 
-            return jsonify({
-                "message": "Profile photo uploaded successfully",
-                "profile_photo_url": profile_photo_url
-            }), 200
+            return jsonify({"message": "Profile photo uploaded successfully", "profile_photo_url": profile_photo_url}), 200
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-        except Exception as e:
-            print(f"Error uploading profile photo: {e}")
-            return jsonify({"message": "Internal server error"}), 500
+    except Exception as e:
+        print(f"Error processing request: {e}")
+        return jsonify({"message": "Internal server error"}), 500
 
-
+# ✅ Serve Profile Photo
 @app.route('/api/profile_photos/<filename>', methods=['GET'])
 def serve_profile_photo(filename):
-    """
-    Serve profile photos from the local directory.
-    """
     try:
         return send_from_directory(PROFILE_PHOTOS_DIR, filename)
     except Exception as e:
@@ -994,57 +993,6 @@ def serve_profile_photo(filename):
         return jsonify({"message": "Error retrieving profile photo"}), 500
 
 
-
-
-# v-1 :
-import requests
- 
-# @app.route('/api/advisor_profile', methods=['GET'])
-# def advisor_profile():
-#     token = request.headers.get('Authorization')
-
-#     if not token:
-#         return jsonify({"message": "Token is missing"}), 401
-
-#     try:
-#         token = token.split(" ")[1] if token.startswith("Bearer ") else None
-#         if not token:
-#             return jsonify({"message": "Invalid token format"}), 401
-
-#         decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-#         email = decoded_token.get('email')
-
-#         user_data = load_user_data(email)
-#         if not user_data:
-#             return jsonify({"message": "User not found"}), 404
-
-#         # Fetch client data count
-#         client_data_url = 'http://localhost:5000/get-all-client-data'
-#         response = requests.get(client_data_url)
-
-#         client_count = 0
-#         if response.status_code == 200:
-#             client_list = response.json().get('data', [])
-#             client_count = len(client_list)
-
-#         profile_data = {
-#             "email": user_data["email"],
-#             "first_name": user_data["first_name"],
-#             "last_name": user_data["last_name"],
-#             "client_count": client_count
-#         }
-
-#         return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
-
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({"message": "Token has expired"}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({"message": "Invalid token"}), 401
-#     except Exception as e:
-#         print(f"Error retrieving profile: {e}")
-#         return jsonify({"message": "Internal server error"}), 500
-    
-     
 # -------------------------------------------
 
 #  Change Password for Profile

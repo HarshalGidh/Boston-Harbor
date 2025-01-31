@@ -43,3 +43,4 @@ markdownify
 prettytable
 waitress
 apscheduler
+dnspython
