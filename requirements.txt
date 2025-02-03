@@ -23,7 +23,6 @@ xlsxwriter
 yfinance
 db-dtypes
 faiss-cpu
-langchain-community-faiss-cpu
 flask
 flask-cors
 markdown

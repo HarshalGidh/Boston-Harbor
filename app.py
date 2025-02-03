@@ -87,11 +87,11 @@ from flask import send_file,send_from_directory
 import asyncio
 from flask_cors import CORS
 
-from config import config
+# from config import config
 
 env = os.getenv("FLASK_ENV", "development")
 base_url = os.getenv("BASE_URL", "http://localhost:5000")  # Default to localhost if not set
-app_config = config[env]
+# app_config = config[env]
 
 app = Flask(__name__, static_folder="./build")
 
@@ -109,7 +109,15 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 print(f"Flask is running in {env} mode with base URL: {base_url}")
 
-app.config.from_object(app_config)
+
+# # API route
+
+@app.route("/api/data", methods=["GET"])
+def get_data():
+
+    return jsonify({"message": "Hello from Flask API!"})
+
+# app.config.from_object(app_config)
 
 print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
 print(f"BASE_URL: {os.getenv('BASE_URL')}")
