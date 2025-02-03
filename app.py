@@ -110,7 +110,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 print(f"Flask is running in {env} mode with base URL: {base_url}")
 
 
-# # API route
+# # API route : Most Important Code !!!!!!!!!!!!
 
 @app.route("/api/data", methods=["GET"])
 def get_data():
@@ -7188,43 +7188,43 @@ os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 ###########################################################################################################
 # Automatic Daily Portfolio Data Updation Code
 
-from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, time, timedelta
 import pytz
 import logging
 
 # Scheduler configuration
-scheduler = BackgroundScheduler(timezone="US/Eastern")  # 4 PM US Eastern time
-logging.basicConfig(level=logging.INFO)
+# scheduler = BackgroundScheduler(timezone="US/Eastern")  # 4 PM US Eastern time
+# logging.basicConfig(level=logging.INFO)
 
-def fetch_all_client_ids():
-    try:
-        client_ids = []
+# def fetch_all_client_ids():
+#     try:
+#         client_ids = []
 
-        if USE_AWS:
-            # Fetch client IDs from AWS S3
-            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-            if 'Contents' in response:
-                for obj in response['Contents']:
-                    file_key = obj['Key']
-                    if file_key.endswith(".json"):
-                        client_id = file_key.split('/')[-1].replace(".json", "")  # Extract client ID
-                        client_ids.append(client_id)
-        else:
-            # Fetch client IDs from local storage
-            for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-                if filename.endswith(".json"):
-                    client_id = filename.replace(".json", "")  # Extract client ID
-                    client_ids.append(client_id)
+#         if USE_AWS:
+#             # Fetch client IDs from AWS S3
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     file_key = obj['Key']
+#                     if file_key.endswith(".json"):
+#                         client_id = file_key.split('/')[-1].replace(".json", "")  # Extract client ID
+#                         client_ids.append(client_id)
+#         else:
+#             # Fetch client IDs from local storage
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     client_id = filename.replace(".json", "")  # Extract client ID
+#                     client_ids.append(client_id)
 
-        return client_ids
+#         return client_ids
 
-    except Exception as e:
-        logging.error(f"Error occurred while retrieving client IDs: {e}")
-        return []
+#     except Exception as e:
+#         logging.error(f"Error occurred while retrieving client IDs: {e}")
+#         return []
 
 
-# prev :
+# # prev :
 # def fetch_all_client_ids():
 #     try:
 #         all_data = []
@@ -7276,30 +7276,30 @@ def fetch_all_client_ids():
 #         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
 
 # # Reusable function to fetch and process portfolios
-def update_portfolio_and_changes():
-    try:
-        logging.info("Running scheduled portfolio update...")
+# def update_portfolio_and_changes():
+#     try:
+#         logging.info("Running scheduled portfolio update...")
 
-        # Get all client IDs
-        all_client_ids = fetch_all_client_ids()
-        logging.info(f"Fetched {len(all_client_ids)} client IDs for portfolio updates.")
+#         # Get all client IDs
+#         all_client_ids = fetch_all_client_ids()
+#         logging.info(f"Fetched {len(all_client_ids)} client IDs for portfolio updates.")
 
-        for client_data in all_client_ids:
-            client_id = client_data.get("uniqueId")
-            if not client_id:
-                logging.warning(f"Skipping client without uniqueId: {client_data}")
-                continue
+#         for client_data in all_client_ids:
+#             client_id = client_data.get("uniqueId")
+#             if not client_id:
+#                 logging.warning(f"Skipping client without uniqueId: {client_data}")
+#                 continue
 
-            logging.info(f"Processing portfolio for client_id: {client_id}")
-            client_portfolio_response = portfolio_update_logic(client_id)
+#             logging.info(f"Processing portfolio for client_id: {client_id}")
+#             client_portfolio_response = portfolio_update_logic(client_id)
 
-            if client_portfolio_response["status"] == "success":
-                logging.info(f"Successfully updated portfolio for client_id: {client_id}")
-            else:
-                logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+#             if client_portfolio_response["status"] == "success":
+#                 logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#             else:
+#                 logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
 
-    except Exception as e:
-        logging.error(f"Error during scheduled portfolio update: {e}")
+#     except Exception as e:
+#         logging.error(f"Error during scheduled portfolio update: {e}")
 
 # def update_portfolio_and_changes():
 #     try:
@@ -7323,229 +7323,12 @@ def update_portfolio_and_changes():
 #         logging.error(f"Error during scheduled portfolio update: {e}")
 
 # Function to encapsulate the portfolio update logic (extracted from the API)
-def portfolio_update_logic(client_id):
-    try:
-        logging.info(f"Starting portfolio update for client_id: {client_id}")
-        # Extract client ID and current date
-        curr_date = datetime.now().strftime('%Y-%m-%d')
-        logging.info(f"Current Date: {curr_date}")
-
-        if not client_id:
-            return jsonify({"message": "Client ID is required"}), 400
-
-        # Load client orders
-        if USE_AWS:
-            # Load orders from AWS S3
-            order_list_key = f"{order_list_folder}{client_id}_orders.json"
-            try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
-                client_orders = json.loads(response['Body'].read().decode('utf-8'))
-                logging.info(f"Fetched orders for client_id: {client_id}")
-                logging.info(f"Fetched {len(client_orders)} orders for client_id: {client_id}")
-            except s3.exceptions.NoSuchKey:
-                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
-            except Exception as e:
-                logging.error(f"Error fetching orders from AWS: {e}")
-                return jsonify({"message": f"Error fetching orders: {e}"}), 500
-        else:
-            # Load orders from local storage
-            order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
-            if not os.path.exists(order_file_path):
-                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
-            with open(order_file_path, 'r') as file:
-                client_orders = json.load(file)
-
-        # Log portfolio metrics
-        logging.info(f"Updating portfolio for {len(client_orders)} orders.")
-        
-        # Initialize portfolio data and 
-        portfolio_data = []
-        portfolio_current_value = 0
-        porfolio_daily_change = 0
-        portfolio_investment_gain_loss = 0
-
-        # Load or initialize daily changes
-        if USE_AWS:
-            daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
-            try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
-                daily_changes = json.loads(response['Body'].read().decode('utf-8'))
-            except s3.exceptions.NoSuchKey:
-                daily_changes = {}
-            except Exception as e:
-                logging.error(f"Error fetching daily changes from AWS: {e}")
-                return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
-        else:
-            daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
-            if os.path.exists(daily_changes_file):
-                with open(daily_changes_file, 'r') as file:
-                    daily_changes = json.load(file)
-            else:
-                daily_changes = {}
-
-        # Process client orders
-        for order in client_orders:
-            asset_class = order.get('AssetClass', 'N/A')
-            name = order.get('Name', 'N/A')
-            symbol = order.get('Symbol', 'N/A')
-            units = order.get('Units', 0)
-            bought_price = order.get('UnitPrice', 0)
-            transaction_amount = order.get('TransactionAmount', 0)
-
-            # Fetch current stock price
-            def fetch_current_stock_price(ticker):
-                stock = yf.Ticker(ticker)
-                try:
-                    current_price = stock.history(period='1d')['Close'].iloc[-1]
-                    return current_price
-                except Exception as e:
-                    logging.error(f"Error fetching stock price for {ticker}: {e}")
-                    return 0
-
-            current_price = fetch_current_stock_price(symbol)
-            diff_price = current_price - bought_price
-            daily_price_change = diff_price
-            daily_value_change = daily_price_change * units
-            current_value = current_price * units
-
-            # Calculate investment gain/loss and other metrics
-            investment_gain_loss = diff_price * units
-            investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
-
-            # Append data to portfolio
-            portfolio_data.append({
-                "assetClass": asset_class,
-                "name": name,
-                "symbol": symbol,
-                "Quantity": units,
-                "Delayed_Price": current_price,
-                "current_value": current_value,
-                "Daily_Price_Change": daily_price_change,
-                "Daily_Value_Change": daily_value_change,
-                "Amount_Invested_per_Unit": bought_price,
-                "Amount_Invested": transaction_amount,
-                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-                "Investment_Gain_or_Loss": investment_gain_loss,
-                "Time_Held": order.get('Date', 'N/A'),
-            })
-
-            # Update portfolio metrics
-            portfolio_current_value += current_value
-            porfolio_daily_change += daily_price_change
-            portfolio_investment_gain_loss += investment_gain_loss
-
-        # Calculate daily change percentages
-        portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
-        portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
-
-        # Update daily changes for the current date
-        daily_changes[curr_date] = {
-            "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
-            "portfolio_daily_change_perc": portfolio_daily_change_perc,
-            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-            "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-        }
-
-        # Save daily changes and portfolio data
-        if USE_AWS:
-            # Save daily changes to AWS
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=daily_changes_key,
-                    Body=json.dumps(daily_changes),
-                    ContentType='application/json'
-                )
-                logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
-            except Exception as e:
-                logging.error(f"Error saving daily changes to AWS: {e}")
-                return jsonify({"message": f"Error saving daily changes: {e}"}), 500
-
-            # Save portfolio data to AWS
-            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=portfolio_key,
-                    Body=json.dumps(portfolio_data),
-                    ContentType='application/json'
-                )
-                logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
-            except Exception as e:
-                logging.error(f"Error saving portfolio data to AWS: {e}")
-                return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
-        else:
-            # Save daily changes locally
-            with open(daily_changes_file, 'w') as file:
-                json.dump(daily_changes, file, indent=4)
-
-            # Save portfolio data locally
-            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-            with open(portfolio_file_path, 'w') as file:
-                json.dump(portfolio_data, file, indent=4)
-
-        # Response data
-        portfolio_response = {
-            "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
-            "portfolio_daily_change_perc": portfolio_daily_change_perc,
-            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-            "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
-            "daily_changes": daily_changes,
-            "portfolio_data": portfolio_data,
-        }
-        
-        return {"status": "success", 
-                "message": "Portfolio updated successfully",
-                "portfolio_response":portfolio_response,
-                "daily_changes":daily_changes,
-                }
-        # return jsonify(portfolio_response), 200
-
-    except Exception as e:
-        logging.error(f"Error in portfolio: {e}")
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-# Schedule the task at 4 PM US time daily
-# scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
-scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0, id="daily_portfolio_update")
-logging.info("Scheduler started. Portfolio updates scheduled at 4 PM US Eastern Time.")
-scheduler.start()
-
-# Flask app for manual API calls
-@app.route('/api/portfolio', methods=['POST'])
-def portfolio():
-    try:
-        client_id = request.json.get('client_id')
-        if not client_id:
-            return jsonify({"message": "Client ID is required"}), 400
-
-        client_portfolio_response = portfolio_update_logic(client_id)
-
-        if client_portfolio_response["status"] == "success":
-            logging.info(f"Successfully updated portfolio for client_id: {client_id}")
-        else:
-            logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
-
-        return jsonify(client_portfolio_response["portfolio_response"]),200
-    except Exception as e:
-        logging.error(f"Error in portfolio: {e}")
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-
-###########################################################################################################
-
-# previous logic :
-
-# @app.route('/api/portfolio', methods=['POST'])
-# def portfolio():
+# def portfolio_update_logic(client_id):
 #     try:
+#         logging.info(f"Starting portfolio update for client_id: {client_id}")
 #         # Extract client ID and current date
-#         client_id = request.json.get('client_id')
-#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+#         curr_date = datetime.now().strftime('%Y-%m-%d')
+#         logging.info(f"Current Date: {curr_date}")
 
 #         if not client_id:
 #             return jsonify({"message": "Client ID is required"}), 400
@@ -7558,6 +7341,7 @@ def portfolio():
 #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
 #                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
 #                 logging.info(f"Fetched orders for client_id: {client_id}")
+#                 logging.info(f"Fetched {len(client_orders)} orders for client_id: {client_id}")
 #             except s3.exceptions.NoSuchKey:
 #                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
 #             except Exception as e:
@@ -7571,7 +7355,10 @@ def portfolio():
 #             with open(order_file_path, 'r') as file:
 #                 client_orders = json.load(file)
 
-#         # Initialize portfolio data and metrics
+#         # Log portfolio metrics
+#         logging.info(f"Updating portfolio for {len(client_orders)} orders.")
+        
+#         # Initialize portfolio data and 
 #         portfolio_data = []
 #         portfolio_current_value = 0
 #         porfolio_daily_change = 0
@@ -7709,11 +7496,224 @@ def portfolio():
 #             "portfolio_data": portfolio_data,
 #         }
         
-#         return jsonify(portfolio_response), 200
+#         return {"status": "success", 
+#                 "message": "Portfolio updated successfully",
+#                 "portfolio_response":portfolio_response,
+#                 "daily_changes":daily_changes,
+#                 }
+#         # return jsonify(portfolio_response), 200
 
 #     except Exception as e:
 #         logging.error(f"Error in portfolio: {e}")
 #         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+# # Schedule the task at 4 PM US time daily
+# # scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
+# scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0, id="daily_portfolio_update")
+# logging.info("Scheduler started. Portfolio updates scheduled at 4 PM US Eastern Time.")
+# scheduler.start()
+
+# # Flask app for manual API calls
+# @app.route('/api/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         client_id = request.json.get('client_id')
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         client_portfolio_response = portfolio_update_logic(client_id)
+
+#         if client_portfolio_response["status"] == "success":
+#             logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#         else:
+#             logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+#         return jsonify(client_portfolio_response["portfolio_response"]),200
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+###########################################################################################################
+
+# previous logic :
+
+@app.route('/api/portfolio', methods=['POST'])
+def portfolio():
+    try:
+        # Extract client ID and current date
+        client_id = request.json.get('client_id')
+        curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
+        # Load client orders
+        if USE_AWS:
+            # Load orders from AWS S3
+            order_list_key = f"{order_list_folder}{client_id}_orders.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+                client_orders = json.loads(response['Body'].read().decode('utf-8'))
+                logging.info(f"Fetched orders for client_id: {client_id}")
+            except s3.exceptions.NoSuchKey:
+                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+            except Exception as e:
+                logging.error(f"Error fetching orders from AWS: {e}")
+                return jsonify({"message": f"Error fetching orders: {e}"}), 500
+        else:
+            # Load orders from local storage
+            order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+            if not os.path.exists(order_file_path):
+                return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+            with open(order_file_path, 'r') as file:
+                client_orders = json.load(file)
+
+        # Initialize portfolio data and metrics
+        portfolio_data = []
+        portfolio_current_value = 0
+        porfolio_daily_change = 0
+        portfolio_investment_gain_loss = 0
+
+        # Load or initialize daily changes
+        if USE_AWS:
+            daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+                daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                daily_changes = {}
+            except Exception as e:
+                logging.error(f"Error fetching daily changes from AWS: {e}")
+                return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+        else:
+            daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+            if os.path.exists(daily_changes_file):
+                with open(daily_changes_file, 'r') as file:
+                    daily_changes = json.load(file)
+            else:
+                daily_changes = {}
+
+        # Process client orders
+        for order in client_orders:
+            asset_class = order.get('AssetClass', 'N/A')
+            name = order.get('Name', 'N/A')
+            symbol = order.get('Symbol', 'N/A')
+            units = order.get('Units', 0)
+            bought_price = order.get('UnitPrice', 0)
+            transaction_amount = order.get('TransactionAmount', 0)
+
+            # Fetch current stock price
+            def fetch_current_stock_price(ticker):
+                stock = yf.Ticker(ticker)
+                try:
+                    current_price = stock.history(period='1d')['Close'].iloc[-1]
+                    return current_price
+                except Exception as e:
+                    logging.error(f"Error fetching stock price for {ticker}: {e}")
+                    return 0
+
+            current_price = fetch_current_stock_price(symbol)
+            diff_price = current_price - bought_price
+            daily_price_change = diff_price
+            daily_value_change = daily_price_change * units
+            current_value = current_price * units
+
+            # Calculate investment gain/loss and other metrics
+            investment_gain_loss = diff_price * units
+            investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+
+            # Append data to portfolio
+            portfolio_data.append({
+                "assetClass": asset_class,
+                "name": name,
+                "symbol": symbol,
+                "Quantity": units,
+                "Delayed_Price": current_price,
+                "current_value": current_value,
+                "Daily_Price_Change": daily_price_change,
+                "Daily_Value_Change": daily_value_change,
+                "Amount_Invested_per_Unit": bought_price,
+                "Amount_Invested": transaction_amount,
+                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+                "Investment_Gain_or_Loss": investment_gain_loss,
+                "Time_Held": order.get('Date', 'N/A'),
+            })
+
+            # Update portfolio metrics
+            portfolio_current_value += current_value
+            porfolio_daily_change += daily_price_change
+            portfolio_investment_gain_loss += investment_gain_loss
+
+        # Calculate daily change percentages
+        portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+        portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+
+        # Update daily changes for the current date
+        daily_changes[curr_date] = {
+            "portfolio_current_value": portfolio_current_value,
+            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change_perc": portfolio_daily_change_perc,
+            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+            "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+        }
+
+        # Save daily changes and portfolio data
+        if USE_AWS:
+            # Save daily changes to AWS
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=daily_changes_key,
+                    Body=json.dumps(daily_changes),
+                    ContentType='application/json'
+                )
+                logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving daily changes to AWS: {e}")
+                return jsonify({"message": f"Error saving daily changes: {e}"}), 500
+
+            # Save portfolio data to AWS
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=portfolio_key,
+                    Body=json.dumps(portfolio_data),
+                    ContentType='application/json'
+                )
+                logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+            except Exception as e:
+                logging.error(f"Error saving portfolio data to AWS: {e}")
+                return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+        else:
+            # Save daily changes locally
+            with open(daily_changes_file, 'w') as file:
+                json.dump(daily_changes, file, indent=4)
+
+            # Save portfolio data locally
+            portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+            with open(portfolio_file_path, 'w') as file:
+                json.dump(portfolio_data, file, indent=4)
+
+        # Response data
+        portfolio_response = {
+            "portfolio_current_value": portfolio_current_value,
+            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change_perc": portfolio_daily_change_perc,
+            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+            "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+            "daily_changes": daily_changes,
+            "portfolio_data": portfolio_data,
+        }
+        
+        return jsonify(portfolio_response), 200
+
+    except Exception as e:
+        logging.error(f"Error in portfolio: {e}")
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
 # Updated Portfolio List using Local Storage :
@@ -13165,9 +13165,15 @@ if __name__ == "__main__":
     # Get the port dynamically from the environment variable, default to 5000
     port = int(os.getenv("PORT", 5000))
     print(f"Port : {port}")
-    serve(app, host="0.0.0.0", port=5000)
+    serve(app, host="0.0.0.0", port=5000) # Working Code 
 
 
+
+# from waitress import serve
 
 # if __name__ == "__main__":
-#     app.run(debug=app_config.DEBUG)
+#     # Get the port dynamically from the environment variable, default to 5000
+#     port = int(os.getenv("PORT", 5000))
+#     print(f"Port : {port}")
+#     serve(app, host="0.0.0.0", port=80)
+
