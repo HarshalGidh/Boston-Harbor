@@ -13390,16 +13390,25 @@ def tax_chatbot():
     """
     try:
         # 🔹 Extract the user's answer from the request
-        data = request.get_json()
-        answer = data.get('data', None)  
+        data = request.json.get('data')  
+
+        if isinstance(data, list):
+            questions = [item.get('question', None) for item in data]
+            answers = [item.get('answer', None) for item in data]
+            print("Questions:", questions)
+            print("Answers:", answers)
+        else:
+            # Handle the case where data is not a list
+            return jsonify({"message": "Invalid data format"}), 400
+
         client_id = data.get('client_id', None)
 
         # 🔹 Validate that an answer was provided
-        if not answer:
-            return jsonify({"message": "Missing answer field."}), 400
+        if not answers:
+            return jsonify({"message": "Missing answers field."}), 400
 
-        tax_result = calculate_taxes(answer,client_id)
-        tax_advice = generate_tax_suggestions(answer)
+        tax_result = calculate_taxes(answers,client_id)
+        tax_advice = generate_tax_suggestions(answers)
         is_assessment_completed = True
 
         return jsonify({
@@ -13423,7 +13432,7 @@ def tax_chatbot():
 #         if 'chat_index' not in session or 'user_responses' not in session:
 #             return jsonify({"message": "Chatbot session not started. Use /api/start-tax-chatbot first."}), 400
 
-#         # 🔹 Extract the user's answer from the request
+#         # 🔹 Extract the user's answers from the request
 #         data = request.get_json()
 #         answer = data.get('answer', None)  
 #         client_id = data.get('client_id', None)
