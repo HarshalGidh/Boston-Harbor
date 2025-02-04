@@ -13253,20 +13253,20 @@ def search_duckduckgo_tax_rates():
 # Load tax rates (Fetch latest or use default)
 TAX_RATES = get_latest_tax_rates()
 
-
 def calculate_taxes(user_responses, client_id):
     """
     Calculate total taxes based on user's chatbot responses and financial data.
-    
+   
     :param user_responses: Dictionary of user-provided responses from chatbot
-    :param client_data: Dictionary containing client's financial data
+    :param client_id: Client's unique identifier
     :return: Dictionary with total tax amount and detailed breakdown
     """
     total_taxes = 0
     tax_details = {}
-    
-    # Load client financial data (from AWS or local based on USE_AWS)
-        
+ 
+    # 🔹 Load client financial data (from AWS or local based on USE_AWS)
+    client_data = None  # Initialize to avoid reference errors
+ 
     if USE_AWS:
         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
         try:
@@ -13274,59 +13274,62 @@ def calculate_taxes(user_responses, client_id):
             client_data = json.loads(response['Body'].read().decode('utf-8'))
         except Exception as e:
             logging.error(f"Error occurred while retrieving client data from AWS: {e}")
-            return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+            return {"error": f"Error retrieving client data from AWS: {str(e)}"}
     else:
         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
         if not os.path.exists(client_data_file_path):
-            return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
-        with open(client_data_file_path, 'r') as f:
-            client_data = json.load(f)
-                
+            return {"error": f"No client data found for client ID: {client_id}"}
+ 
+        try:
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading local client data: {e}")
+            return {"error": f"Failed to load client data: {str(e)}"}
+ 
+    if not client_data:
+        return {"error": "Client data could not be retrieved."}
+ 
     # 🔹 **Step 1: Tax on Income**
-    
     income_sources = client_data.get("incomeFields", [])
     for income in income_sources:
-        source = income.get("sourceIncome", "Other")  # Default to "Other" if not found
-        income_amount = float(income.get("amountIncome", "0") or 0)
-        tax_rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))  # Get rate dynamically
-
+        source = income.get("sourceIncome", "Other")
+        income_amount = float(income.get("amountIncome", 0) or 0)  # Ensure numeric conversion
+        tax_rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))  # Use fallback rate
+ 
         income_tax = income_amount * tax_rate
         tax_details[f"Income Tax - {source}"] = income_tax
         total_taxes += income_tax
-
+ 
     # 🔹 **Step 2: Tax on Assets**
     assets = client_data.get("assetsLiabilities", {})
-    for key, asset in assets.items():
-        asset_value = float(asset.get("currentLibKb", "0") or 0)
+    for asset in assets.values():  # Use `.values()` to avoid key errors
+        asset_value = float(asset.get("currentLibKb", 0) or 0)
         asset_name = asset.get("assetsName", "Other Assets")
-
+ 
         if "Home" in asset_name or "Real Estate" in asset_name:
-            tax_rate = TAX_RATES["Real Estate"]
+            tax_rate = TAX_RATES.get("Real Estate", 0.2)  # Default rate fallback
         elif "Business" in asset_name:
-            tax_rate = TAX_RATES["Business"]
+            tax_rate = TAX_RATES.get("Business", 0.25)
         else:
-            tax_rate = TAX_RATES["Other Assets"]
-
+            tax_rate = TAX_RATES.get("Other Assets", 0.15)
+ 
         asset_tax = asset_value * tax_rate
         tax_details[f"Asset Tax - {asset_name}"] = asset_tax
         total_taxes += asset_tax
-
+ 
     # 🔹 **Step 3: Tax on Liabilities**
     liabilities = client_data.get("myLiabilities", {})
-    for key, liability in liabilities.items():
-        interest_rate = float(liability.get("mortgageInterest", "0") or 0) / 100
-        loan_balance = float(liability.get("mortgageBalance", "0") or 0)
-        interest_tax = loan_balance * interest_rate * TAX_RATES["Liabilities"]
-
+    for liability in liabilities.values():  # Use `.values()` to avoid key errors
+        interest_rate = float(liability.get("mortgageInterest", 0) or 0) / 100  # Convert % to decimal
+        loan_balance = float(liability.get("mortgageBalance", 0) or 0)
+        interest_tax = loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05)
+ 
         liability_name = liability.get("liabilityName", "Loan Interest")
         tax_details[f"Loan Interest Tax - {liability_name}"] = interest_tax
         total_taxes += interest_tax
-
-    return {"total_taxes": total_taxes, "tax_breakdown": tax_details}
-
-# Example Usage:
-# tax_result = calculate_taxes(user_responses, client_data)
-# print(json.dumps(tax_result, indent=4))
+ 
+    return {"total_taxes": round(total_taxes, 2), "tax_breakdown": tax_details}
 
 
 
@@ -13366,23 +13369,6 @@ def start_chatbot():
         print(f"❌ Error in chatbot start: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-# @app.route('/api/start-tax-chatbot', methods=['POST'])
-# def start_chatbot():
-#     """
-#     Starts the tax assessment chatbot by returning the first question.
-#     """
-#     try:
-#         if not tax_questions or "questions" not in tax_questions or not tax_questions["questions"]:
-#             return jsonify({"message": "No tax questions available"}), 500
-
-#         first_question = tax_questions["questions"][0]  # Access list inside dictionary
-#         return jsonify({"message": first_question, "question_index": 0}), 200
-
-#     except Exception as e:
-#         print(f"❌ Error in chatbot start: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-   
-
 @app.route('/api/tax-chatbot', methods=['POST'])
 def tax_chatbot():
     """
@@ -13390,94 +13376,40 @@ def tax_chatbot():
     """
     try:
         # 🔹 Extract the user's answer from the request
-        data = request.json.get('data')  
-
-        if isinstance(data, list):
+        data = request.json.get('data')
+ 
+        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
             questions = [item.get('question', None) for item in data]
             answers = [item.get('answer', None) for item in data]
+            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+ 
             print("Questions:", questions)
             print("Answers:", answers)
+            
         else:
-            # Handle the case where data is not a list
             return jsonify({"message": "Invalid data format"}), 400
-
-        client_id = data.get('client_id', None)
-
+ 
         # 🔹 Validate that an answer was provided
         if not answers:
             return jsonify({"message": "Missing answers field."}), 400
 
-        tax_result = calculate_taxes(answers,client_id)
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
+        tax_result = calculate_taxes(answers, client_id)
         tax_advice = generate_tax_suggestions(answers)
         is_assessment_completed = True
-
+ 
         return jsonify({
             "message": "Assessment completed.",
             "is_assessment_completed": is_assessment_completed,
             "tax_details": tax_result,
             "suggestions": tax_advice
         }), 200
-
+ 
     except Exception as e:
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-
-# @app.route('/api/tax-chatbot', methods=['POST'])
-# def tax_chatbot():
-#     """
-#     Handles the tax chatbot interaction by storing user responses and returning the next question.
-#     """
-#     try:
-#         # 🔹 Ensure the chatbot session is started
-#         if 'chat_index' not in session or 'user_responses' not in session:
-#             return jsonify({"message": "Chatbot session not started. Use /api/start-tax-chatbot first."}), 400
-
-#         # 🔹 Extract the user's answers from the request
-#         data = request.get_json()
-#         answer = data.get('answer', None)  
-#         client_id = data.get('client_id', None)
-
-#         # 🔹 Validate that an answer was provided
-#         if not answer:
-#             return jsonify({"message": "Missing answer field."}), 400
-
-#         question_index = session['chat_index']
-
-#         # 🔹 Ensure `tax_questions` exists before accessing it
-#         if "questions" not in tax_questions or not tax_questions["questions"]:
-#             return jsonify({"message": "No tax questions available."}), 500
-
-#         # 🔹 Store the user's response
-#         session['user_responses'][tax_questions["questions"][question_index]] = answer
-#         session['chat_index'] += 1  # Move to the next question
-#         is_assessment_completed = False
-
-#         # 🔹 When Questions are Pending:
-#         if session['chat_index'] < len(tax_questions["questions"]):
-#             return jsonify({
-#                 "message": tax_questions["questions"][session['chat_index']],
-#                 "question_index": session['chat_index'],
-#                 "is_assessment_completed": is_assessment_completed
-#             }), 200
-
-#         # 🔹 When Assessment is Completed:
-#         else:
-#             tax_result = calculate_taxes(session['user_responses'],client_id)
-#             tax_advice = generate_tax_suggestions(session['user_responses'])
-#             is_assessment_completed = True
-#             session.clear()  # Clear session after assessment
-
-#             return jsonify({
-#                 "message": "Assessment completed.",
-#                 "is_assessment_completed": is_assessment_completed,
-#                 "tax_details": tax_result,
-#                 "suggestions": tax_advice
-#             }), 200
-
-#     except Exception as e:
-#         print(f"❌ Error in chatbot: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-
+     
 
 #################################################################################################################################
 
