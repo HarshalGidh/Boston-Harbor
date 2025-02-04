@@ -13169,8 +13169,22 @@ tax_assessment_folder = os.getenv('tax_assessment_folder')
 TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
 
 # Updated Tax Questions
-tax_questions = {
-    "questions": [
+# tax_questions = {
+#     "questions": [
+#         "What is your primary source of income?",
+#         "What is your total annual taxable income?",
+#         "Which state do you reside in?",
+#         "Do you have any dependents?",
+#         "What tax deductions or exemptions are you eligible for?",
+#         "Do you own any real estate properties?",
+#         "Are you self-employed or a small business owner?",
+#         "Do you have medical expenses exceeding a certain percentage of your income?",
+#         "Do you contribute to a charity or nonprofit organization?",
+#         "Have you made any large one-time purchases in the past year?"
+#     ]
+# }
+
+tax_questions = [
         "What is your primary source of income?",
         "What is your total annual taxable income?",
         "Which state do you reside in?",
@@ -13181,8 +13195,7 @@ tax_questions = {
         "Do you have medical expenses exceeding a certain percentage of your income?",
         "Do you contribute to a charity or nonprofit organization?",
         "Have you made any large one-time purchases in the past year?"
-    ]
-}
+]
 
 #################################################################################
 
@@ -13333,23 +13346,41 @@ def generate_tax_suggestions(user_responses):
     
     return format_suggestions if response else "No suggestions available."
 
-
-
 @app.route('/api/start-tax-chatbot', methods=['POST'])
 def start_chatbot():
     """
     Starts the tax assessment chatbot by returning the first question.
     """
     try:
-        if not tax_questions or "questions" not in tax_questions or not tax_questions["questions"]:
+        if not tax_questions:
             return jsonify({"message": "No tax questions available"}), 500
-
-        first_question = tax_questions["questions"][0]  # Access list inside dictionary
-        return jsonify({"message": first_question, "question_index": 0}), 200
+        
+        print("Starting tax assessment chatbot...")
+        print(tax_questions)
+        return jsonify({"message": "Tax Questions Passed successfully",
+                        "tax_quesyions": tax_questions}),200
+        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
+        # return jsonify({"message": first_question, "question_index": 0}), 200
 
     except Exception as e:
         print(f"❌ Error in chatbot start: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# @app.route('/api/start-tax-chatbot', methods=['POST'])
+# def start_chatbot():
+#     """
+#     Starts the tax assessment chatbot by returning the first question.
+#     """
+#     try:
+#         if not tax_questions or "questions" not in tax_questions or not tax_questions["questions"]:
+#             return jsonify({"message": "No tax questions available"}), 500
+
+#         first_question = tax_questions["questions"][0]  # Access list inside dictionary
+#         return jsonify({"message": first_question, "question_index": 0}), 200
+
+#     except Exception as e:
+#         print(f"❌ Error in chatbot start: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
    
 
 @app.route('/api/tax-chatbot', methods=['POST'])
@@ -13358,55 +13389,85 @@ def tax_chatbot():
     Handles the tax chatbot interaction by storing user responses and returning the next question.
     """
     try:
-        # 🔹 Ensure the chatbot session is started
-        if 'chat_index' not in session or 'user_responses' not in session:
-            return jsonify({"message": "Chatbot session not started. Use /api/start-tax-chatbot first."}), 400
-
         # 🔹 Extract the user's answer from the request
         data = request.get_json()
-        answer = data.get('answer', None)  # Correctly extract 'answer'
+        answer = data.get('answer', None)  
         client_id = data.get('client_id', None)
 
         # 🔹 Validate that an answer was provided
         if not answer:
             return jsonify({"message": "Missing answer field."}), 400
 
-        question_index = session['chat_index']
+        tax_result = calculate_taxes(answer,client_id)
+        tax_advice = generate_tax_suggestions(answer)
+        is_assessment_completed = True
 
-        # 🔹 Ensure `tax_questions` exists before accessing it
-        if "questions" not in tax_questions or not tax_questions["questions"]:
-            return jsonify({"message": "No tax questions available."}), 500
-
-        # 🔹 Store the user's response
-        session['user_responses'][tax_questions["questions"][question_index]] = answer
-        session['chat_index'] += 1  # Move to the next question
-        is_assessment_completed = False
-
-        # 🔹 When Questions are Pending:
-        if session['chat_index'] < len(tax_questions["questions"]):
-            return jsonify({
-                "message": tax_questions["questions"][session['chat_index']],
-                "question_index": session['chat_index'],
-                "is_assessment_completed": is_assessment_completed
-            }), 200
-
-        # 🔹 When Assessment is Completed:
-        else:
-            tax_result = calculate_taxes(session['user_responses'],client_id)
-            tax_advice = generate_tax_suggestions(session['user_responses'])
-            is_assessment_completed = True
-            session.clear()  # Clear session after assessment
-
-            return jsonify({
-                "message": "Assessment completed.",
-                "is_assessment_completed": is_assessment_completed,
-                "tax_details": tax_result,
-                "suggestions": tax_advice
-            }), 200
+        return jsonify({
+            "message": "Assessment completed.",
+            "is_assessment_completed": is_assessment_completed,
+            "tax_details": tax_result,
+            "suggestions": tax_advice
+        }), 200
 
     except Exception as e:
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# @app.route('/api/tax-chatbot', methods=['POST'])
+# def tax_chatbot():
+#     """
+#     Handles the tax chatbot interaction by storing user responses and returning the next question.
+#     """
+#     try:
+#         # 🔹 Ensure the chatbot session is started
+#         if 'chat_index' not in session or 'user_responses' not in session:
+#             return jsonify({"message": "Chatbot session not started. Use /api/start-tax-chatbot first."}), 400
+
+#         # 🔹 Extract the user's answer from the request
+#         data = request.get_json()
+#         answer = data.get('answer', None)  
+#         client_id = data.get('client_id', None)
+
+#         # 🔹 Validate that an answer was provided
+#         if not answer:
+#             return jsonify({"message": "Missing answer field."}), 400
+
+#         question_index = session['chat_index']
+
+#         # 🔹 Ensure `tax_questions` exists before accessing it
+#         if "questions" not in tax_questions or not tax_questions["questions"]:
+#             return jsonify({"message": "No tax questions available."}), 500
+
+#         # 🔹 Store the user's response
+#         session['user_responses'][tax_questions["questions"][question_index]] = answer
+#         session['chat_index'] += 1  # Move to the next question
+#         is_assessment_completed = False
+
+#         # 🔹 When Questions are Pending:
+#         if session['chat_index'] < len(tax_questions["questions"]):
+#             return jsonify({
+#                 "message": tax_questions["questions"][session['chat_index']],
+#                 "question_index": session['chat_index'],
+#                 "is_assessment_completed": is_assessment_completed
+#             }), 200
+
+#         # 🔹 When Assessment is Completed:
+#         else:
+#             tax_result = calculate_taxes(session['user_responses'],client_id)
+#             tax_advice = generate_tax_suggestions(session['user_responses'])
+#             is_assessment_completed = True
+#             session.clear()  # Clear session after assessment
+
+#             return jsonify({
+#                 "message": "Assessment completed.",
+#                 "is_assessment_completed": is_assessment_completed,
+#                 "tax_details": tax_result,
+#                 "suggestions": tax_advice
+#             }), 200
+
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
 
 #################################################################################################################################
