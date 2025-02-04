@@ -145,6 +145,8 @@ s3 = boto3.client(
     aws_secret_access_key=aws_secret_key
 )
 
+LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
+
 def list_s3_keys(bucket_name, prefix=""):
     try:
         # List objects in the bucket with the given prefix
@@ -733,7 +735,7 @@ def sign_up():
         #     del otp_store[email]
         #     print("OTP verified successfully!")
         # else:
-        #     return jsonify({"error": "Invalid OTP"}), 400
+        #     return jsonify({"error": "Invalid OTP"}),400
  
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         user_data = {
@@ -13148,6 +13150,8 @@ def dashboard_infographics():
         return jsonify({"success": False, "error": str(e)}), 500
 
 #################################################################################################################################
+# Tax Advisor Chatbot :
+from src.taxes import *
 
 
 #################################################################################################################################
