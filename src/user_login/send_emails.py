@@ -10,9 +10,14 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta,timezone
 
 # Flask app initialization
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
+
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+
 bcrypt = Bcrypt(app)
 
 # Email configuration

@@ -7,10 +7,10 @@ from src.utils.model_config import *
 from src.utils.formatting import *
 from flask import Flask, request, jsonify, session
 
-# app.secret_key = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
 
 # AWS S3 Configuration
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+# S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 tax_assessment_folder = os.getenv('tax_assessment_folder')
 TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
 
@@ -47,44 +47,18 @@ DEFAULT_TAX_RATES = {
 
 # Dynaminc Approach Needs API key :
 # Function to dynamically fetch the latest tax rates
+
 def get_latest_tax_rates():
     """
-    Fetch the latest tax rates using Google Custom Search API.
-    Falls back to DuckDuckGo API if Google fails.
-    Returns default tax rates if both fail.
+    Fetch the latest tax rates using DuckDuckGo API.
+    Returns default tax rates if DuckDuckGo fails.
     """
-    query = "latest income tax rates in USA 2024 site:irs.gov"
-    google_api_key = "YOUR_GOOGLE_API_KEY"
-    search_engine_id = os.getenv('search_engine_id') # cx id 
-
-    # url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={google_api_key}&cx={search_engine_id}"
-    
-    # try:
-    #     response = requests.get(url)
-        
-    #     if response.status_code == 200:
-    #         results = response.json()
-    #         for item in results.get("items", []):
-    #             print(f"🔍 Found on Google: {item['title']} - {item['link']}")  # Display results
-            
-    #         # Placeholder: Extract tax rates from search results (requires web scraping)
-    #         # If successful, return extracted tax rates
-
-    #         print("✅ Using tax rates retrieved from Google.")
-    #         return DEFAULT_TAX_RATES  # Replace with extracted values later
-        
-    #     print("⚠️ Google API failed. Trying DuckDuckGo...")
-    #     return search_duckduckgo_tax_rates()  # Fallback to DuckDuckGo
-    
-    # except Exception as e:
-    #     print(f"❌ Error fetching tax rates from Google: {e}")
-    
-    print("Using method: DuckDuckGo...")
+    print("🔍 Using method: DuckDuckGo...")
     return search_duckduckgo_tax_rates()
 
 def search_duckduckgo_tax_rates():
     """
-    Fetches tax rates using DuckDuckGo Instant Answer API as a fallback.
+    Fetches tax rates using DuckDuckGo Instant Answer API.
     Returns default tax rates if DuckDuckGo fails.
     """
     query = "latest income tax rates in USA 2024 site:irs.gov"
@@ -99,10 +73,8 @@ def search_duckduckgo_tax_rates():
             
             if abstract_text:
                 print(f"🔍 Found on DuckDuckGo: {abstract_text}")
-                # Placeholder: Extract and return actual tax rates
-                print("✅ Using tax rates retrieved from DuckDuckGo.")
-                return DEFAULT_TAX_RATES  # Replace with extracted values later
-            
+                return DEFAULT_TAX_RATES  # Replace with extracted values if applicable
+
         print("⚠️ DuckDuckGo API failed or returned no useful results.")
     
     except Exception as e:
@@ -113,6 +85,7 @@ def search_duckduckgo_tax_rates():
 
 # Load tax rates (Fetch latest or use default)
 TAX_RATES = get_latest_tax_rates()
+
 
 def calculate_taxes(user_responses, client_data):
     """
