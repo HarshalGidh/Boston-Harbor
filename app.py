@@ -13391,7 +13391,7 @@ def tax_chatbot():
     try:
         # 🔹 Extract the user's answer from the request
         data = request.get_json()
-        answer = data.get('answer', None)  
+        answer = data.get('question', None)  
         client_id = data.get('client_id', None)
 
         # 🔹 Validate that an answer was provided
