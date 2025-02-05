@@ -13203,6 +13203,8 @@ tax_questions = [
 
 # Sample tax rates : Static :
 # Default tax rates (fallback if online search fails)
+
+# Default tax rates (fallback if online search fails)
 DEFAULT_TAX_RATES = {
     "Employment": 0.3,         # 30% tax on employment income
     "Capital Gains": 0.15,     # 15% tax on investment gains
@@ -13212,46 +13214,143 @@ DEFAULT_TAX_RATES = {
     "Liabilities": 0.05        # 5% tax on loan interests
 }
 
-# Dynaminc Approach Needs API key :
-# Function to dynamically fetch the latest tax rates
+import requests
+import re
+from bs4 import BeautifulSoup
 
-def get_latest_tax_rates():
+# 🔍 Extract tax rates using regex
+def extract_tax_rates(text):
     """
-    Fetch the latest tax rates using DuckDuckGo API.
-    Returns default tax rates if DuckDuckGo fails.
+    Extracts tax percentages from text using regex.
     """
-    print("🔍 Using method: DuckDuckGo...")
-    return search_duckduckgo_tax_rates()
+    matches = re.findall(r"(\d{1,2}\.?\d*)%", text)  # Find "30%", "15.5%", etc.
+    tax_rates = [float(match) / 100 for match in matches]  # Convert to decimals
+    if len(tax_rates) >= 5:
+        return {
+            "Employment": tax_rates[0],
+            "Capital Gains": tax_rates[1],
+            "Real Estate": tax_rates[2],
+            "Business": tax_rates[3],
+            "Other Assets": tax_rates[4],
+            "Liabilities": tax_rates[5] if len(tax_rates) > 5 else 0.05
+        }
+    return None
 
-def search_duckduckgo_tax_rates():
+# 🔍 Scrape DuckDuckGo SERP for Tax Rates
+def scrape_duckduckgo():
     """
-    Fetches tax rates using DuckDuckGo Instant Answer API.
-    Returns default tax rates if DuckDuckGo fails.
+    Searches DuckDuckGo for IRS tax rates and extracts links.
     """
-    query = "latest income tax rates in USA 2024 site:irs.gov"
-    url = f"https://api.duckduckgo.com/?q={query}&format=json"
+    query = "latest income tax brackets 2024 site:irs.gov"
+    search_url = f"https://html.duckduckgo.com/html/?q={query}"
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    try:
+        response = requests.get(search_url, headers=headers)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # Find the first relevant search result link
+            search_results = soup.find_all("a", class_="result__a")
+            for link in search_results:
+                href = link.get("href")
+                if "irs.gov" in href:  # Prioritize IRS links
+                    return f"https://duckduckgo.com{href}" if href.startswith("/") else href
+        
+    except Exception as e:
+        print(f"❌ DuckDuckGo Search Error: {e}")
+    
+    return None
+
+# 🔍 Fetch Tax Rates from IRS.gov
+def fetch_tax_rates_from_irs():
+    """
+    Scrapes tax rate information from the first IRS link found.
+    """
+    irs_url = scrape_duckduckgo()
+    if not irs_url:
+        print("⚠️ No IRS link found. Falling back to default rates.")
+        return DEFAULT_TAX_RATES
+
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
-        response = requests.get(url)
-        
+        response = requests.get(irs_url, headers=headers)
         if response.status_code == 200:
-            results = response.json()
-            abstract_text = results.get("AbstractText", "").strip()
-            
-            if abstract_text:
-                print(f"🔍 Found on DuckDuckGo: {abstract_text}")
-                return DEFAULT_TAX_RATES  # Replace with extracted values if applicable
-
-        print("⚠️ DuckDuckGo API failed or returned no useful results.")
-    
+            tax_rates = extract_tax_rates(response.text)
+            if tax_rates:
+                print(f"✅ Tax rates extracted from {irs_url}")
+                return tax_rates
+        
     except Exception as e:
-        print(f"❌ Error fetching tax rates from DuckDuckGo: {e}")
-    
-    print("⚠️ Falling back to default tax rates.")
-    return DEFAULT_TAX_RATES  # Final fallback
+        print(f"❌ Error scraping IRS: {e}")
 
-# Load tax rates (Fetch latest or use default)
+    print("⚠️ Falling back to default tax rates.")
+    return DEFAULT_TAX_RATES
+
+# 🔄 Fetch Latest Tax Rates (Scraping + Fallback)
+def get_latest_tax_rates():
+    print("🔍 Fetching latest tax rates...")
+    return fetch_tax_rates_from_irs()
+
+# Load tax rates dynamically
 TAX_RATES = get_latest_tax_rates()
+
+# ✅ Print tax rates for verification
+print("📌 Final Tax Rates:", TAX_RATES)
+
+# Previous :
+
+# DEFAULT_TAX_RATES = {
+#     "Employment": 0.3,         # 30% tax on employment income
+#     "Capital Gains": 0.15,     # 15% tax on investment gains
+#     "Real Estate": 0.25,       # 25% property tax on real estate
+#     "Business": 0.2,           # 20% tax on business income
+#     "Other Assets": 0.1,       # 10% tax on miscellaneous assets
+#     "Liabilities": 0.05        # 5% tax on loan interests
+# }
+
+# # Dynaminc Approach Needs API key :
+# # Function to dynamically fetch the latest tax rates
+
+# def get_latest_tax_rates():
+#     """
+#     Fetch the latest tax rates using DuckDuckGo API.
+#     Returns default tax rates if DuckDuckGo fails.
+#     """
+#     print("🔍 Using method: DuckDuckGo...")
+#     return search_duckduckgo_tax_rates()
+
+# def search_duckduckgo_tax_rates():
+#     """
+#     Fetches tax rates using DuckDuckGo Instant Answer API.
+#     Returns default tax rates if DuckDuckGo fails.
+#     """
+#     query = "latest income tax rates in USA 2024 site:irs.gov"
+#     url = f"https://api.duckduckgo.com/?q={query}&format=json"
+
+#     try:
+#         response = requests.get(url)
+        
+#         if response.status_code == 200:
+#             results = response.json()
+#             abstract_text = results.get("AbstractText", "").strip()
+            
+#             if abstract_text:
+#                 print(f"🔍 Found on DuckDuckGo: {abstract_text}")
+#                 return DEFAULT_TAX_RATES  # Replace with extracted values if applicable
+
+#         print("⚠️ DuckDuckGo API failed or returned no useful results.")
+    
+#     except Exception as e:
+#         print(f"❌ Error fetching tax rates from DuckDuckGo: {e}")
+    
+#     print("⚠️ Falling back to default tax rates.")
+#     return DEFAULT_TAX_RATES  # Final fallback
+
+# # Load tax rates (Fetch latest or use default)
+# TAX_RATES = get_latest_tax_rates()
 
 def calculate_taxes(user_responses, client_id):
     """
@@ -13338,16 +13437,36 @@ def calculate_taxes(user_responses, client_id):
 
 
 # Function to generate tax-saving suggestions
-def generate_tax_suggestions(user_responses):
-    prompt = f"Given the following user financial data, suggest tax-saving strategies:\n{json.dumps(user_responses, indent=4)}"
+def generate_tax_suggestions(user_responses,client_id):
+    
+     # 🔹 Load client financial data (from AWS or local based on USE_AWS)
+    client_data = None  # Initialize to avoid reference errors
+ 
+    if USE_AWS:
+        client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+            client_data = json.loads(response['Body'].read().decode('utf-8'))
+        except Exception as e:
+            logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+            return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+    else:
+        client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+        if not os.path.exists(client_data_file_path):
+            return {"error": f"No client data found for client ID: {client_id}"}
+    
+    prompt = f"""Given the following user financial data {client_data}, 
+            suggest tax-saving strategies:\n{json.dumps(user_responses, indent=4)}"""
     
     response = model.generate_content(prompt)
     
     # Process the response from LLM
     html_suggestions = markdown.markdown(response.text)
-    format_suggestions = markdown_to_text(html_suggestions)
+    # format_suggestions = markdown_to_text(html_suggestions)
     
-    return format_suggestions if response else "No suggestions available."
+    return html_suggestions if response else "No suggestions available."
+    
+    # return format_suggestions if response else "No suggestions available."
 
 @app.route('/api/start-tax-chatbot', methods=['POST'])
 def start_chatbot():
@@ -13361,7 +13480,7 @@ def start_chatbot():
         print("Starting tax assessment chatbot...")
         print(tax_questions)
         return jsonify({"message": "Tax Questions Passed successfully",
-                        "tax_quesyions": tax_questions}),200
+                        "tax_questions": tax_questions}),200
         # first_question = tax_questions["questions"][0]  # Access list inside dictionary
         # return jsonify({"message": first_question, "question_index": 0}), 200
 
@@ -13396,7 +13515,7 @@ def tax_chatbot():
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
         tax_result = calculate_taxes(answers, client_id)
-        tax_advice = generate_tax_suggestions(answers)
+        tax_advice = generate_tax_suggestions(answers,client_id)
         is_assessment_completed = True
  
         return jsonify({
