@@ -13580,6 +13580,10 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
         else:
             response_text = "Error: Unexpected AI response format."
 
+    # Process the response from LLM
+    # response_text  html_suggestions = markdown.markdown(response_text)
+    # response_text  format_suggestions = markdown_to_text(html_suggestions)
+    
     except Exception as e:
         logging.error(f"Error during AI processing: {e}")
         response_text = f"Error: {str(e)}"
