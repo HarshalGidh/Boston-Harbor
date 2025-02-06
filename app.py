@@ -12928,19 +12928,6 @@ revisit_assessment_count = {}
 #         "Have you made any large one-time purchases in the past year?"
 # ]
 
-tax_questions = [
-     "What is your primary source of income?",
-     "What is your total annual taxable income?",
-     "Which state do you reside in?",
-     "Do you have any dependents?",
-     "What tax deductions or exemptions are you eligible for?",
-     "What is the approximate net capital value of all of your real estate properties?",
-     "State the total investments that you have done",
-     "Do you have medical expenses exceeding a certain percentage of your income?",
-     "Do you contribute to a charity or nonprofit organization?",
-     "Have you made any large one-time purchases in the past year?",
-]
-
 #################################################################################
 
 # Taxes Calculations 
@@ -13242,22 +13229,24 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
     if not client_data:
         return {"error": "Client data could not be retrieved."}
     
-    # Load portfolio data (using local or AWS storage based on USE_AWS)
+    # 🔹 **Step 2: Load Portfolio Data**
+    portfolio_data = None
     if USE_AWS:
         portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
         try:
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
             portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
         except s3.exceptions.NoSuchKey:
-            portfolio_data = "No investments done in stock Market"
-            return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
+            logging.warning(f"Portfolio file not found for client ID: {client_id}")
+            portfolio_data = "No investments made"
     else:
-        portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
-        if not os.path.exists(portfolio_file_path):
-            portfolio_data = "No investments done in stock Market"
-            return jsonify({"message": f"Portfolio file not found for client ID: {client_id}"}), 404
-        with open(portfolio_file_path, 'r') as file:
-            portfolio_data = json.load(file)
+        portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+        if os.path.exists(portfolio_file_path):
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
+        else:
+            logging.warning(f"Portfolio file not found for client ID: {client_id}")
+            portfolio_data = "No investments made"
 
     # Step 2: Prepare input for Multi-AI Agent
     input_data = {
@@ -13368,7 +13357,7 @@ tax_assessment_folder = os.getenv('tax_assessment_folder')  # Folder in S3
 # Local storage fallback
 LOCAL_SAVE_DIR = "local_tax_assessments"
 
-def save_user_responses(client_id,user_responses):
+def save_user_responses(client_id,user_responses,question_index=0):
     """
     Save user responses as a JSON file in AWS S3 or locally.
     """
@@ -13387,9 +13376,9 @@ def save_user_responses(client_id,user_responses):
                 Body=responses_json,
                 ContentType='application/json'
             )
-            print(f"Saved user responses for client_id: {client_id} in AWS S3.")
-            logging.info(f"Saved user responses for client_id: {client_id} in AWS S3.")
-            return f"Saved user responses for client_id: {client_id} in AWS S3."
+            print(f"Saved {question_index} user responses for client_id: {client_id} in AWS S3.")
+            logging.info(f"Saved {question_index} user responses for client_id: {client_id} in AWS S3.")
+            return f"Saved {question_index} user responses for client_id: {client_id} in AWS S3."
         
         else:
                 # Ensure local directory exists
@@ -13514,6 +13503,22 @@ def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_asse
 
 
 #################################################################################
+# New Version :
+
+tax_questions = [
+     "What is your primary source of income?",
+     "What is your total annual taxable income?",
+     "Which state do you reside in?",
+     "Do you have any dependents?",
+     "What tax deductions or exemptions are you eligible for?",
+     "What is the approximate net capital value of all of your real estate properties?",
+     "State the total investments that you have done",
+     "Do you have medical expenses exceeding a certain percentage of your income?",
+     "Do you contribute to a charity or nonprofit organization?",
+     "Have you made any large one-time purchases in the past year?",
+]
+
+question_index = 0 # making it global to keep track of it
 
 @app.route('/api/start-tax-chatbot', methods=['POST'])
 def start_chatbot():
@@ -13524,12 +13529,22 @@ def start_chatbot():
         if not tax_questions:
             return jsonify({"message": "No tax questions available"}), 500
         
+        if question_index != 0:
+            print("Not the first question,called by mistake probably")
+            return jsonify({"message": "Not the first question,called by mistake probably"}), 204
+        
         print("Starting tax assessment chatbot...")
-        print(tax_questions)
-        return jsonify({"message": "Tax Questions Passed successfully",
-                        "tax_questions": tax_questions}),200
-        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
-        # return jsonify({"message": first_question, "question_index": 0}), 200
+        print("tax_questions",tax_questions)
+        
+        # return jsonify({"message": "Tax Questions Passed successfully",
+        #                 "tax_questions": tax_questions}),200
+        
+        first_question = tax_questions[0]  # Access list inside dictionary
+        print("First Question",first_question)
+        
+        return jsonify({"message": first_question,
+                        "question_index": 0,
+                        "tax_questions":tax_questions}), 200
 
     except Exception as e:
         print(f"❌ Error in chatbot start: {e}")
@@ -13547,8 +13562,6 @@ def tax_chatbot():
         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
             questions = [item.get('question', None) for item in data]
             answers = [item.get('answer', None) for item in data]
-            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
             print("Questions:", questions)
             print("Answers:", answers)
             
@@ -13559,21 +13572,27 @@ def tax_chatbot():
         if not answers:
             return jsonify({"message": "Missing answers field."}), 400
         
-    
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
         
-        # Store User Responses : # need to map questions with the ans
-        # user_responses = {
-        #     "question": questions,
-        #     "answer": answers
-        # }
+        question_index = request.json.get('question_index', 0) #,question_index+1
+        print("Question Index:", question_index)
         
-        # print("User Responses :", user_responses)
+        if question_index >= 0 and question_index < len(tax_questions) -1:
+            question_index += 1
+            # next_question = tax_questions[question_index]
+            next_question = tax_questions[question_index] if question_index < len(tax_questions) else None
+            print("Next Question:", next_question)
+            print("User Responses :", data)
+            save_user_responses(client_id, data,question_index)
+            return jsonify({"message": next_question,
+                            "question_index": question_index,
+                            "tax_questions": tax_questions}), 200
+            
+        # When question_index >= len(tax_questions) :
+        print(question_index)
         print("User Responses :", data)
-        
-        save_user_responses(client_id, data)
-        # save_user_responses(client_id, user_responses)
+        save_user_responses(client_id, data,question_index)
         
         # Get Tax Rates :
         TAX_RATES = get_latest_tax_rates()
@@ -13590,6 +13609,9 @@ def tax_chatbot():
         # revisit_assessment_count['client_id'] += 1
 
         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+        
+        question_index = 0 # resets the question index
+        
         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
         
         return jsonify({
@@ -13653,6 +13675,197 @@ def get_user_responses():
     except Exception as e:
         print(f"�� No user responses found: {e}")
         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+
+
+# {
+#   "data": [
+#     {
+#       "question": "What is your primary source of income?",
+#       "answer": "Business"
+#     },
+#     {
+#       "question": "What is your total annual taxable income?",
+#       "answer": "300000"
+#     },
+#     {
+#       "question": "Which state do you reside in?",
+#       "answer": "Texas"
+#     },
+#     {
+#       "question": "Do you have any dependents?",
+#       "answer": "yes"
+#     },
+#     {
+#       "question": "What tax deductions or exemptions are you eligible for?",
+#       "answer": "no"
+#     },
+#     {
+#       "question": "What is the approximate net capital value of all of your real estate properties?",
+#       "answer": "500000"
+#     },
+#     {
+#       "question": "State the total investments that you have done",
+#       "answer": "none"
+#     },
+#     {
+#       "question": "Do you have medical expenses exceeding a certain percentage of your income?",
+#       "answer": "no"
+#     },
+#     {
+#       "question": "Do you contribute to a charity or nonprofit organization?",
+#       "answer": "yes, 30,000 annually"
+#     },
+#     {
+#       "question": "Have you made any large one-time purchases in the past year?",
+#       "answer": "no"
+#     }
+#   ],
+#   "client_id": "SB6064",
+#   "question_index":9
+# }
+
+#######################################################################################################
+
+# previous working system however it didnt saved sessions :
+
+# @app.route('/api/start-tax-chatbot', methods=['POST'])
+# def start_chatbot():
+#     """
+#     Starts the tax assessment chatbot by returning the first question.
+#     """
+#     try:
+#         if not tax_questions:
+#             return jsonify({"message": "No tax questions available"}), 500
+        
+#         print("Starting tax assessment chatbot...")
+#         print(tax_questions)
+#         return jsonify({"message": "Tax Questions Passed successfully",
+#                         "tax_questions": tax_questions}),200
+#         # first_question = tax_questions["questions"][0]  # Access list inside dictionary
+#         # return jsonify({"message": first_question, "question_index": 0}), 200
+
+#     except Exception as e:
+#         print(f"❌ Error in chatbot start: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# @app.route('/api/tax-chatbot', methods=['POST'])
+# def tax_chatbot():
+#     """
+#     Handles the tax chatbot interaction by storing user responses and returning the next question.
+#     """
+#     try:
+#         # 🔹 Extract the user's answer from the request
+#         data = request.json.get('data')
+ 
+#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+#             questions = [item.get('question', None) for item in data]
+#             answers = [item.get('answer', None) for item in data]
+#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+ 
+#             print("Questions:", questions)
+#             print("Answers:", answers)
+            
+#         else:
+#             return jsonify({"message": "Invalid data format"}), 400
+ 
+#         # 🔹 Validate that an answer was provided
+#         if not answers:
+#             return jsonify({"message": "Missing answers field."}), 400
+        
+    
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+        
+#         # Store User Responses : # need to map questions with the ans
+#         # user_responses = {
+#         #     "question": questions,
+#         #     "answer": answers
+#         # }
+        
+#         # print("User Responses :", user_responses)
+#         print("User Responses :", data)
+        
+#         save_user_responses(client_id, data)
+#         # save_user_responses(client_id, user_responses)
+        
+#         # Get Tax Rates :
+#         TAX_RATES = get_latest_tax_rates()
+#         print("Final Tax Rates:", TAX_RATES)
+        
+#         # Calculate Tax Details :
+#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+#         print("Generating Tax Calculations :",tax_result)
+        
+#         # Generate Tax Suggestions :
+#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+#         print("Generating Tax Suggestions",tax_advice)
+        
+#         # revisit_assessment_count['client_id'] += 1
+
+#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+        
+#         return jsonify({
+#             "message": "Assessment completed.",
+#             # "revisit_assessment_count": revisit_assessment_count,
+#             "TAX_RATES": TAX_RATES,
+#             "tax_details": tax_result,
+#             "suggestions": tax_advice
+#         }), 200
+ 
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+     
+# # retrive previous tax suggestions :
+
+# @app.route('/api/get-tax-suggestions', methods=['POST'])
+# def get_tax_suggestions():
+#     """
+#     Retrieves the tax suggestions for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+    
+#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+    
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#             suggestions_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved tax suggestions data:", suggestions_json)
+#             return jsonify(json.loads(suggestions_json)),200
+    
+#     except Exception as e:
+#         print(f"�� No tax suggestions found: {e}")
+#         return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+    
+# # Get Previous user responses :
+
+# @app.route('/api/get-user-responses', methods=['POST'])
+# def get_user_responses():
+#     """
+#     Retrieves the user responses for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+        
+#         responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+        
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
+#             responses_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved responses data:", responses_json)
+#             return jsonify(json.loads(responses_json)),200
+    
+#     except Exception as e:
+#         print(f"�� No user responses found: {e}")
+#         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 #################################################################################################################################
 
