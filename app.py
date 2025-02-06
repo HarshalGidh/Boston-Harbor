@@ -13316,7 +13316,7 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
             response_text = "Error: Unexpected AI response format."
 
         # Process the response from LLM
-        response_text = markdown.markdown(response_text) # html_suggestions
+        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
         # response_text = markdown_to_text(html_suggestions) # format_suggestions
 
     except Exception as e:
@@ -13677,6 +13677,7 @@ def get_user_responses():
         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 
+# testing purposes : 
 # {
 #   "data": [
 #     {
@@ -13723,6 +13724,7 @@ def get_user_responses():
 #   "client_id": "SB6064",
 #   "question_index":9
 # }
+
 #######################################################################################################
 # Chatbot :
 
