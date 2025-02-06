@@ -13463,49 +13463,49 @@ def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_asse
 # For testing purposes :
 
 # user_responses = [
-  {
-    "question": "What is your primary source of income?",
-    "answer": "Buisness and Employment"
-  },
-  {
-    "question": "What is your total annual taxable income?",
-    "answer": "500000"
-  },
-  {
-    "question": "Which state do you reside in?",
-    "answer": "texas"
-  },
-  {
-    "question": "Do you have any dependents?",
-    "answer": "no"
-  },
-  {
-    "question": "What tax deductions or exemptions are you eligible for?",
-    "answer": "no idea"
-  },
-  {
-    "question": "What is the approximate net capital value of all of your real estate properties?",
-    "answer": "5000000"
-  },
-  {
-    "question": "State the total investments that you have done",
-    "answer": "30000"
-  },
-  {
-    "question": "Do you have medical expenses exceeding a certain percentage of your income?",
-    "answer": "no"
-  },
-  {
-    "question": "Do you contribute to a charity or nonprofit organization?",
-    "answer": "no"
-  },
-  {
-    "question": "Have you made any large one-time purchases in the past year?",
-    "answer": "no"
-  }
-]
+#   {
+#     "question": "What is your primary source of income?",
+#     "answer": "Buisness and Employment"
+#   },
+#   {
+#     "question": "What is your total annual taxable income?",
+#     "answer": "500000"
+#   },
+#   {
+#     "question": "Which state do you reside in?",
+#     "answer": "texas"
+#   },
+#   {
+#     "question": "Do you have any dependents?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "What tax deductions or exemptions are you eligible for?",
+#     "answer": "no idea"
+#   },
+#   {
+#     "question": "What is the approximate net capital value of all of your real estate properties?",
+#     "answer": "5000000"
+#   },
+#   {
+#     "question": "State the total investments that you have done",
+#     "answer": "30000"
+#   },
+#   {
+#     "question": "Do you have medical expenses exceeding a certain percentage of your income?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "Do you contribute to a charity or nonprofit organization?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "Have you made any large one-time purchases in the past year?",
+#     "answer": "no"
+#   }
+# ]
 
-client_id = "DD3375"
+# client_id = "DD3375"
 # tax_result = calculate_taxes(user_responses, client_id)
 # suggestions = generate_tax_suggestions(user_responses, client_id)
 
@@ -13563,7 +13563,7 @@ def tax_chatbot():
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
         
-        # Store User Responses :
+        # Store User Responses : # need to map questions with the ans
         user_responses = {
             "question": questions,
             "answer": answers
