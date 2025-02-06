@@ -13564,15 +13564,16 @@ def tax_chatbot():
         print("Client ID:", client_id)
         
         # Store User Responses : # need to map questions with the ans
-        user_responses = {
-            "question": questions,
-            "answer": answers
-        }
+        # user_responses = {
+        #     "question": questions,
+        #     "answer": answers
+        # }
         
-        print("User Responses :", user_responses)
+        # print("User Responses :", user_responses)
+        print("User Responses :", data)
         
-        # user_responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
-        save_user_responses(client_id, user_responses)
+        save_user_responses(client_id, data)
+        # save_user_responses(client_id, user_responses)
         
         # Get Tax Rates :
         TAX_RATES = get_latest_tax_rates()
@@ -13618,9 +13619,10 @@ def get_tax_suggestions():
     
         if USE_AWS:
             # Download from S3
-            s3 = boto3.client('s3')
+            # s3 = boto3.client('s3')
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
             suggestions_json = response['Body'].read().decode('utf-8')
+            print("Retrieved tax suggestions data:", suggestions_json)
             return jsonify(json.loads(suggestions_json)),200
     
     except Exception as e:
@@ -13642,9 +13644,10 @@ def get_user_responses():
         
         if USE_AWS:
             # Download from S3
-            s3 = boto3.client('s3')
+            # s3 = boto3.client('s3')
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
             responses_json = response['Body'].read().decode('utf-8')
+            print("Retrieved responses data:", responses_json)
             return jsonify(json.loads(responses_json)),200
     
     except Exception as e:
