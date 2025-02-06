@@ -1,83 +1,13 @@
 # import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-
-import os
-import filetype
-import docx
-import PyPDF2
-import re
-from dotenv import load_dotenv
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import Docx2txtLoader
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.memory import ConversationSummaryMemory
-import asyncio
-import numpy as np
-import json
-
-import google.generativeai as genai
-import pathlib
-import logging
-import sys
-import io
-import matplotlib.pyplot as plt
-import seaborn as sns
-# Import things that are needed generically
-from langchain.pydantic_v1 import BaseModel, Field
-from langchain.tools import BaseTool, StructuredTool, tool
-# Define functions to generate investment suggestions :\
-
-import random
-from datetime import datetime
-import os
-import json
-from email.mime.text import MIMEText
-import smtplib
-import jwt
+# import all libraries:
+from src.utils.libraries import *
 
 USE_AWS = True  # Set to False to use local storage
 
-# # -------------------------------------Start Aws---------------------
-# import paramiko
-
-# # Set up the SSH key file, IP, username, and passphrase
-# key_path = "keys/aws_key.pem"  # Path to the converted .pem file
-# hostname = "172.31.15.173"  # AWS EC2 public IP address
-# username = "pragatidhobe"  # EC2 instance username
-# passphrase = "12345678"  # Passphrase, if any
-
-# # Create an SSH client instance
-# ssh_client = paramiko.SSHClient()
-# ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-# try:
-#     # Load SSH key
-#     key = paramiko.RSAKey.from_private_key_file(key_path, password=passphrase)
-
-#     # Connect to the instance
-#     ssh_client.connect(hostname=hostname, username=username, pkey=key)
-
-#     # Execute a command (example)
-#     stdin, stdout, stderr = ssh_client.exec_command("ls")
-#     print(stdout.read().decode())  # Print command output
-
-# except Exception as e:
-#     print(f"An error occurred: {e}")
-
-# finally:
-#     ssh_client.close()
-
-# # -------------------------------------End Aws---------------------
+# from src.utils.start_aws import *
 
 #########################################################################################################
-
+# Most Important part of the code and cant be imported 
 
 import boto3
 load_dotenv()
@@ -126,180 +56,14 @@ print(f"DEBUG: {os.getenv('DEBUG')}")
 #########################################################################################################
 
 # # AWS keys
-aws_access_key = os.getenv('aws_access_key')
-aws_secret_key = os.getenv('aws_secret_key')
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
-client_summary_folder = os.getenv('client_summary_folder') 
-suggestions_folder = os.getenv('suggestions_folder') 
-order_list_folder = os.getenv('order_list_folder')
-portfolio_list_folder = os.getenv('portfolio_list_folder') 
-personality_assessment_folder = os.getenv('personality_assessment_folder') 
-login_folder = os.getenv('login_folder')
-daily_changes_folder = os.getenv('daily_changes_folder')
-signUp_user_folder = os.getenv('signUp_user_folder')
-PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
-# Connecting to Amazon S3
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=aws_access_key,
-    aws_secret_access_key=aws_secret_key
-)
-
-LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
-
-def list_s3_keys(bucket_name, prefix=""):
-    try:
-        # List objects in the bucket with the given prefix
-        response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-        if 'Contents' in response:
-            print("Keys in the S3 folder:")
-            for obj in response['Contents']:
-                print(obj['Key'])
-        else:
-            print("No files found in the specified folder.")
-    except Exception as e:
-        print(f"Error listing objects in S3: {e}")
-
-# Call the function
-# list_s3_keys(S3_BUCKET_NAME, signUp_user_folder) 
-# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
-
-
-####################################################################################
-
-# Download the files :
-
-# def download_json_file(bucket_name, file_key, local_file_path):
-#     """
-#     Downloads a JSON file from an S3 bucket to a local file.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) of the file in the bucket
-#     :param local_file_path: Path to save the file locally
-#     """
-#     try:
-#         # Download the file
-#         s3.download_file(bucket_name, file_key, local_file_path)
-#         print(f"File '{file_key}' successfully downloaded to '{local_file_path}'.")
-        
-#         # Load the JSON content to confirm it's valid
-#         with open(local_file_path, 'r') as file:
-#             data = json.load(file)
-#             print("Downloaded JSON content:", data)
-#         return data
-    
-#     except Exception as e:
-#         print(f"Error downloading file: {e}")
-#         return None
-
-# # Example usage 
-# local_file_path = "local_data\orders\orders_SF3648.json"
-# downloaded_data = download_json_file(S3_BUCKET_NAME,"order_list_folder/SF3648_orders.json", local_file_path)
-
-# downloaded_data = download_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
-
-# print(downloaded_data)
-
-######################################################################################
-
-# Upload File :
-
-# def upload_json_file(bucket_name, file_key, local_file_path):
-#     """
-#     Uploads a JSON file from the local file system to an S3 bucket.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) to upload the file to in the bucket
-#     :param local_file_path: Path of the file locally to be uploaded
-#     """
-#     try:
-#         # Upload the file
-#         s3.upload_file(local_file_path, bucket_name, file_key, ExtraArgs={'ContentType': 'application/json'})
-#         print(f"File '{local_file_path}' successfully uploaded to '{file_key}' in bucket '{bucket_name}'.")
-    
-#     except Exception as e:
-#         print(f"Error uploading file: {e}")
-
-# # Example usage
-# local_file_path = "local_data\portfolios\portfolio_SF3648.json"
-# upload_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
-
-# local_file_path = "local_data\orders\orders_SF3648.json"
-# upload_json_file(S3_BUCKET_NAME, "order_list_folder/SF3648_orders.json", local_file_path)
-
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-
-
-######################################################################################
-
-
-# delete folders/files from bucket :
-
-
-
-# S3 bucket and file details
-
-# FILE_KEY = "order_list_folder/JM4162_orders.json"
-# FILE_KEY = "order_list_folder/JR5059_orders.json"
-# FILE_KEY = "portfolio_list_folder//JM4162.json"
-# FILE_KEY = "portfolio_list_folder//JR5059.json"
-
-# FILE_KEY = "order_list_folder/SF3648_orders.json" 
-
-# FILE_KEY = "order_list_folder/SF3648_orders.json" 
-# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
-
-# FILE_KEY = "client_summary_folder/client-data/CM5657.json"
-
-# def delete_file_from_s3(bucket_name, file_key):
-#     """
-#     Deletes a specified file from an S3 bucket.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) of the file in the bucket
-#     """
-#     try:
-#         # Delete the file
-#         response = s3.delete_object(Bucket=bucket_name, Key=file_key)
-        
-#         # Confirm deletion
-#         if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
-#             print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
-#         else:
-#             print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
-    
-#     except Exception as e:
-#         print(f"Error deleting file: {e}")
-
-# # Call the function
-# delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
-
-
-# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
-# # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
+from src.utils.aws_config import * 
 
 
 
 # =------------------------------------------------------=
 
-
-
-
-
-
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-
-
-# Configure generativeai with your API key
-genai.configure(api_key=GOOGLE_API_KEY)
-
-# Initialize the model :
-model = genai.GenerativeModel("gemini-1.5-flash")
-
-import markdown
+# Import and Initialize the Model
+from src.utils.model_config import *
 
 ########################### Sign in Sign using aws ###################################################
 
@@ -319,95 +83,100 @@ bcrypt = Bcrypt(app)
 
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
+# AWS Data Config
+from src.utils.aws_data import *
 
-def load_from_local(filepath):
-    try:
-        if not os.path.exists(filepath):
-            return None
-        with open(filepath, 'r') as file:
-            return json.load(file)
-    except Exception as e:
-        print(f"Error loading file: {e}")
-        return None
+# def load_from_local(filepath):
+#     try:
+#         if not os.path.exists(filepath):
+#             return None
+#         with open(filepath, 'r') as file:
+#             return json.load(file)
+#     except Exception as e:
+#         print(f"Error loading file: {e}")
+#         return None
  
-def save_to_local(data, filepath):
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w') as file:
-            json.dump(data, file)
-        print(f"Data saved at {filepath}")  # Debug log
-    except Exception as e:
-        print(f"Error saving file: {e}")  # Debug log
-        raise
+# def save_to_local(data, filepath):
+#     try:
+#         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+#         with open(filepath, 'w') as file:
+#             json.dump(data, file)
+#         print(f"Data saved at {filepath}")  # Debug log
+#     except Exception as e:
+#         print(f"Error saving file: {e}")  # Debug log
+#         raise
  
-def delete_from_local(filename):
-    file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"File {filename} deleted from local storage.")  # Debug log
-        else:
-            print(f"File {filename} not found in local storage.")  # Debug log
-    except Exception as e:
-        print(f"Error deleting file: {e}")  # Debug log
-        raise
+# def delete_from_local(filename):
+#     file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
+#     try:
+#         if os.path.exists(file_path):
+#             os.remove(file_path)
+#             print(f"File {filename} deleted from local storage.")  # Debug log
+#         else:
+#             print(f"File {filename} not found in local storage.")  # Debug log
+#     except Exception as e:
+#         print(f"Error deleting file: {e}")  # Debug log
+#         raise
  
-def save_to_aws(data, filename):
-    try:
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=filename,
-            Body=json.dumps(data),
-            ContentType='application/json'
-        )
-        print(f"Data saved to AWS at {filename}")
-    except (NoCredentialsError, PartialCredentialsError) as e:
-        print(f"AWS credentials error: {e}")
-        raise
-    except Exception as e:
-        print(f"Error saving to AWS: {e}")
-        raise
+# def save_to_aws(data, filename):
+#     try:
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=filename,
+#             Body=json.dumps(data),
+#             ContentType='application/json'
+#         )
+#         print(f"Data saved to AWS at {filename}")
+#     except (NoCredentialsError, PartialCredentialsError) as e:
+#         print(f"AWS credentials error: {e}")
+#         raise
+#     except Exception as e:
+#         print(f"Error saving to AWS: {e}")
+#         raise
  
-def load_from_aws(filename):
-    try:
-        obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
-        return json.loads(obj['Body'].read().decode('utf-8'))
-    except s3.exceptions.NoSuchKey:
-        return None
-    except Exception as e:
-        print(f"Error loading from AWS: {e}")
-        return None
+# def load_from_aws(filename):
+#     try:
+#         obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+#         return json.loads(obj['Body'].read().decode('utf-8'))
+#     except s3.exceptions.NoSuchKey:
+#         return None
+#     except Exception as e:
+#         print(f"Error loading from AWS: {e}")
+#         return None
  
-def save_user_data(data, email):
-    if USE_AWS:
-        # Store in AWS under 'signUp_user_folder/<email>.json'
-        filename = f"{signUp_user_folder}{email}.json"
-        save_to_aws(data, filename)
-    else:
-        # Store locally under 'users/<email>.json'
-        filename = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
-        save_to_local(data, filename)
+# def save_user_data(data, email):
+#     if USE_AWS:
+#         # Store in AWS under 'signUp_user_folder/<email>.json'
+#         filename = f"{signUp_user_folder}{email}.json"
+#         save_to_aws(data, filename)
+#     else:
+#         # Store locally under 'users/<email>.json'
+#         filename = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
+#         save_to_local(data, filename)
  
-def load_user_data(email):
-    if USE_AWS:
-        filename = f"{signUp_user_folder}{email}.json"
-        return load_from_aws(filename) or {} # Fixed returning None
-    else:
-        filename = f"users/{email}.json"
-        return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename)) or {} # Fixed returning None
+# def load_user_data(email):
+#     if USE_AWS:
+#         filename = f"{signUp_user_folder}{email}.json"
+#         return load_from_aws(filename) or {} # Fixed returning None
+#     else:
+#         filename = f"users/{email}.json"
+#         return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename)) or {} # Fixed returning None
  
-def delete_user_data(email):
-    if USE_AWS:
-        try:
-            filename = f"{signUp_user_folder}{email}.json"
-            s3.delete_object(Bucket=S3_BUCKET_NAME, Key=filename)
-            print(f"File {filename} deleted from AWS.")  # Debug log
-        except Exception as e:
-            print(f"Error deleting file from AWS: {e}")  # Debug log
-            raise
-    else:
-        filename = f"users/{email}.json"
-        delete_from_local(filename)
+# def delete_user_data(email):
+#     if USE_AWS:
+#         try:
+#             filename = f"{signUp_user_folder}{email}.json"
+#             s3.delete_object(Bucket=S3_BUCKET_NAME, Key=filename)
+#             print(f"File {filename} deleted from AWS.")  # Debug log
+#         except Exception as e:
+#             print(f"Error deleting file from AWS: {e}")  # Debug log
+#             raise
+#     else:
+#         filename = f"users/{email}.json"
+#         delete_from_local(filename)
+
+###################################################################################
+
 
 # # ✅ Function to Send Email using Office 365 SMTP
 # import ssl
@@ -587,35 +356,40 @@ EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
 EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
 
 # Previous Wroking Code with Personal Email Id : 
-def send_email(to_email, otp):
-    try:
-        print(f"to_email{to_email}")
-        # Validate email format
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
-            print(f"Invalid email address: {to_email}")
-            return False
- 
-        # Setup email message
-        subject = "Your Reset Password Code"
-        message = f"Your Reset Password Code is: {otp}"
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(message, 'plain'))
- 
-        # Send email using SMTP
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_ADDRESS, to_email, msg.as_string())
-        print("Email sent successfully")
-        return True
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        return False
- 
+# Send email :
+from src.user_login.send_emails import send_email
+
+
 # Email verification :
+import dns.resolver  # For checking email domain validity
+import string
+
+# from src.user_login.email_verification import is_valid_email_domain,generate_otp # didnt work
+
+# need to include failsafe system when email bounces back 
+def is_valid_email_domain(email):
+    """Checks if the domain of the email has valid MX records."""
+    try:
+        domain = email.split('@')[1]  # Extract domain from email
+        dns.resolver.resolve(domain, 'MX')  # Check MX records
+        return True
+    except dns.resolver.NoAnswer:
+        return False  # No MX record found
+    except dns.resolver.NXDOMAIN:
+        return False  # Domain does not exist
+    except Exception as e:
+        print(f"DNS lookup error for {email}: {e}")
+        return False  # Other DNS errors
+ 
+# Function to Generate OTP
+import string
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+# def generate_otp(length=6):
+#     """Generates a random OTP of given length."""
+#     return ''.join(random.choices(string.digits, k=length))
  
 @app.route('/api/email-verification', methods=['POST'])
 def email_verification():
@@ -671,34 +445,6 @@ def email_verification():
     except Exception as e:
         print(f"Error sending email: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-
-# 🔹 Function to Validate Email Domain (MX Record Lookup)
-import dns.resolver  # For checking email domain validity
-
-def is_valid_email_domain(email):
-    """Checks if the domain of the email has valid MX records."""
-    try:
-        domain = email.split('@')[1]  # Extract domain from email
-        dns.resolver.resolve(domain, 'MX')  # Check MX records
-        return True
-    except dns.resolver.NoAnswer:
-        return False  # No MX record found
-    except dns.resolver.NXDOMAIN:
-        return False  # Domain does not exist
-    except Exception as e:
-        print(f"DNS lookup error for {email}: {e}")
-        return False  # Other DNS errors
- 
-# Function to Generate OTP
-import string
-
-def generate_otp():
-    return str(random.randint(100000, 999999))
-
-# def generate_otp(length=6):
-#     """Generates a random OTP of given length."""
-#     return ''.join(random.choices(string.digits, k=length))
 
 
 # 2. Sign Up
@@ -13632,6 +13378,7 @@ def save_user_responses(client_id,user_responses):
         
         if USE_AWS:
             responses_json = json.dumps(user_responses,indent=4)
+            print(f"Response json: {responses_json}\n")
             
             # Upload to S3
             s3.put_object(
@@ -13681,6 +13428,7 @@ def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_asse
         if USE_AWS:
             # Convert tax suggestions to JSON
             suggestions_json = json.dumps(tax_data, indent=4)
+            print(f"Suggestions json: {suggestions_json}\n")
 
             # Upload to S3
             s3.put_object(
@@ -13715,49 +13463,49 @@ def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_asse
 # For testing purposes :
 
 # user_responses = [
-#   {
-#     "question": "What is your primary source of income?",
-#     "answer": "Buisness and Employment"
-#   },
-#   {
-#     "question": "What is your total annual taxable income?",
-#     "answer": "500000"
-#   },
-#   {
-#     "question": "Which state do you reside in?",
-#     "answer": "texas"
-#   },
-#   {
-#     "question": "Do you have any dependents?",
-#     "answer": "no"
-#   },
-#   {
-#     "question": "What tax deductions or exemptions are you eligible for?",
-#     "answer": "no idea"
-#   },
-#   {
-#     "question": "What is the approximate net capital value of all of your real estate properties?",
-#     "answer": "5000000"
-#   },
-#   {
-#     "question": "State the total investments that you have done",
-#     "answer": "30000"
-#   },
-#   {
-#     "question": "Do you have medical expenses exceeding a certain percentage of your income?",
-#     "answer": "no"
-#   },
-#   {
-#     "question": "Do you contribute to a charity or nonprofit organization?",
-#     "answer": "no"
-#   },
-#   {
-#     "question": "Have you made any large one-time purchases in the past year?",
-#     "answer": "no"
-#   }
-# ]
+  {
+    "question": "What is your primary source of income?",
+    "answer": "Buisness and Employment"
+  },
+  {
+    "question": "What is your total annual taxable income?",
+    "answer": "500000"
+  },
+  {
+    "question": "Which state do you reside in?",
+    "answer": "texas"
+  },
+  {
+    "question": "Do you have any dependents?",
+    "answer": "no"
+  },
+  {
+    "question": "What tax deductions or exemptions are you eligible for?",
+    "answer": "no idea"
+  },
+  {
+    "question": "What is the approximate net capital value of all of your real estate properties?",
+    "answer": "5000000"
+  },
+  {
+    "question": "State the total investments that you have done",
+    "answer": "30000"
+  },
+  {
+    "question": "Do you have medical expenses exceeding a certain percentage of your income?",
+    "answer": "no"
+  },
+  {
+    "question": "Do you contribute to a charity or nonprofit organization?",
+    "answer": "no"
+  },
+  {
+    "question": "Have you made any large one-time purchases in the past year?",
+    "answer": "no"
+  }
+]
 
-# client_id = "DD3375"
+client_id = "DD3375"
 # tax_result = calculate_taxes(user_responses, client_id)
 # suggestions = generate_tax_suggestions(user_responses, client_id)
 
@@ -13821,6 +13569,8 @@ def tax_chatbot():
             "answer": answers
         }
         
+        print("User Responses :", user_responses)
+        
         # user_responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
         save_user_responses(client_id, user_responses)
         
@@ -13830,9 +13580,11 @@ def tax_chatbot():
         
         # Calculate Tax Details :
         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        print("Generating Tax Calculations :",tax_result)
         
         # Generate Tax Suggestions :
         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+        print("Generating Tax Suggestions",tax_advice)
         
         # revisit_assessment_count['client_id'] += 1
 

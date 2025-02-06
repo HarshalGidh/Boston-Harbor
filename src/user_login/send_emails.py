@@ -11,9 +11,11 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta,timezone
+from src.utils.app_config import *
+from src.utils.aws_config import *
 
 # Flask app initialization
-app = Flask(__name__)
+# app = Flask(__name__)
 bcrypt = Bcrypt(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
@@ -30,8 +32,8 @@ app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
 mail = Mail(app)
 
 # AWS S3 setup
-s3 = boto3.client('s3')
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+# s3 = boto3.client('s3')
+# S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 # In-memory storage for email and OTP (for simplicity)
 otp_store = {}
