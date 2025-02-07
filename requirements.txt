@@ -47,3 +47,4 @@ groq
 phidata
 duckduckgo-search
 openai
+mistune

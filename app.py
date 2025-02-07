@@ -8277,6 +8277,10 @@ def actual_vs_predicted():
                 return jsonify({"message": "No daily changes data found."}), 404
 
         # Process daily changes data for only current quarter :
+        if not raw_daily_changes_data:
+            logging.warning(f"No daily changes reflected yet for this client.Please refresh or check the daily changes tomorrow")
+            return jsonify({"message": "No daily changes reflected yet for this client.Please refresh or check the daily changes tomorrow"}), 400
+        
         daily_changes_data = []
         current_quarter_date = get_current_quarter_dates()
         start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
@@ -10068,18 +10072,20 @@ def asset_class_predictions():
         simulated_response = markdown_to_text(response.text)
         
         # Process the response from LLM
-        html_suggestions = markdown.markdown(simulated_response)
+        html_suggestions = markdown.markdown(simulated_response,extensions=["extra"])
+        # response_text = markdown.markdown(response_text, extensions=["extra"]) 
+        
         # print(f"html_suggestions:\n\n{html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
+        # format_suggestions = markdown_to_text(html_suggestions)
         
         # Debugging output for validation
-        print("Generated Asset Class Predictions:\n\n", format_suggestions)
+        print("Generated Asset Class Predictions:\n\n",html_suggestions) # format_suggestions)
 
         # Response structure
         response_data = {
             "message": "Asset Class Predictions Generated Successfully",
             "asset_predictions_table_data":asset_predictions_table_data,
-            "simulated_response":format_suggestions
+            "simulated_response":html_suggestions  #format_suggestions
         }
 
         return jsonify(response_data), 200
@@ -10736,6 +10742,7 @@ def analyze_dashboard():
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
         
+        print(f"🔹 Processing {len(clients)} clients")
         logging.info(f"🔹 Processing {len(clients)} clients")
 
         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
@@ -10747,6 +10754,8 @@ def analyze_dashboard():
         logging.info("🔹 Fetching portfolios...")
         start_fetch_time = time.time()
         portfolios = fetch_portfolios(client_ids)
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
         logging.info(f"✅ Portfolios fetched in {time.time() - start_fetch_time:.2f} seconds")
 
         insights = []
@@ -10787,14 +10796,7 @@ def analyze_dashboard():
 
             # Get portfolio data from the fetched portfolios
             logging.info(f"✅ Client data fetched for {client_id} in {time.time() - start_client_fetch:.2f} seconds")
-
-            # Step 3: Process Portfolio Data
-            start_portfolio_processing = time.time()
-            portfolio_data = portfolios.get(client_id, [])
-            logging.info(f"✅ Processed portfolio for {client_id} in {time.time() - start_portfolio_processing:.2f} seconds")
-
-            # Safely parse assets and liabilities
-            # Step 4: Analyze Portfolio Performance
+            
             start_analysis = time.time()
             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
@@ -10835,103 +10837,6 @@ def analyze_dashboard():
             # print(f"Financial goals :\n{financial_goals}")
             client_income = client_data.get("incomeFields","Unknown")
             # print(f"Client income :\n{client_income}")
-
-            invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
-            available_funds = funds - invested_amount
-
-            # Initialize variables to calculate portfolio-level metrics
-            portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
-            portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
-            portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
-            
-            if portfolio_current_value != 0:
-                portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
-                portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
-            else:
-                portfolio_daily_change_perc = 0
-                portfolio_investment_gain_loss_perc = 0
-            
-            # Calculate portfolio time held
-            time_held_values = []
-            for asset in portfolio_data:
-                time_held_str = asset.get("Time_Held", "")
-                if time_held_str:
-                    try:
-                        # Adjusted format string for American date format (MM/DD/YYYY)
-                        time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
-                        time_held_values.append(time_held_dt)
-                    except ValueError as ve:
-                        print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
-
-            if time_held_values:
-                oldest_time_held = min(time_held_values)
-                portfolio_time_held = (datetime.now() - oldest_time_held).days
-                # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
-            else:
-                portfolio_time_held = 0
-                print("No valid Time_Held data found in portfolio.")
-
-            # print(f"Portfolio Time Held: {portfolio_time_held} days")
-            
-            # Calculate high asset class
-            asset_class_returns = {}
-            for asset in portfolio_data:
-                asset_class = asset.get("assetClass", "Unknown")
-                asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
-                if asset_class != "Unknown":
-                    asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
-                else:
-                    print(f"Missing asset_class for asset: {asset}")  # Debug log
-
-            # Log asset_class_returns for debugging
-            # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
-
-            # Find the asset class with the highest return
-            if asset_class_returns:
-                high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
-            else:
-                high_asset_class = "Unknown"
-                
-            # Asset Allocation
-            asset_allocation = {}
-            for asset in portfolio_data:
-                asset_class = asset.get("assetClass", "Other")
-                allocation = float(asset.get("Amount_Invested", 0))
-                asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
-
-            total_allocation = sum(asset_allocation.values())
-            asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
-            
-            # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
-            
-            # Risk-reward metrics
-            sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
-            volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
-            volatility = volatility if volatility > 0 else volatility * (-1)
-            # print(f"sharpe ratio :{sharpe_ratio}")
-            
-            # Diversification analysis
-            diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
-            # print(f"Diversification Score :{diversification_score}")
-            
-            # Stress Testing
-            stress_scenarios = ["recession", "high inflation", "market crash"]
-            stress_test_result = {
-                "client_id": client_id,
-                "scenarios": {}
-            }
-            for scenario in stress_scenarios:
-                factor = {
-                    "recession": -0.2,
-                    "high inflation": -0.15,
-                    "market crash": -0.3
-                }.get(scenario, -0.1)
-                stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
-                stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
-            stress_test_results.append(stress_test_result)
-            
-            print(f"Stress Test Results : {stress_test_results}")
-
             
             # Liquidity analysis :
             
@@ -10980,14 +10885,117 @@ def analyze_dashboard():
                 print("Financial goals are not in the expected format.")
             
             client_goal_progress[client_id] = progress_to_goals_score
-            
-            # Recommendations
-            rebalancing_recommendations = []
-            for asset_class, percentage in asset_allocation.items():
-                if percentage > 50:
-                    rebalancing_recommendations.append(f"Reduce allocation in {asset_class} to improve diversification.")
 
-            client_rebalancing_recommendations[client_id] = rebalancing_recommendations
+            # Step 3: Process Portfolio Data
+            start_portfolio_processing = time.time()
+            portfolio_data = portfolios.get(client_id, [])
+            logging.info(f"✅ Processed portfolio for {client_id} in {time.time() - start_portfolio_processing:.2f} seconds")
+
+            if not portfolio_data:  # Check if portfolio_data is empty
+                logging.warning(f"No portfolio data found for client {client_id}. Skipping portfolio analysis.")
+                continue
+            
+            # Calculate portfolio performance metrics
+            else:
+                # Safely parse assets and liabilities
+                # Step 4: Analyze Portfolio Performance
+
+                invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
+                available_funds = funds - invested_amount
+
+                # Initialize variables to calculate portfolio-level metrics
+                portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+                portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+                portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+                
+                if portfolio_current_value != 0:
+                    portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+                    portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+                else:
+                    portfolio_daily_change_perc = 0
+                    portfolio_investment_gain_loss_perc = 0
+                
+                # Calculate portfolio time held
+                time_held_values = []
+                for asset in portfolio_data:
+                    time_held_str = asset.get("Time_Held", "")
+                    if time_held_str:
+                        try:
+                            # Adjusted format string for American date format (MM/DD/YYYY)
+                            time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
+                            time_held_values.append(time_held_dt)
+                        except ValueError as ve:
+                            print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
+
+                if time_held_values:
+                    oldest_time_held = min(time_held_values)
+                    portfolio_time_held = (datetime.now() - oldest_time_held).days
+                    # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
+                else:
+                    portfolio_time_held = 0
+                    print("No valid Time_Held data found in portfolio.")
+
+                # print(f"Portfolio Time Held: {portfolio_time_held} days")
+                
+                # Calculate high asset class
+                asset_class_returns = {}
+                for asset in portfolio_data:
+                    asset_class = asset.get("assetClass", "Unknown")
+                    asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+                    if asset_class != "Unknown":
+                        asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+                    else:
+                        print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+                # Log asset_class_returns for debugging
+                # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+                # Find the asset class with the highest return
+                if asset_class_returns:
+                    high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+                else:
+                    high_asset_class = "Unknown"
+                    
+                # Asset Allocation
+                asset_allocation = {}
+                for asset in portfolio_data:
+                    asset_class = asset.get("assetClass", "Other")
+                    allocation = float(asset.get("Amount_Invested", 0))
+                    asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+                total_allocation = sum(asset_allocation.values())
+                asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
+                
+                # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
+                
+                # Risk-reward metrics
+                sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
+                volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
+                volatility = volatility if volatility > 0 else volatility * (-1)
+                # print(f"sharpe ratio :{sharpe_ratio}")
+                
+                # Diversification analysis
+                diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
+                # print(f"Diversification Score :{diversification_score}")
+                
+                # Stress Testing
+                stress_scenarios = ["recession", "high inflation", "market crash"]
+                stress_test_result = {
+                    "client_id": client_id,
+                    "scenarios": {}
+                }
+                for scenario in stress_scenarios:
+                    factor = {
+                        "recession": -0.2,
+                        "high inflation": -0.15,
+                        "market crash": -0.3
+                    }.get(scenario, -0.1)
+                    stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
+                    stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
+                stress_test_results.append(stress_test_result)
+                
+                print(f"Stress Test Results : {stress_test_results}")
+            
             
             # Append to performance list
             performance_list.append({
@@ -11021,8 +11029,8 @@ def analyze_dashboard():
                 "diversification_score": diversification_score,
                 "liquidity_ratio": liquidity_ratio,
                 "progress_to_goals_score": progress_to_goals_score,
-                "stress_test_results": stress_test_results,
-                "rebalancing_recommendations": rebalancing_recommendations
+                "stress_test_results": stress_test_results #,
+                # "rebalancing_recommendations": rebalancing_recommendations
             })
             
             insights.append({
@@ -11034,71 +11042,6 @@ def analyze_dashboard():
             
             logging.info(f"✅ Completed financial analysis for {client_id} in {time.time() - start_analysis:.2f} seconds")
 
-            # Generate insights using Gemini LLM
-            
-            # task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
-            #         Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
-            #         - Total Assets: ${assets}
-            #         - Total Liabilities: ${liabilities}
-            #         - Net Worth: ${net_worth}
-            #         - Investment Personality: {investment_personality}
-            #         - Retirement Age Goal: {retirement_age}
-            #         - Retirement Goal: {retirement_goals}
-            #         - Client Income: {client_income}
-            #         - Financial Goals: {financial_goals}
-            #         - Funds: {funds}
-            #         - Invested Amount: ${invested_amount}
-            #         - Available Funds: ${available_funds}
-            #         - Current Portfolio Value: ${portfolio_current_value}
-            #         - Portfolio Daily Change: ${portfolio_daily_change}
-            #         - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
-            #         - Portfolio Returns: ${portfolio_investment_gain_loss}
-            #         - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
-            #         - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
-            #         - Best Performing Asset Class: {high_asset_class}
-            #         - Best Performing Asset: {portfolio_data}
-            #         - Asset Allocation (Breakdown): {asset_allocation}
-            #         - Total Allocation: ${total_allocation}
-            #         - Sharpe Ratio: {sharpe_ratio}
-            #         - Volatility: {volatility}%
-            #         - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
-            #         - Liquid Assets: ${liquid_assets}
-            #         - Liquidity Ratio: {liquidity_ratio}%
-            #         - Savings Ratio: {savings_rate}%
-            #         - Liability Monthly Payments: ${liability_monthly_payments}
-            #         - Insurance Monthly Premiums: ${insurance_monthly_premiums}
-            #         - Monthly Expenses: ${monthly_expenses}
-            #         - Progress to Goals Score: {progress_to_goals_score} 
-            #         - Stress Test Results: {stress_test_results}
-            #         - Rebalancing Recommendations: {rebalancing_recommendations}
-
-            #         Provide detailed insights into:
-            #         1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
-            #         2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
-            #         3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
-            #         4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
-            #         5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
-            #         6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
-            #         7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
-            #         8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
-
-            #         Generate specific insights for the client on:
-            #         - How their portfolio aligns with their stated investment personality.
-            #         - Strategies to improve diversification, liquidity, and overall portfolio health.
-            #         - Long-term viability of their financial plan given current metrics.
-            #         """
-
-            # model = genai.GenerativeModel("gemini-1.5-flash")
-            # response = model.generate_content(task)
-            # insights_text = markdown.markdown(response.text)
-
-            # Append insights
-            # insights.append({
-            #     "client_id": client_id,
-            #     "client_name": client_data["clientDetail"]["clientName"],
-            #     "insights": insights_text,
-            #     "net_worth": net_worth,
-            # })
             
         total_time = time.time() - start_time
         logging.info(f"✅ All Dashboard Clients analysis completed in {total_time:.2f} seconds")
@@ -11117,173 +11060,6 @@ def analyze_dashboard():
         low_performers = performance_list[-10:]
 
         curr_date = datetime.now()
-        
-        # task = f"""
-        #     You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
-        #     Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
-        #     The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
-            
-        #     ### Formatting Guidelines:
-        #     1. Use **bolded section headings** to clearly delineate sections of the report.
-        #     2. Organize information into structured categories such as **Insights**, **Comparative Analysis**, **Recommendations**, and **Key Metrics**.
-        #     3. Avoid raw table syntax like '|---|---|', and instead use visually separated sections.
-        #     4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
-        #     5. Use readable percentages, dollar values, and ratios where applicable.
-        #     6. The report should have a **summary section** at the end with actionable next steps.
-        #     7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
-        #     8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
-        #     9. Include all the Sections mentioned below in the report.
-            
-        #     ### Dashboard Insights and Performance Analysis
-
-        #     Date : {curr_date}
-            
-        #     #### **Key Deliverables**:
-        #     Refer to the insights here: {insights}.
-        #     Provide a **clear, structured, and actionable report** covering the following areas:
-
-        #     ---
-
-        #     ### 1. **Top Performing Clients**
-        #     - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
-        #     - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
-        #     - Best-performing assets and asset classes.
-        #     - Strategies or characteristics that contributed to their success.
-        #     - Provide actionable recommendations to replicate successful strategies for other clients.
-            
-        #     ---
-
-        #     ### 2. **Low Performing Clients**
-        #     - Identify and Examine weaknesses among low-performing clients ({low_performers}):
-        #     - Common gaps in their financial profiles, such as:
-        #         - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
-        #         - Over-reliance on volatile or underperforming assets.
-        #         - Insufficient Emergency Funds
-        #         - Misaligned Risk Tolerance and Portfolio Composition
-        #         - High Monthly Expenses and Low Savings Rates
-        #     - Poor Goal Alignment or Misaligned Risk Tolerance.
-        #     - Suggest actionable improvements:
-        #     - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
-        #     - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
-        #     - Rebalancing Recommendations for Portfolios to address underperforming areas.
-
-        #     ---
-
-        #     ### 3. **Comparative Analysis of Clients**
-        #     - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
-        #     - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
-        #     - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
-        #     - Common Trends and Development for both.
-        #     - Provide insights into successful strategies and common pitfalls to avoid.  
-        #     - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
-        #     - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
-
-        #     ---
-
-        #     ### 4. **Stress Testing Results**
-        #     - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
-        #     - Analyze:
-        #     - Portfolio Resilience Rankings for all clients.
-        #     - Potential Financial Impacts on Net Worth and Liquidity.
-        #     - Provide actionable steps to strengthen and fortify portfolios against future risks.
-
-        #     ---
-
-        #     ### 5. **Rebalancing Recommendations**
-        #     - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
-        #     - Address over-concentration in certain asset classes or sectors.
-        #     - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
-        #     - Align portfolios with client financial goals and risk profiles.
-        #     - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
-
-        #     ---
-
-        #     ### 6. **Asset Allocation Trends**
-        #     - Analyze trends in asset allocation across all clients:
-        #     - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
-        #     - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
-
-        #     ---
-
-        #     ### 7. **Goal Achievement Progress**
-        #     - Assess the progress of client goals ({client_goal_progress}):
-        #     - Evaluate how many :
-        #         - Goals Achieved(we need to determine that it wont be mentioned direclty),
-        #         - Goals on Track(including an estimate of when the goal will be achieved for most clients),
-        #         - Goals at Risk of Delay.
-        #         - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
-        #     - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
-
-        #     ---
-
-        #     ### 8. **Risk and Diversification Metrics**
-        #     - Calculate and Evaluate:
-        #     - Diversification Scores (Average and Individual Client Scores).
-        #     - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
-        #     - Liquidity Ratios and Emergency Fund Coverage.
-        #     - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
-
-        #     ---
-
-        #     ### 9. **Common Patterns and Trends**
-        #     - Identify patterns among top-performing clients:
-        #     - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
-        #     - Highlight patterns among low-performing clients:
-        #     - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
-        #     - Provide actionable insights to address vulnerabilities and capitalize on strengths.
-
-        #     ---
-
-        #     ### 10. **Goal-Based Insights**
-        #     - How many goals have been achieved, are on track, or at risk?
-        #     - Suggest steps to:
-        #     - Accelerate progress for at-risk goals.
-        #     - Adjust timelines for unreachable goals.
-
-        #     ---
-
-        #     ### 11. **Most Gaining and Losing Assets**
-        #     - Highlight the **most gaining** and **most losing assets** for:
-        #     - Individual Clients.
-        #     - Across all portfolios.
-        #     - Recommend strategies to leverage high-performing assets or mitigate losses.
-
-        #     ---
-            
-        #     ### 12. **Longest and Shortest Investment Periods**
-        #     - Identify clients with the:
-        #     - Longest Investment Period and its impact on performance.
-        #     - Shortest Investment Period and how it reflects their strategies.
-
-        #     ---
-
-        #     ### 13. **Overall Portfolio Management Score**
-        #     - Assign a score out of 100 for the Wealth Manager based on:
-        #     - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
-        #     - Provide reasons for the score and actionable steps for improvement.
-
-        #     ---
-
-        #     ### 14. **Custom Recommendations**
-        #     - Identify and Suggest specific investment opportunities including:
-        #     - Low-risk alternatives like Bonds, ETFs, or Index Funds.
-        #     - High-potential sectors based on current market trends.
-        #     - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
-
-        #     ---
-            
-        #     ### 15. **Actionable Summary**
-        #     - Provide key insights, recommendations, and patterns to help the Wealth Manager:
-        #     - Improve portfolio performance.
-        #     - Align client portfolios with financial goals and market trends.
-        #     - Strengthen risk management and diversification.
-
-        #     #### **Note**:
-        #     Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
-        #     Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
-        #     Use all the provided data to generate meaningful and actionable insights.
-        #     Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
-        #     """
         
         # new :
         task = f"""
@@ -11434,8 +11210,10 @@ def analyze_dashboard():
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(task)
         dashboard_analysis = markdown_to_text_new(response.text)
+        
         # Process the response from LLM
-        html_suggestions = markdown.markdown(dashboard_analysis)
+        # response_text = markdown.markdown(response_text, extensions=["extra"]) 
+        html_suggestions = markdown.markdown(dashboard_analysis,extensions=["extra"])
         print(html_suggestions)
         dashboard_suggestions = markdown_to_text_new(html_suggestions)
         print(dashboard_suggestions)
@@ -13272,6 +13050,7 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
     #     - Provide structured, markdown-formatted output.
     #     """
     # )
+    
     print(input_data)
     # Step 3: Use Multi-AI Agent for Tax Optimization
     try:
@@ -13316,8 +13095,11 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
             response_text = "Error: Unexpected AI response format."
 
         # Process the response from LLM
-        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
         # response_text = markdown_to_text(html_suggestions) # format_suggestions
+        
+        # markdown_parser = mistune.create_markdown(renderer=mistune.HTMLRenderer())
+        # response_text = markdown_parser(response_text)
 
     except Exception as e:
         logging.error(f"Error during AI processing: {e}")
@@ -13518,163 +13300,169 @@ tax_questions = [
      "Have you made any Large One-Time Purchases in the Past Year?",
 ]
 
-question_index = 0 # making it global to keep track of it
+# question_index = 0 # making it global to keep track of it
 
-@app.route('/api/start-tax-chatbot', methods=['POST'])
-def start_chatbot():
-    """
-    Starts the tax assessment chatbot by returning the first question.
-    """
-    try:
-        if not tax_questions:
-            return jsonify({"message": "No tax questions available"}), 500
+# @app.route('/api/start-tax-chatbot', methods=['POST'])
+# def start_chatbot():
+#     """
+#     Starts the tax assessment chatbot by returning the first question.
+#     """
+#     try:
+#         if not tax_questions:
+#             return jsonify({"message": "No tax questions available"}), 500
         
-        if question_index != 0:
-            print("Not the first question,called by mistake probably")
-            return jsonify({"message": "Not the first question,called by mistake probably"}), 204
+#         if question_index != 0:
+#             print("Not the first question,called by mistake probably")
+#             return jsonify({"message": "Not the first question,called by mistake probably"}), 204
         
-        print("Starting tax assessment chatbot...")
-        print("tax_questions",tax_questions)
+#         print("Starting tax assessment chatbot...")
+#         print("tax_questions",tax_questions)
         
-        # return jsonify({"message": "Tax Questions Passed successfully",
-        #                 "tax_questions": tax_questions}),200
+#         # return jsonify({"message": "Tax Questions Passed successfully",
+#         #                 "tax_questions": tax_questions}),200
         
-        first_question = tax_questions[0]  # Access list inside dictionary
-        print("First Question",first_question)
+#         first_question = tax_questions[0]  # Access list inside dictionary
+#         print("First Question",first_question)
         
-        return jsonify({"message": first_question,
-                        "question_index": 0,
-                        "tax_questions":tax_questions}), 200
+#         return jsonify({"message": first_question,
+#                         "question_index": 0,
+#                         "tax_questions":tax_questions}), 200
 
-    except Exception as e:
-        print(f"❌ Error in chatbot start: {e}")
-        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+#     except Exception as e:
+#         print(f"❌ Error in chatbot start: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    
+# import mistune
 
-@app.route('/api/tax-chatbot', methods=['POST'])
-def tax_chatbot():
-    """
-    Handles the tax chatbot interaction by storing user responses and returning the next question.
-    """
-    try:
-        # 🔹 Extract the user's answer from the request
-        data = request.json.get('data')
+
+# @app.route('/api/tax-chatbot', methods=['POST'])
+# def tax_chatbot():
+#     """
+#     Handles the tax chatbot interaction by storing user responses and returning the next question.
+#     """
+#     try:
+#         # 🔹 Extract the user's answer from the request
+#         data = request.json.get('data')
  
-        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-            questions = [item.get('question', None) for item in data]
-            answers = [item.get('answer', None) for item in data]
-            print("Questions:", questions)
-            print("Answers:", answers)
+#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+#             questions = [item.get('question', None) for item in data]
+#             answers = [item.get('answer', None) for item in data]
+#             print("Questions:", questions)
+#             print("Answers:", answers)
             
-        else:
-            return jsonify({"message": "Invalid data format"}), 400
+#         else:
+#             return jsonify({"message": "Invalid data format"}), 400
  
-        # 🔹 Validate that an answer was provided
-        if not answers:
-            return jsonify({"message": "Missing answers field."}), 400
+#         # 🔹 Validate that an answer was provided
+#         if not answers:
+#             return jsonify({"message": "Missing answers field."}), 400
         
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
         
-        question_index = request.json.get('question_index', 0) #,question_index+1
-        print("Question Index:", question_index)
+#         question_index = request.json.get('question_index', 0) #,question_index+1
+#         print("Question Index:", question_index)
         
-        if question_index >= 0 and question_index < len(tax_questions) -1:
-            question_index += 1
-            # next_question = tax_questions[question_index]
-            next_question = tax_questions[question_index] if question_index < len(tax_questions) else None
-            print("Next Question:", next_question)
-            print("User Responses :", data)
-            save_user_responses(client_id, data,question_index)
-            return jsonify({"message": next_question,
-                            "question_index": question_index,
-                            "tax_questions": tax_questions}), 200
+#         if question_index >= 0 and question_index < len(tax_questions) -1:
+#             question_index += 1
+#             # next_question = tax_questions[question_index]
+#             next_question = tax_questions[question_index] if question_index < len(tax_questions) else None
+#             print("Next Question:", next_question)
+#             print("User Responses :", data)
+#             save_user_responses(client_id, data,question_index)
+#             return jsonify({"message": next_question,
+#                             "question_index": question_index,
+#                             "tax_questions": tax_questions}), 200
             
-        # When question_index >= len(tax_questions) :
-        print(question_index)
-        print("User Responses :", data)
-        save_user_responses(client_id, data,question_index)
+#         # When question_index >= len(tax_questions) :
+#         print(question_index)
+#         print("User Responses :", data)
+#         save_user_responses(client_id, data,question_index)
         
-        # Get Tax Rates :
-        TAX_RATES = get_latest_tax_rates()
-        print("Final Tax Rates:", TAX_RATES)
+#         # Get Tax Rates :
+#         TAX_RATES = get_latest_tax_rates()
+#         print("Final Tax Rates:", TAX_RATES)
         
-        # Calculate Tax Details :
-        tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-        print("Generating Tax Calculations :",tax_result)
+#         # Calculate Tax Details :
+#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+#         print("Generating Tax Calculations :",tax_result)
         
-        # Generate Tax Suggestions :
-        tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
-        print("Generating Tax Suggestions",tax_advice)
+#         # Generate Tax Suggestions :
+#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+#         print("Generating Tax Suggestions",tax_advice)
         
-        # revisit_assessment_count['client_id'] += 1
+#         # revisit_assessment_count['client_id'] += 1
 
-        save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
         
-        question_index = 0 # resets the question index
+#         question_index = 0 # resets the question index
         
-        # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
         
-        return jsonify({
-            "message": "Assessment completed.",
-            # "revisit_assessment_count": revisit_assessment_count,
-            "TAX_RATES": TAX_RATES,
-            "tax_details": tax_result,
-            "suggestions": tax_advice
-        }), 200
+#         return jsonify({
+#             "message": "Assessment completed.",
+#             # "revisit_assessment_count": revisit_assessment_count,
+#             "TAX_RATES": TAX_RATES,
+#             "tax_details": tax_result,
+#             "suggestions": tax_advice
+#         }), 200
  
-    except Exception as e:
-        print(f"❌ Error in chatbot: {e}")
-        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
      
-# retrive previous tax suggestions :
+# # retrive previous tax suggestions :
 
-@app.route('/api/get-tax-suggestions', methods=['POST'])
-def get_tax_suggestions():
-    """
-    Retrieves the tax suggestions for a given client_id.
-    """
-    try:
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
+# @app.route('/api/get-tax-suggestions', methods=['POST'])
+# def get_tax_suggestions():
+#     """
+#     Retrieves the tax suggestions for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
     
-        suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
     
-        if USE_AWS:
-            # Download from S3
-            # s3 = boto3.client('s3')
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-            suggestions_json = response['Body'].read().decode('utf-8')
-            print("Retrieved tax suggestions data:", suggestions_json)
-            return jsonify(json.loads(suggestions_json)),200
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#             suggestions_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved tax suggestions data:", suggestions_json)
+#             return jsonify(json.loads(suggestions_json)),200
     
-    except Exception as e:
-        print(f"�� No tax suggestions found: {e}")
-        return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+#     except Exception as e:
+#         print(f"�� No tax suggestions found: {e}")
+#         return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
     
-# Get Previous user responses :
+# # Get Previous user responses :
 
-@app.route('/api/get-user-responses', methods=['POST'])
-def get_user_responses():
-    """
-    Retrieves the user responses for a given client_id.
-    """
-    try:
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
+# @app.route('/api/get-user-responses', methods=['POST'])
+# def get_user_responses():
+#     """
+#     Retrieves the user responses for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
         
-        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+#         responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
         
-        if USE_AWS:
-            # Download from S3
-            # s3 = boto3.client('s3')
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
-            responses_json = response['Body'].read().decode('utf-8')
-            print("Retrieved responses data:", responses_json)
-            return jsonify(json.loads(responses_json)),200
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
+#             responses_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved responses data:", responses_json)
+#             print(len(tax_questions))
+#             # return jsonify({json.loads(responses_json),"question_length":len(tax_questions)}),200
+#             return jsonify({"history":json.loads(responses_json), "question_length": len(tax_questions)}), 200
+
     
-    except Exception as e:
-        print(f"�� No user responses found: {e}")
-        return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+#     except Exception as e:
+#         print(f"�� No user responses found: {e}")
+#         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 
 # testing purposes : 
@@ -13837,17 +13625,27 @@ def chatbot():
             stream=False
         )
 
-        # 🔹 **Extract Response Text**
-        ai_response = response.content if hasattr(response, "content") else str(response)
-
-        print("ai_response", ai_response)
+        # # 🔹 **Extract Response Text**
+        # ai_response = response.content if hasattr(response, "content") else str(response)
+        
+        # Extract response content safely
+        if isinstance(response, RunResponse) and hasattr(response, "content"):
+            response_text = response.content  # Extracting the actual response text
+        else:
+            response_text = str(response) # "Error: Unexpected AI response format."
+        
+        # Process the response from LLM
+        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+        # response_text = markdown_to_text(html_suggestions) # format_suggestions
+        
+        print("ai_response", response_text)
         
         # 🔹 **Save Response History (Optional)**
-        save_chat_history(session_id, user_input, ai_response)
+        save_chat_history(session_id, user_input, response_text)
 
         return jsonify({
             "user_input": user_input,
-            "ai_response": ai_response
+            "ai_response": response_text
         }), 200
 
     except Exception as e:
@@ -13902,144 +13700,144 @@ def get_chat_history():
 
 # previous working system however it didnt saved sessions :
 
-# @app.route('/api/start-tax-chatbot', methods=['POST'])
-# def start_chatbot():
-#     """
-#     Starts the tax assessment chatbot by returning the first question.
-#     """
-#     try:
-#         if not tax_questions:
-#             return jsonify({"message": "No tax questions available"}), 500
+@app.route('/api/start-tax-chatbot', methods=['POST'])
+def start_chatbot():
+    """
+    Starts the tax assessment chatbot by returning the first question.
+    """
+    try:
+        if not tax_questions:
+            return jsonify({"message": "No tax questions available"}), 500
         
-#         print("Starting tax assessment chatbot...")
-#         print(tax_questions)
-#         return jsonify({"message": "Tax Questions Passed successfully",
-#                         "tax_questions": tax_questions}),200
-#         # first_question = tax_questions["questions"][0]  # Access list inside dictionary
-#         # return jsonify({"message": first_question, "question_index": 0}), 200
+        print("Starting tax assessment chatbot...")
+        print(tax_questions)
+        return jsonify({"message": "Tax Questions Passed successfully",
+                        "tax_questions": tax_questions}),200
+        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
+        # return jsonify({"message": first_question, "question_index": 0}), 200
 
-#     except Exception as e:
-#         print(f"❌ Error in chatbot start: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Error in chatbot start: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-# @app.route('/api/tax-chatbot', methods=['POST'])
-# def tax_chatbot():
-#     """
-#     Handles the tax chatbot interaction by storing user responses and returning the next question.
-#     """
-#     try:
-#         # 🔹 Extract the user's answer from the request
-#         data = request.json.get('data')
+@app.route('/api/tax-chatbot', methods=['POST'])
+def tax_chatbot():
+    """
+    Handles the tax chatbot interaction by storing user responses and returning the next question.
+    """
+    try:
+        # 🔹 Extract the user's answer from the request
+        data = request.json.get('data')
  
-#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-#             questions = [item.get('question', None) for item in data]
-#             answers = [item.get('answer', None) for item in data]
-#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+            questions = [item.get('question', None) for item in data]
+            answers = [item.get('answer', None) for item in data]
+            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
  
-#             print("Questions:", questions)
-#             print("Answers:", answers)
+            print("Questions:", questions)
+            print("Answers:", answers)
             
-#         else:
-#             return jsonify({"message": "Invalid data format"}), 400
+        else:
+            return jsonify({"message": "Invalid data format"}), 400
  
-#         # 🔹 Validate that an answer was provided
-#         if not answers:
-#             return jsonify({"message": "Missing answers field."}), 400
+        # 🔹 Validate that an answer was provided
+        if not answers:
+            return jsonify({"message": "Missing answers field."}), 400
         
     
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
         
-#         # Store User Responses : # need to map questions with the ans
-#         # user_responses = {
-#         #     "question": questions,
-#         #     "answer": answers
-#         # }
+        # Store User Responses : # need to map questions with the ans
+        # user_responses = {
+        #     "question": questions,
+        #     "answer": answers
+        # }
         
-#         # print("User Responses :", user_responses)
-#         print("User Responses :", data)
+        # print("User Responses :", user_responses)
+        print("User Responses :", data)
         
-#         save_user_responses(client_id, data)
-#         # save_user_responses(client_id, user_responses)
+        save_user_responses(client_id, data)
+        # save_user_responses(client_id, user_responses)
         
-#         # Get Tax Rates :
-#         TAX_RATES = get_latest_tax_rates()
-#         print("Final Tax Rates:", TAX_RATES)
+        # Get Tax Rates :
+        TAX_RATES = get_latest_tax_rates()
+        print("Final Tax Rates:", TAX_RATES)
         
-#         # Calculate Tax Details :
-#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-#         print("Generating Tax Calculations :",tax_result)
+        # Calculate Tax Details :
+        tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        print("Generating Tax Calculations :",tax_result)
         
-#         # Generate Tax Suggestions :
-#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
-#         print("Generating Tax Suggestions",tax_advice)
+        # Generate Tax Suggestions :
+        tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+        print("Generating Tax Suggestions",tax_advice)
         
-#         # revisit_assessment_count['client_id'] += 1
+        # revisit_assessment_count['client_id'] += 1
 
-#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+        save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+        # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
         
-#         return jsonify({
-#             "message": "Assessment completed.",
-#             # "revisit_assessment_count": revisit_assessment_count,
-#             "TAX_RATES": TAX_RATES,
-#             "tax_details": tax_result,
-#             "suggestions": tax_advice
-#         }), 200
+        return jsonify({
+            "message": "Assessment completed.",
+            # "revisit_assessment_count": revisit_assessment_count,
+            "TAX_RATES": TAX_RATES,
+            "tax_details": tax_result,
+            "suggestions": tax_advice
+        }), 200
  
-#     except Exception as e:
-#         print(f"❌ Error in chatbot: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Error in chatbot: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
      
-# # retrive previous tax suggestions :
+# retrive previous tax suggestions :
 
-# @app.route('/api/get-tax-suggestions', methods=['POST'])
-# def get_tax_suggestions():
-#     """
-#     Retrieves the tax suggestions for a given client_id.
-#     """
-#     try:
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
+@app.route('/api/get-tax-suggestions', methods=['POST'])
+def get_tax_suggestions():
+    """
+    Retrieves the tax suggestions for a given client_id.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
     
-#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+        suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
     
-#         if USE_AWS:
-#             # Download from S3
-#             # s3 = boto3.client('s3')
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-#             suggestions_json = response['Body'].read().decode('utf-8')
-#             print("Retrieved tax suggestions data:", suggestions_json)
-#             return jsonify(json.loads(suggestions_json)),200
+        if USE_AWS:
+            # Download from S3
+            # s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+            suggestions_json = response['Body'].read().decode('utf-8')
+            print("Retrieved tax suggestions data:", suggestions_json)
+            return jsonify(json.loads(suggestions_json)),200
     
-#     except Exception as e:
-#         print(f"�� No tax suggestions found: {e}")
-#         return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+    except Exception as e:
+        print(f"�� No tax suggestions found: {e}")
+        return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
     
-# # Get Previous user responses :
+# Get Previous user responses :
 
-# @app.route('/api/get-user-responses', methods=['POST'])
-# def get_user_responses():
-#     """
-#     Retrieves the user responses for a given client_id.
-#     """
-#     try:
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
+@app.route('/api/get-user-responses', methods=['POST'])
+def get_user_responses():
+    """
+    Retrieves the user responses for a given client_id.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
         
-#         responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
         
-#         if USE_AWS:
-#             # Download from S3
-#             # s3 = boto3.client('s3')
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
-#             responses_json = response['Body'].read().decode('utf-8')
-#             print("Retrieved responses data:", responses_json)
-#             return jsonify(json.loads(responses_json)),200
+        if USE_AWS:
+            # Download from S3
+            # s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
+            responses_json = response['Body'].read().decode('utf-8')
+            print("Retrieved responses data:", responses_json)
+            return jsonify(json.loads(responses_json)),200
     
-#     except Exception as e:
-#         print(f"�� No user responses found: {e}")
-#         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+    except Exception as e:
+        print(f"�� No user responses found: {e}")
+        return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 #################################################################################################################################
 

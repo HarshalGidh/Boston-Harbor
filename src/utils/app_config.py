@@ -1,5 +1,5 @@
 import os
-from config import config
+# from config import config
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
