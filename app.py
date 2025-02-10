@@ -6678,6 +6678,9 @@ LOCAL_STORAGE_PATH = "data/orders/"
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 
+###############################################################################################################################    
+
+
 # Using AWS to Place Order :
 
 def create_transaction(order_data, asset_class):
@@ -6891,7 +6894,7 @@ def show_order_list():
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
     
-    
+###############################################################################################################################    
     
 # Updated Show Order List for Local Storage :
 
@@ -7112,7 +7115,7 @@ import logging
 #         # Initialize portfolio data and 
 #         portfolio_data = []
 #         portfolio_current_value = 0
-#         porfolio_daily_change = 0
+#         portfolio_daily_change = 0
 #         portfolio_investment_gain_loss = 0
 
 #         # Load or initialize daily changes
@@ -7182,17 +7185,17 @@ import logging
 
 #             # Update portfolio metrics
 #             portfolio_current_value += current_value
-#             porfolio_daily_change += daily_price_change
+#             portfolio_daily_change += daily_price_change
 #             portfolio_investment_gain_loss += investment_gain_loss
 
 #         # Calculate daily change percentages
-#         portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
 #         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
 
 #         # Update daily changes for the current date
 #         daily_changes[curr_date] = {
 #             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change": portfolio_daily_change,
 #             "portfolio_daily_change_perc": portfolio_daily_change_perc,
 #             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
 #             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
@@ -7239,7 +7242,7 @@ import logging
 #         # Response data
 #         portfolio_response = {
 #             "portfolio_current_value": portfolio_current_value,
-#             "porfolio_daily_change": porfolio_daily_change,
+#             "portfolio_daily_change": portfolio_daily_change,
 #             "portfolio_daily_change_perc": portfolio_daily_change_perc,
 #             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
 #             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
@@ -7289,7 +7292,8 @@ import logging
 
 ###########################################################################################################
 
-# previous logic :
+# updated logic : with handling done for sell :
+
 
 @app.route('/api/portfolio', methods=['POST'])
 def portfolio():
@@ -7325,7 +7329,7 @@ def portfolio():
         # Initialize portfolio data and metrics
         portfolio_data = []
         portfolio_current_value = 0
-        porfolio_daily_change = 0
+        portfolio_daily_change  = 0
         portfolio_investment_gain_loss = 0
 
         # Load or initialize daily changes
@@ -7346,66 +7350,92 @@ def portfolio():
                     daily_changes = json.load(file)
             else:
                 daily_changes = {}
+                
+        # Fetch current stock price (needed only for "buy" actions)
+        def fetch_current_stock_price(ticker):
+            stock = yf.Ticker(ticker)
+            try:
+                current_price = stock.history(period='1d')['Close'].iloc[-1]
+                return current_price
+            except Exception as e:
+                logging.error(f"Error fetching stock price for {ticker}: {e}")
+                return 0
 
-        # Process client orders
+        # Process client orders:
         for order in client_orders:
+            action = order.get('Action', 'N/A').lower()
             asset_class = order.get('AssetClass', 'N/A')
             name = order.get('Name', 'N/A')
             symbol = order.get('Symbol', 'N/A')
             units = order.get('Units', 0)
-            bought_price = order.get('UnitPrice', 0)
+            transaction_price = order.get('UnitPrice', 0)
             transaction_amount = order.get('TransactionAmount', 0)
 
-            # Fetch current stock price
-            def fetch_current_stock_price(ticker):
-                stock = yf.Ticker(ticker)
-                try:
-                    current_price = stock.history(period='1d')['Close'].iloc[-1]
-                    return current_price
-                except Exception as e:
-                    logging.error(f"Error fetching stock price for {ticker}: {e}")
-                    return 0
+            # Find the asset in portfolio_data (if exists)
+            existing_asset = next((item for item in portfolio_data if item["symbol"] == symbol), None)
 
-            current_price = fetch_current_stock_price(symbol)
-            diff_price = current_price - bought_price
-            daily_price_change = diff_price
-            daily_value_change = daily_price_change * units
-            current_value = current_price * units
+            if action == "buy":
+                current_price = fetch_current_stock_price(symbol)
+                diff_price = current_price - transaction_price
+                daily_price_change = diff_price
+                daily_value_change = daily_price_change * units
+                current_value = current_price * units
 
-            # Calculate investment gain/loss and other metrics
-            investment_gain_loss = diff_price * units
-            investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+                investment_gain_loss = diff_price * units
+                investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
 
-            # Append data to portfolio
-            portfolio_data.append({
-                "assetClass": asset_class,
-                "name": name,
-                "symbol": symbol,
-                "Quantity": units,
-                "Delayed_Price": current_price,
-                "current_value": current_value,
-                "Daily_Price_Change": daily_price_change,
-                "Daily_Value_Change": daily_value_change,
-                "Amount_Invested_per_Unit": bought_price,
-                "Amount_Invested": transaction_amount,
-                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-                "Investment_Gain_or_Loss": investment_gain_loss,
-                "Time_Held": order.get('Date', 'N/A'),
-            })
+                if existing_asset:
+                    existing_asset["Quantity"] += units
+                    existing_asset["Amount_Invested"] += transaction_amount
+                    existing_asset["current_value"] += current_value
+                else:
+                    portfolio_data.append({
+                        "assetClass": asset_class,
+                        "name": name,
+                        "symbol": symbol,
+                        "Quantity": units,
+                        "Delayed_Price": current_price,
+                        "current_value": current_value,
+                        "Daily_Price_Change": daily_price_change,
+                        "Daily_Value_Change": daily_value_change,
+                        "Amount_Invested_per_Unit": transaction_price,
+                        "Amount_Invested": transaction_amount,
+                        "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+                        "Investment_Gain_or_Loss": investment_gain_loss,
+                        "Time_Held": order.get('Date', 'N/A'),
+                    })
 
-            # Update portfolio metrics
-            portfolio_current_value += current_value
-            porfolio_daily_change += daily_price_change
-            portfolio_investment_gain_loss += investment_gain_loss
+                portfolio_current_value += current_value
+                portfolio_daily_change += daily_price_change
+                portfolio_investment_gain_loss += investment_gain_loss
+
+            elif action == "sell":
+                if not existing_asset or existing_asset["Quantity"] < units:
+                    logging.warning(f"Tried to sell {units} of {symbol}, but only {existing_asset['Quantity'] if existing_asset else 0} available.")
+                    continue
+
+                remaining_units = existing_asset["Quantity"] - units
+                total_investment_sold = (existing_asset["Amount_Invested"] / existing_asset["Quantity"]) * units if existing_asset["Quantity"] > 0 else 0
+                profit_or_loss = (transaction_price - (existing_asset["Amount_Invested"] / existing_asset["Quantity"])) * units if existing_asset["Quantity"] > 0 else 0
+                profit_or_loss_perc = round((profit_or_loss / total_investment_sold) * 100, 2) if total_investment_sold > 0 else 0
+
+                if remaining_units > 0:
+                    existing_asset["Quantity"] = remaining_units
+                    existing_asset["Amount_Invested"] -= total_investment_sold
+                else:
+                    portfolio_data.remove(existing_asset)  # ✅ Remove asset if all units are sold
+
+                portfolio_current_value -= total_investment_sold
+                portfolio_investment_gain_loss += profit_or_loss
 
         # Calculate daily change percentages
-        portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+        portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
 
         # Update daily changes for the current date
         daily_changes[curr_date] = {
             "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change": portfolio_daily_change,
             "portfolio_daily_change_perc": portfolio_daily_change_perc,
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
@@ -7452,19 +7482,199 @@ def portfolio():
         # Response data
         portfolio_response = {
             "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change": portfolio_daily_change,
             "portfolio_daily_change_perc": portfolio_daily_change_perc,
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
             "daily_changes": daily_changes,
             "portfolio_data": portfolio_data,
         }
-        
+        print("Portfolio:\n\n",portfolio_response)
         return jsonify(portfolio_response), 200
 
     except Exception as e:
         logging.error(f"Error in portfolio: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+
+# previous logic :
+
+# @app.route('/api/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         # Extract client ID and current date
+#         client_id = request.json.get('client_id')
+#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load client orders
+#         if USE_AWS:
+#             # Load orders from AWS S3
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info(f"Fetched orders for client_id: {client_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             except Exception as e:
+#                 logging.error(f"Error fetching orders from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching orders: {e}"}), 500
+#         else:
+#             # Load orders from local storage
+#             order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+#             if not os.path.exists(order_file_path):
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             with open(order_file_path, 'r') as file:
+#                 client_orders = json.load(file)
+
+        # # Initialize portfolio data and metrics
+        # portfolio_data = []
+        # portfolio_current_value = 0
+        # portfolio_daily_change = 0
+        # portfolio_investment_gain_loss = 0
+
+#         # Load or initialize daily changes
+#         if USE_AWS:
+#             daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 daily_changes = {}
+#             except Exception as e:
+#                 logging.error(f"Error fetching daily changes from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+#         else:
+#             daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     daily_changes = json.load(file)
+#             else:
+#                 daily_changes = {}
+
+#         # Process client orders
+#         for order in client_orders:
+#             asset_class = order.get('AssetClass', 'N/A')
+#             name = order.get('Name', 'N/A')
+#             symbol = order.get('Symbol', 'N/A')
+#             units = order.get('Units', 0)
+#             bought_price = order.get('UnitPrice', 0)
+#             transaction_amount = order.get('TransactionAmount', 0)
+
+#             # Fetch current stock price
+#             def fetch_current_stock_price(ticker):
+#                 stock = yf.Ticker(ticker)
+#                 try:
+#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
+#                     return current_price
+#                 except Exception as e:
+#                     logging.error(f"Error fetching stock price for {ticker}: {e}")
+#                     return 0
+
+#             current_price = fetch_current_stock_price(symbol)
+#             diff_price = current_price - bought_price
+#             daily_price_change = diff_price
+#             daily_value_change = daily_price_change * units
+#             current_value = current_price * units
+
+#             # Calculate investment gain/loss and other metrics
+#             investment_gain_loss = diff_price * units
+#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+
+#             # Append data to portfolio
+#             portfolio_data.append({
+#                 "assetClass": asset_class,
+#                 "name": name,
+#                 "symbol": symbol,
+#                 "Quantity": units,
+#                 "Delayed_Price": current_price,
+#                 "current_value": current_value,
+#                 "Daily_Price_Change": daily_price_change,
+#                 "Daily_Value_Change": daily_value_change,
+#                 "Amount_Invested_per_Unit": bought_price,
+#                 "Amount_Invested": transaction_amount,
+#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+#                 "Investment_Gain_or_Loss": investment_gain_loss,
+#                 "Time_Held": order.get('Date', 'N/A'),
+#             })
+
+#             # Update portfolio metrics
+#             portfolio_current_value += current_value
+#             portfolio_daily_change += daily_price_change
+#             portfolio_investment_gain_loss += investment_gain_loss
+
+#         # Calculate daily change percentages
+#         portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+
+#         # Update daily changes for the current date
+#         daily_changes[curr_date] = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#         }
+
+#         # Save daily changes and portfolio data
+#         if USE_AWS:
+#             # Save daily changes to AWS
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=daily_changes_key,
+#                     Body=json.dumps(daily_changes),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving daily changes to AWS: {e}")
+#                 return jsonify({"message": f"Error saving daily changes: {e}"}), 500
+
+#             # Save portfolio data to AWS
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=portfolio_key,
+#                     Body=json.dumps(portfolio_data),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving portfolio data to AWS: {e}")
+#                 return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+#         else:
+#             # Save daily changes locally
+#             with open(daily_changes_file, 'w') as file:
+#                 json.dump(daily_changes, file, indent=4)
+
+#             # Save portfolio data locally
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             with open(portfolio_file_path, 'w') as file:
+#                 json.dump(portfolio_data, file, indent=4)
+
+#         # Response data
+#         portfolio_response = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#             "daily_changes": daily_changes,
+#             "portfolio_data": portfolio_data,
+#         }
+        
+#         return jsonify(portfolio_response), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
 # Updated Portfolio List using Local Storage :
@@ -8137,7 +8347,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 #                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
 #                 # Safely get the correct daily change value
-#                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+#                 value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
 #                 # Append if the value is not zero and is after or on the start date
 #                 if value != 0 and date >= start_date:
@@ -8292,7 +8502,7 @@ def actual_vs_predicted():
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -8471,7 +8681,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -8710,7 +8920,7 @@ def get_current_quarter_dates():
 #     try:
 #         # Retrieve client ID and current portfolio daily change
 #         client_id = request.json.get('client_id')
-#         portfolio_daily_change = request.json.get('porfolio_daily_change')
+#         portfolio_daily_change = request.json.get('portfolio_daily_change')
 #         current_date = datetime.now().strftime("%Y-%m-%d")
 
 #         current_quarter = "2024_Q4"
@@ -9541,7 +9751,7 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -13720,11 +13930,10 @@ def start_chatbot():
         print(f"❌ Error in chatbot start: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-@app.route('/api/tax-chatbot', methods=['POST'])
-def tax_chatbot():
-    """
-    Handles the tax chatbot interaction by storing user responses and returning the next question.
-    """
+# #generate tax suggestions :
+
+@app.route('/api/generate-tax-suggestions', methods=['POST']) 
+def generate_tax_suggestions():
     try:
         # 🔹 Extract the user's answer from the request
         data = request.json.get('data')
@@ -13788,6 +13997,75 @@ def tax_chatbot():
     except Exception as e:
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# @app.route('/api/tax-chatbot', methods=['POST']) #generate-tax-suggestions
+# def tax_chatbot():
+#     """
+#     Handles the tax chatbot interaction by storing user responses and returning the next question.
+#     """
+#     try:
+#         # 🔹 Extract the user's answer from the request
+#         data = request.json.get('data')
+ 
+#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+#             questions = [item.get('question', None) for item in data]
+#             answers = [item.get('answer', None) for item in data]
+#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+ 
+#             print("Questions:", questions)
+#             print("Answers:", answers)
+            
+#         else:
+#             return jsonify({"message": "Invalid data format"}), 400
+ 
+#         # 🔹 Validate that an answer was provided
+#         if not answers:
+#             return jsonify({"message": "Missing answers field."}), 400
+        
+    
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+        
+#         # Store User Responses : # need to map questions with the ans
+#         # user_responses = {
+#         #     "question": questions,
+#         #     "answer": answers
+#         # }
+        
+#         # print("User Responses :", user_responses)
+#         print("User Responses :", data)
+        
+#         save_user_responses(client_id, data)
+#         # save_user_responses(client_id, user_responses)
+        
+#         # Get Tax Rates :
+#         TAX_RATES = get_latest_tax_rates()
+#         print("Final Tax Rates:", TAX_RATES)
+        
+#         # Calculate Tax Details :
+#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+#         print("Generating Tax Calculations :",tax_result)
+        
+#         # Generate Tax Suggestions :
+#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+#         print("Generating Tax Suggestions",tax_advice)
+        
+#         # revisit_assessment_count['client_id'] += 1
+
+#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+        
+#         return jsonify({
+#             "message": "Assessment completed.",
+#             # "revisit_assessment_count": revisit_assessment_count,
+#             "TAX_RATES": TAX_RATES,
+#             "tax_details": tax_result,
+#             "suggestions": tax_advice
+#         }), 200
+ 
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
      
 # retrive previous tax suggestions :
 
