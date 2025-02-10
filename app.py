@@ -66,8 +66,10 @@ from src.utils.aws_config import *
 from src.utils.model_config import *
 
 ########################### Sign in Sign using aws ###################################################
+from datetime import timedelta
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)  # 🔹 Increase to 12 hours
 
 from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
@@ -531,6 +533,8 @@ def sign_up():
 
 
 from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+
 
 @app.route('/api/sign-in', methods=['POST'])
 def sign_in():
@@ -551,16 +555,26 @@ def sign_in():
 
         # Create JWT token
         token = create_access_token(identity=email)  # `identity` will be stored as the `sub` claim
+        refresh_token = create_refresh_token(identity=email, expires_delta=timedelta(days=7))  # 🔹 Refresh token valid for 7 days
 
         # Return the token
         return jsonify({
             "message": "Sign in successful",
-            "token": token
+            "token": token,
+            "refresh_token": refresh_token  # Include the refresh token in the response for future use
         }), 200
 
     except Exception as e:
         print(f"Error during sign-in: {e}")
         return jsonify({"message": "Internal server error"}), 500
+
+# can be called to get a new access token when the current one expires.
+@app.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True)  # Requires the refresh token
+def refresh():
+    identity = get_jwt_identity()
+    new_access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+    return jsonify(access_token=new_access_token), 200
 
 
 #  # 4. Forgot Password
