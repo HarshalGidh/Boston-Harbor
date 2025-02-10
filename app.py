@@ -573,7 +573,7 @@ def sign_in():
 @jwt_required(refresh=True)  # Requires the refresh token
 def refresh():
     identity = get_jwt_identity()
-    new_access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+    new_access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=12))
     return jsonify(access_token=new_access_token), 200
 
 
