@@ -58,7 +58,7 @@ print(f"DEBUG: {os.getenv('DEBUG')}")
 # # AWS keys
 from src.utils.aws_config import * 
 
-
+# signUp_user_folder
 
 # =------------------------------------------------------=
 
@@ -6774,7 +6774,21 @@ def save_data_to_local(client_id, client_transactions, order_file_path, order_da
 # Local storage path (if USE_AWS is False)
 LOCAL_STORAGE_PATH = "data/orders/"
 
-# new version :
+# added available funds and realized gains/losses :
+
+import json
+import os
+import logging
+import datetime
+from flask import jsonify, request
+
+# Helper function to parse date strings (assumes format "MM/DD/YYYY, HH:MM:SS")
+def parse_date(date_str):
+    try:
+        return datetime.strptime(date_str, "%m/%d/%Y, %H:%M:%S")
+    except Exception as e:
+        logging.error(f"Error parsing date '{date_str}': {e}")
+        return datetime.min
 
 @app.route('/api/order_placed', methods=['POST'])
 def order_placed():
@@ -6784,15 +6798,27 @@ def order_placed():
         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
         funds = request.json.get('funds')
-        action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
-
-        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
-
-        # ✅ Load existing transactions from JSON file (AWS/local)
+        action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+        available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
+        realized_gains_losses = request.json.get("realized_gains_losses", 0)
+        
+        try:
+            available_funds = float(available_funds)
+        except (ValueError, TypeError):
+            available_funds = 0.0
+        try:
+            realized_gains_losses = float(realized_gains_losses)
+        except (ValueError, TypeError):
+            realized_gains_losses = 0.0
+        
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+        print("Available Funds:", available_funds)
+        print("Realized Gains/Losses:", realized_gains_losses)
+        
+        # Load existing transactions from JSON file (AWS/local)
         if USE_AWS:
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -6800,11 +6826,9 @@ def order_placed():
             except s3.exceptions.NoSuchKey:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
         else:
             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-
             if os.path.exists(order_file_path):
                 with open(order_file_path, 'r') as file:
                     client_transactions = json.load(file)
@@ -6812,51 +6836,81 @@ def order_placed():
             else:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
+        
         print("client transactions:", client_transactions)
-
-        # 🔹 **Sell Order Validation (Now Checks File Data)**
+        
+        # Sell Order Validation and FIFO Realized Gain/Loss Calculation
         if action == "sell":
             print("Sell Order Validation")
-            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
             sell_units = order_data.get("units", 0)
             sell_market = order_data.get("market") or order_data.get("Market")
-
-            print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
-
-            # ✅ Find all transactions of the asset (same market)
+            sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+            print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            
+            # Find all matching orders (for this symbol and market)
             matching_orders = [
                 order for order in client_transactions
-                if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
-                and (order.get("market") or order.get("Market")) == sell_market
+                if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+                   (order.get("market") or order.get("Market")) == sell_market
             ]
-
-            print("Matching orders of sell:", matching_orders)
-
-            # ✅ Prevent selling an asset that was never bought
-            total_units_bought = sum(order.get("units", order.get("Units", 0)) 
-                                     for order in matching_orders 
-                                     if (order.get("buy_or_sell", "").lower() == "buy" 
-                                         or order.get("Action", "").lower() == "buy"))
-
-            total_units_sold = sum(order.get("units", order.get("Units", 0)) 
-                                   for order in matching_orders 
-                                   if (order.get("buy_or_sell", "").lower() == "sell" 
-                                       or order.get("Action", "").lower() == "sell"))
-
-            available_units = total_units_bought - total_units_sold  # ✅ Net available units
-
+            print("Matching orders for sell:", matching_orders)
+            
+            # Calculate total available units
+            total_units_bought = sum(order.get("units", order.get("Units", 0))
+                                     for order in matching_orders
+                                     if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+            total_units_sold = sum(order.get("units", order.get("Units", 0))
+                                   for order in matching_orders
+                                   if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+            available_units = total_units_bought - total_units_sold
             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
-
+            
             if total_units_bought == 0:
                 return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
-
             if sell_units > available_units:
                 return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
-
+            
             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
-
-        # ✅ Standardize field names before saving (ensuring uniform format for "buy" and "sell")
+            
+            # Check if TransactionAmount is greater than available funds
+            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            print(f"Transaction amount: {transactionAmount}")
+            if transactionAmount > available_funds:
+                return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            
+            # Update available funds
+            available_funds = available_funds - transactionAmount
+            print(f"New available funds: {available_funds}")
+            
+            # Calculate realized gains/losses using FIFO
+            # Get all buy orders (for the asset in this market) and sort them in FIFO order
+            buy_orders = sorted(
+                [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+                key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+            )
+            print("FIFO buy orders:", buy_orders)
+            
+            units_to_sell = sell_units
+            fifo_profit = 0.0
+            for buy in buy_orders:
+                # Available units in this buy order
+                buy_units = float(buy.get("units", buy.get("Units", 0)))
+                # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
+                # For now, assume the buy order's full units are available in FIFO order.
+                if units_to_sell <= 0:
+                    break
+                allocation_units = min(buy_units, units_to_sell)
+                cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+                profit = allocation_units * (sell_price - cost_basis)
+                fifo_profit += profit
+                units_to_sell -= allocation_units
+            print(f"Realized profit/loss for this sell order: {fifo_profit}")
+            
+            realized_gains_losses = realized_gains_losses + fifo_profit
+            print(f"New realized gains/losses: {realized_gains_losses}")
+        
+        # Standardize field names before saving the order
         formatted_order = {
             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
             "Date": order_data.get("date") or order_data.get("Date", ""),
@@ -6868,35 +6922,38 @@ def order_placed():
             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
             "Units": order_data.get("units") or order_data.get("Units", 0)
         }
-
-        # ✅ Append the formatted order to the transaction list
+        
+        # Append the formatted order to the transaction list
         client_transactions.append(formatted_order)
-
-        # 🔹 **Save updated transactions**
+        
+        # Save updated transactions
         if USE_AWS:
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
                 Key=order_list_key,
-                Body=json.dumps(client_transactions, indent=4)
+                Body=json.dumps(client_transactions, indent=4),
+                ContentType="application/json"
             )
             print(f"✅ Saved updated transactions for client {client_id} in S3.")
-
-            # ✅ Update client summary to set isNewClient to False
+            
             try:
                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-                client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
-                s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+                client_summary['isNewClient'] = False
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=client_summary_key,
+                    Body=json.dumps(client_summary, indent=4),
+                    ContentType="application/json"
+                )
                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
             except s3.exceptions.NoSuchKey:
                 print(f"No summary file found for client {client_id} in S3.")
-
         else:
             with open(order_file_path, 'w') as file:
                 json.dump(client_transactions, file, indent=4)
             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
-
-            # ✅ Update client summary to set isNewClient to False
+            
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r+') as summary_file:
                     client_summary = json.load(summary_file)
@@ -6907,34 +6964,45 @@ def order_placed():
                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
             else:
                 print(f"No summary file found for client {client_id} in local storage.")
-
-        return jsonify({"message": "✅ Order placed successfully", "status": 200})
-
+        
+        return jsonify({"message": "✅ Order placed successfully",
+                        "status": 200,
+                        "available_funds": available_funds,
+                        "realized_gains_losses": realized_gains_losses}), 200
+    
     except Exception as e:
         print(f"❌ Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 
+# New Version : adding available funds and managing it through order placement 
 
 # @app.route('/api/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
 #         # Extract data from the request
-#         order_data = request.json.get('order_data')
+#         order_data = request.json.get('order_data', {})
 #         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
-#         funds = request.json.get('funds')  # Example extra data if needed
-#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
- 
-#         # Check whether to use AWS or local storage
+#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
+#         funds = request.json.get('funds')
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
+#         available_funds = request.json.get("available_funds","") # get the available funds
+#         realized_gains_losses = request.json.get("realized_gains_losses","") # get the realized gains/losses
+        
+#         if not available_funds:
+#             print("No available funds available, taking investment amount as available funds.")
+#             available_funds = funds #order_data.get("investmentAmount","") # get the available funds from investmentAmount
+        
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
+#         print("Available Funds : ", available_funds)
+        
+#         print("Realized Gains/Losses : ",realized_gains_losses)
+        
+#         # ✅ Load existing transactions from JSON file (AWS/local)
 #         if USE_AWS:
-#             # AWS S3 file key for the order list
 #             order_list_key = f"{order_list_folder}{client_id}_orders.json"
-#             # client_summary_key = f"{client_summary_folder}{client_id}_summary.json"
 #             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-           
-           
-#             # Load existing transactions
+
 #             try:
 #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
 #                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -6942,28 +7010,11 @@ def order_placed():
 #             except s3.exceptions.NoSuchKey:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-           
-#             # Save new order
-#             save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
- 
-#             # Update client summary file to set isNewClient to False
-#             print(f"summary_file_path keys {client_summary_key}")
-#             try:
-#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
-#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-#                 print(f"summary_file_path {client_summary}")
-#                 client_summary['isNewClient'] = False  # Set isNewClient to False
-#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary))
-#                 print(f"Updated client summary for {client_id} to set isNewClient as False in S3")
-#             except s3.exceptions.NoSuchKey:
-#                 print(f"No summary file found for client {client_id} in S3.")
- 
+
 #         else:
-#             # Local storage paths
 #             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
 #             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-           
-#             # Load existing transactions
+
 #             if os.path.exists(order_file_path):
 #                 with open(order_file_path, 'r') as file:
 #                     client_transactions = json.load(file)
@@ -6971,28 +7022,264 @@ def order_placed():
 #             else:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
- 
-#             # Save new order
-#             save_data_to_local(client_id, client_transactions, order_file_path, order_data)
- 
-#             # Update client summary file to set isNewClient to False
+
+#         print("client transactions:", client_transactions)
+
+#         # 🔹 **Sell Order Validation (Now Checks File Data)**
+#         if action == "sell":
+#             print("Sell Order Validation")
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+#             sell_units = order_data.get("units", 0)
+#             sell_market = order_data.get("market") or order_data.get("Market")
+
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
+
+#             # ✅ Find all transactions of the asset (same market)
+#             matching_orders = [
+#                 order for order in client_transactions
+#                 if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
+#                 and (order.get("market") or order.get("Market")) == sell_market
+#             ]
+
+#             print("Matching orders of sell:", matching_orders)
+
+#             # ✅ Prevent selling an asset that was never bought
+#             total_units_bought = sum(order.get("units", order.get("Units", 0)) 
+#                                      for order in matching_orders 
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" 
+#                                          or order.get("Action", "").lower() == "buy"))
+
+#             total_units_sold = sum(order.get("units", order.get("Units", 0)) 
+#                                    for order in matching_orders 
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" 
+#                                        or order.get("Action", "").lower() == "sell"))
+
+#             available_units = total_units_bought - total_units_sold  # ✅ Net available units
+
+#             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
+
+#             if total_units_bought == 0:
+#                 return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
+
+#             if sell_units > available_units:
+#                 return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
+
+#             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+            
+#             # ✅ Update available funds :
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+            
+#             # check if Transaction Amount is greater than available funds :
+#             if transactionAmount > available_funds:
+#                 return jsonify({"message": f"�� Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            
+#             # update available funds :
+#             available_funds = available_funds - transactionAmount #(sell_units * order_data.get("unit_price", 0))
+#             print(f"New available funds: {available_funds}")
+            
+#             # update the realized gains/losses :
+#             realized_gains_losses = realized_gains_losses + transactionAmount #(sell_units * order_data.get("unit_price", 0)) - (transactionAmount * order_data.get("unit_price", 0))
+#             print(f"New realized gains/losses: {realized_gains_losses}")
+            
+#         formatted_order = {
+#             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+#             "Date": order_data.get("date") or order_data.get("Date", ""),
+#             "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+#             "Name": order_data.get("name") or order_data.get("Name", ""),
+#             "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+#             "Market": order_data.get("market") or order_data.get("Market", ""),
+#             "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+#             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
+#             "Units": order_data.get("units") or order_data.get("Units", 0)
+#         }
+
+#         # ✅ Append the formatted order to the transaction list
+#         client_transactions.append(formatted_order)
+
+#         # 🔹 **Save updated transactions**
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=order_list_key,
+#                 Body=json.dumps(client_transactions, indent=4)
+#             )
+#             print(f"✅ Saved updated transactions for client {client_id} in S3.")
+
+#             # ✅ Update client summary to set isNewClient to False
+#             try:
+#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+#                 client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
+#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+#             except s3.exceptions.NoSuchKey:
+#                 print(f"No summary file found for client {client_id} in S3.")
+
+#         else:
+#             with open(order_file_path, 'w') as file:
+#                 json.dump(client_transactions, file, indent=4)
+#             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+
+#             # ✅ Update client summary to set isNewClient to False
 #             if os.path.exists(summary_file_path):
 #                 with open(summary_file_path, 'r+') as summary_file:
 #                     client_summary = json.load(summary_file)
 #                     client_summary['isNewClient'] = False
 #                     summary_file.seek(0)
-#                     summary_file.write(json.dumps(client_summary))
+#                     summary_file.write(json.dumps(client_summary, indent=4))
 #                     summary_file.truncate()
-#                 print(f"Updated client summary for {client_id} to set isNewClient as False in local storage")
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
 #             else:
 #                 print(f"No summary file found for client {client_id} in local storage.")
- 
-#         return jsonify({"message": "Order placed successfully", "status": 200})
- 
+
+#         return jsonify({"message": "✅ Order placed successfully", "status": 200})
+
 #     except Exception as e:
-#         print(f"Error occurred while placing order: {e}")
+#         print(f"❌ Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
- 
+
+
+# new version : updated sell logic correctly 
+
+# @app.route('/api/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract data from the request
+#         order_data = request.json.get('order_data', {})
+#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
+#         funds = request.json.get('funds')
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
+        
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
+
+#         # ✅ Load existing transactions from JSON file (AWS/local)
+#         if USE_AWS:
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing transactions for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+
+#         else:
+#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+
+#             if os.path.exists(order_file_path):
+#                 with open(order_file_path, 'r') as file:
+#                     client_transactions = json.load(file)
+#                 print(f"Loaded existing transactions for client {client_id} from local storage")
+#             else:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+
+#         print("client transactions:", client_transactions)
+
+#         # 🔹 **Sell Order Validation (Now Checks File Data)**
+#         if action == "sell":
+#             print("Sell Order Validation")
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+#             sell_units = order_data.get("units", 0)
+#             sell_market = order_data.get("market") or order_data.get("Market")
+
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
+
+#             # ✅ Find all transactions of the asset (same market)
+#             matching_orders = [
+#                 order for order in client_transactions
+#                 if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
+#                 and (order.get("market") or order.get("Market")) == sell_market
+#             ]
+
+#             print("Matching orders of sell:", matching_orders)
+
+#             # ✅ Prevent selling an asset that was never bought
+#             total_units_bought = sum(order.get("units", order.get("Units", 0)) 
+#                                      for order in matching_orders 
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" 
+#                                          or order.get("Action", "").lower() == "buy"))
+
+#             total_units_sold = sum(order.get("units", order.get("Units", 0)) 
+#                                    for order in matching_orders 
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" 
+#                                        or order.get("Action", "").lower() == "sell"))
+
+#             available_units = total_units_bought - total_units_sold  # ✅ Net available units
+
+#             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
+
+#             if total_units_bought == 0:
+#                 return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
+
+#             if sell_units > available_units:
+#                 return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
+
+#             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+
+#         # ✅ Standardize field names before saving (ensuring uniform format for "buy" and "sell")
+#         formatted_order = {
+#             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+#             "Date": order_data.get("date") or order_data.get("Date", ""),
+#             "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+#             "Name": order_data.get("name") or order_data.get("Name", ""),
+#             "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+#             "Market": order_data.get("market") or order_data.get("Market", ""),
+#             "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+#             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
+#             "Units": order_data.get("units") or order_data.get("Units", 0)
+#         }
+
+#         # ✅ Append the formatted order to the transaction list
+#         client_transactions.append(formatted_order)
+
+#         # 🔹 **Save updated transactions**
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=order_list_key,
+#                 Body=json.dumps(client_transactions, indent=4)
+#             )
+#             print(f"✅ Saved updated transactions for client {client_id} in S3.")
+
+#             # ✅ Update client summary to set isNewClient to False
+#             try:
+#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+#                 client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
+#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+#             except s3.exceptions.NoSuchKey:
+#                 print(f"No summary file found for client {client_id} in S3.")
+
+#         else:
+#             with open(order_file_path, 'w') as file:
+#                 json.dump(client_transactions, file, indent=4)
+#             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+
+#             # ✅ Update client summary to set isNewClient to False
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r+') as summary_file:
+#                     client_summary = json.load(summary_file)
+#                     client_summary['isNewClient'] = False
+#                     summary_file.seek(0)
+#                     summary_file.write(json.dumps(client_summary, indent=4))
+#                     summary_file.truncate()
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
+#             else:
+#                 print(f"No summary file found for client {client_id} in local storage.")
+
+#         return jsonify({"message": "✅ Order placed successfully", "status": 200})
+
+#     except Exception as e:
+#         print(f"❌ Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
 
 # ## Using AWS to Show Order :
 @app.route('/api/show_order_list', methods=['POST'])
