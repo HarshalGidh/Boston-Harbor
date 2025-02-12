@@ -6780,21 +6780,19 @@ LOCAL_STORAGE_PATH = "data/orders/"
 def order_placed():
     try:
         # Extract data from the request
-        order_data = request.json.get('order_data')
+        order_data = request.json.get('order_data', {})
         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-        client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
-        funds = request.json.get('funds')  # Example extra data if needed
-        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
- 
-        # Check whether to use AWS or local storage
+        client_id = request.json.get('client_id', 'RS4603')  # Default client ID
+        funds = request.json.get('funds')
+        action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
+
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
+
+        # ✅ Load existing transactions from JSON file (AWS/local)
         if USE_AWS:
-            # AWS S3 file key for the order list
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
-            # client_summary_key = f"{client_summary_folder}{client_id}_summary.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-           
-           
-            # Load existing transactions
+
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -6802,28 +6800,11 @@ def order_placed():
             except s3.exceptions.NoSuchKey:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-           
-            # Save new order
-            save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
- 
-            # Update client summary file to set isNewClient to False
-            print(f"summary_file_path keys {client_summary_key}")
-            try:
-                summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
-                client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-                print(f"summary_file_path {client_summary}")
-                client_summary['isNewClient'] = False  # Set isNewClient to False
-                s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary))
-                print(f"Updated client summary for {client_id} to set isNewClient as False in S3")
-            except s3.exceptions.NoSuchKey:
-                print(f"No summary file found for client {client_id} in S3.")
- 
+
         else:
-            # Local storage paths
             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-           
-            # Load existing transactions
+
             if os.path.exists(order_file_path):
                 with open(order_file_path, 'r') as file:
                     client_transactions = json.load(file)
@@ -6831,27 +6812,186 @@ def order_placed():
             else:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
- 
-            # Save new order
-            save_data_to_local(client_id, client_transactions, order_file_path, order_data)
- 
-            # Update client summary file to set isNewClient to False
+
+        print("client transactions:", client_transactions)
+
+        # 🔹 **Sell Order Validation (Now Checks File Data)**
+        if action == "sell":
+            print("Sell Order Validation")
+            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+            sell_units = order_data.get("units", 0)
+            sell_market = order_data.get("market") or order_data.get("Market")
+
+            print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
+
+            # ✅ Find all transactions of the asset (same market)
+            matching_orders = [
+                order for order in client_transactions
+                if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
+                and (order.get("market") or order.get("Market")) == sell_market
+            ]
+
+            print("Matching orders of sell:", matching_orders)
+
+            # ✅ Prevent selling an asset that was never bought
+            total_units_bought = sum(order.get("units", order.get("Units", 0)) 
+                                     for order in matching_orders 
+                                     if (order.get("buy_or_sell", "").lower() == "buy" 
+                                         or order.get("Action", "").lower() == "buy"))
+
+            total_units_sold = sum(order.get("units", order.get("Units", 0)) 
+                                   for order in matching_orders 
+                                   if (order.get("buy_or_sell", "").lower() == "sell" 
+                                       or order.get("Action", "").lower() == "sell"))
+
+            available_units = total_units_bought - total_units_sold  # ✅ Net available units
+
+            print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
+
+            if total_units_bought == 0:
+                return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
+
+            if sell_units > available_units:
+                return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
+
+            print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+
+        # ✅ Standardize field names before saving (ensuring uniform format for "buy" and "sell")
+        formatted_order = {
+            "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+            "Date": order_data.get("date") or order_data.get("Date", ""),
+            "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+            "Name": order_data.get("name") or order_data.get("Name", ""),
+            "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+            "Market": order_data.get("market") or order_data.get("Market", ""),
+            "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+            "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
+            "Units": order_data.get("units") or order_data.get("Units", 0)
+        }
+
+        # ✅ Append the formatted order to the transaction list
+        client_transactions.append(formatted_order)
+
+        # 🔹 **Save updated transactions**
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=order_list_key,
+                Body=json.dumps(client_transactions, indent=4)
+            )
+            print(f"✅ Saved updated transactions for client {client_id} in S3.")
+
+            # ✅ Update client summary to set isNewClient to False
+            try:
+                summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+                client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
+                s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+                print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+            except s3.exceptions.NoSuchKey:
+                print(f"No summary file found for client {client_id} in S3.")
+
+        else:
+            with open(order_file_path, 'w') as file:
+                json.dump(client_transactions, file, indent=4)
+            print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+
+            # ✅ Update client summary to set isNewClient to False
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r+') as summary_file:
                     client_summary = json.load(summary_file)
                     client_summary['isNewClient'] = False
                     summary_file.seek(0)
-                    summary_file.write(json.dumps(client_summary))
+                    summary_file.write(json.dumps(client_summary, indent=4))
                     summary_file.truncate()
-                print(f"Updated client summary for {client_id} to set isNewClient as False in local storage")
+                print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
             else:
                 print(f"No summary file found for client {client_id} in local storage.")
- 
-        return jsonify({"message": "Order placed successfully", "status": 200})
- 
+
+        return jsonify({"message": "✅ Order placed successfully", "status": 200})
+
     except Exception as e:
-        print(f"Error occurred while placing order: {e}")
+        print(f"❌ Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+
+
+# @app.route('/api/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract data from the request
+#         order_data = request.json.get('order_data')
+#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
+#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
+#         funds = request.json.get('funds')  # Example extra data if needed
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
+ 
+#         # Check whether to use AWS or local storage
+#         if USE_AWS:
+#             # AWS S3 file key for the order list
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             # client_summary_key = f"{client_summary_folder}{client_id}_summary.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+           
+           
+#             # Load existing transactions
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing transactions for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+           
+#             # Save new order
+#             save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
+ 
+#             # Update client summary file to set isNewClient to False
+#             print(f"summary_file_path keys {client_summary_key}")
+#             try:
+#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+#                 print(f"summary_file_path {client_summary}")
+#                 client_summary['isNewClient'] = False  # Set isNewClient to False
+#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary))
+#                 print(f"Updated client summary for {client_id} to set isNewClient as False in S3")
+#             except s3.exceptions.NoSuchKey:
+#                 print(f"No summary file found for client {client_id} in S3.")
+ 
+#         else:
+#             # Local storage paths
+#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+           
+#             # Load existing transactions
+#             if os.path.exists(order_file_path):
+#                 with open(order_file_path, 'r') as file:
+#                     client_transactions = json.load(file)
+#                 print(f"Loaded existing transactions for client {client_id} from local storage")
+#             else:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+ 
+#             # Save new order
+#             save_data_to_local(client_id, client_transactions, order_file_path, order_data)
+ 
+#             # Update client summary file to set isNewClient to False
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r+') as summary_file:
+#                     client_summary = json.load(summary_file)
+#                     client_summary['isNewClient'] = False
+#                     summary_file.seek(0)
+#                     summary_file.write(json.dumps(client_summary))
+#                     summary_file.truncate()
+#                 print(f"Updated client summary for {client_id} to set isNewClient as False in local storage")
+#             else:
+#                 print(f"No summary file found for client {client_id} in local storage.")
+ 
+#         return jsonify({"message": "Order placed successfully", "status": 200})
+ 
+#     except Exception as e:
+#         print(f"Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
  
 
 # ## Using AWS to Show Order :
@@ -13524,42 +13664,97 @@ tax_questions = [
      "Have you made any Large One-Time Purchases in the Past Year?",
 ]
 
-# question_index = 0 # making it global to keep track of it
+# previous working system however it didnt saved sessions :
 
-# @app.route('/api/start-tax-chatbot', methods=['POST'])
-# def start_chatbot():
-#     """
-#     Starts the tax assessment chatbot by returning the first question.
-#     """
-#     try:
-#         if not tax_questions:
-#             return jsonify({"message": "No tax questions available"}), 500
+@app.route('/api/start-tax-chatbot', methods=['POST'])
+def start_chatbot():
+    """
+    Starts the tax assessment chatbot by returning the first question.
+    """
+    try:
+        if not tax_questions:
+            return jsonify({"message": "No tax questions available"}), 500
         
-#         if question_index != 0:
-#             print("Not the first question,called by mistake probably")
-#             return jsonify({"message": "Not the first question,called by mistake probably"}), 204
-        
-#         print("Starting tax assessment chatbot...")
-#         print("tax_questions",tax_questions)
-        
-#         # return jsonify({"message": "Tax Questions Passed successfully",
-#         #                 "tax_questions": tax_questions}),200
-        
-#         first_question = tax_questions[0]  # Access list inside dictionary
-#         print("First Question",first_question)
-        
-#         return jsonify({"message": first_question,
-#                         "question_index": 0,
-#                         "tax_questions":tax_questions}), 200
+        print("Starting tax assessment chatbot...")
+        print(tax_questions)
+        return jsonify({"message": "Tax Questions Passed successfully",
+                        "tax_questions": tax_questions}),200
+        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
+        # return jsonify({"message": first_question, "question_index": 0}), 200
 
-#     except Exception as e:
-#         print(f"❌ Error in chatbot start: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"❌ Error in chatbot start: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# #generate tax suggestions :
+
+@app.route('/api/generate-tax-suggestions', methods=['POST']) 
+def generate_tax_suggestions():
+    try:
+        # 🔹 Extract the user's answer from the request
+        data = request.json.get('data')
+ 
+        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+            questions = [item.get('question', None) for item in data]
+            answers = [item.get('answer', None) for item in data]
+            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+ 
+            print("Questions:", questions)
+            print("Answers:", answers)
+            
+        else:
+            return jsonify({"message": "Invalid data format"}), 400
+ 
+        # 🔹 Validate that an answer was provided
+        if not answers:
+            return jsonify({"message": "Missing answers field."}), 400
+        
     
-# import mistune
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
+        
+        # Store User Responses : # need to map questions with the ans
+        # user_responses = {
+        #     "question": questions,
+        #     "answer": answers
+        # }
+        
+        # print("User Responses :", user_responses)
+        print("User Responses :", data)
+        
+        save_user_responses(client_id, data)
+        # save_user_responses(client_id, user_responses)
+        
+        # Get Tax Rates :
+        TAX_RATES = get_latest_tax_rates()
+        print("Final Tax Rates:", TAX_RATES)
+        
+        # Calculate Tax Details :
+        tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        print("Generating Tax Calculations :",tax_result)
+        
+        # Generate Tax Suggestions :
+        tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+        print("Generating Tax Suggestions",tax_advice)
+        
+        # revisit_assessment_count['client_id'] += 1
 
+        save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+        # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+        
+        return jsonify({
+            "message": "Assessment completed.",
+            # "revisit_assessment_count": revisit_assessment_count,
+            "TAX_RATES": TAX_RATES,
+            "tax_details": tax_result,
+            "suggestions": tax_advice
+        }), 200
+ 
+    except Exception as e:
+        print(f"❌ Error in chatbot: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-# @app.route('/api/tax-chatbot', methods=['POST'])
+# @app.route('/api/tax-chatbot', methods=['POST']) #generate-tax-suggestions
 # def tax_chatbot():
 #     """
 #     Handles the tax chatbot interaction by storing user responses and returning the next question.
@@ -13571,6 +13766,8 @@ tax_questions = [
 #         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
 #             questions = [item.get('question', None) for item in data]
 #             answers = [item.get('answer', None) for item in data]
+#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
+ 
 #             print("Questions:", questions)
 #             print("Answers:", answers)
             
@@ -13581,27 +13778,21 @@ tax_questions = [
 #         if not answers:
 #             return jsonify({"message": "Missing answers field."}), 400
         
+    
 #         client_id = request.json.get('client_id', None)
 #         print("Client ID:", client_id)
         
-#         question_index = request.json.get('question_index', 0) #,question_index+1
-#         print("Question Index:", question_index)
+#         # Store User Responses : # need to map questions with the ans
+#         # user_responses = {
+#         #     "question": questions,
+#         #     "answer": answers
+#         # }
         
-#         if question_index >= 0 and question_index < len(tax_questions) -1:
-#             question_index += 1
-#             # next_question = tax_questions[question_index]
-#             next_question = tax_questions[question_index] if question_index < len(tax_questions) else None
-#             print("Next Question:", next_question)
-#             print("User Responses :", data)
-#             save_user_responses(client_id, data,question_index)
-#             return jsonify({"message": next_question,
-#                             "question_index": question_index,
-#                             "tax_questions": tax_questions}), 200
-            
-#         # When question_index >= len(tax_questions) :
-#         print(question_index)
+#         # print("User Responses :", user_responses)
 #         print("User Responses :", data)
-#         save_user_responses(client_id, data,question_index)
+        
+#         save_user_responses(client_id, data)
+#         # save_user_responses(client_id, user_responses)
         
 #         # Get Tax Rates :
 #         TAX_RATES = get_latest_tax_rates()
@@ -13618,9 +13809,6 @@ tax_questions = [
 #         # revisit_assessment_count['client_id'] += 1
 
 #         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-        
-#         question_index = 0 # resets the question index
-        
 #         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
         
 #         return jsonify({
@@ -13635,58 +13823,55 @@ tax_questions = [
 #         print(f"❌ Error in chatbot: {e}")
 #         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
      
-# # retrive previous tax suggestions :
+# retrive previous tax suggestions :
 
-# @app.route('/api/get-tax-suggestions', methods=['POST'])
-# def get_tax_suggestions():
-#     """
-#     Retrieves the tax suggestions for a given client_id.
-#     """
-#     try:
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
+@app.route('/api/get-tax-suggestions', methods=['POST'])
+def get_tax_suggestions():
+    """
+    Retrieves the tax suggestions for a given client_id.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
     
-#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+        suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
     
-#         if USE_AWS:
-#             # Download from S3
-#             # s3 = boto3.client('s3')
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-#             suggestions_json = response['Body'].read().decode('utf-8')
-#             print("Retrieved tax suggestions data:", suggestions_json)
-#             return jsonify(json.loads(suggestions_json)),200
+        if USE_AWS:
+            # Download from S3
+            # s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+            suggestions_json = response['Body'].read().decode('utf-8')
+            print("Retrieved tax suggestions data:", suggestions_json)
+            return jsonify(json.loads(suggestions_json)),200
     
-#     except Exception as e:
-#         print(f"�� No tax suggestions found: {e}")
-#         return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+    except Exception as e:
+        print(f"�� No tax suggestions found: {e}")
+        return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
     
-# # Get Previous user responses :
+# Get Previous user responses :
 
-# @app.route('/api/get-user-responses', methods=['POST'])
-# def get_user_responses():
-#     """
-#     Retrieves the user responses for a given client_id.
-#     """
-#     try:
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
+@app.route('/api/get-user-responses', methods=['POST'])
+def get_user_responses():
+    """
+    Retrieves the user responses for a given client_id.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
         
-#         responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
         
-#         if USE_AWS:
-#             # Download from S3
-#             # s3 = boto3.client('s3')
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
-#             responses_json = response['Body'].read().decode('utf-8')
-#             print("Retrieved responses data:", responses_json)
-#             print(len(tax_questions))
-#             # return jsonify({json.loads(responses_json),"question_length":len(tax_questions)}),200
-#             return jsonify({"history":json.loads(responses_json), "question_length": len(tax_questions)}), 200
-
+        if USE_AWS:
+            # Download from S3
+            # s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
+            responses_json = response['Body'].read().decode('utf-8')
+            print("Retrieved responses data:", responses_json)
+            return jsonify(json.loads(responses_json)),200
     
-#     except Exception as e:
-#         print(f"�� No user responses found: {e}")
-#         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+    except Exception as e:
+        print(f"�� No user responses found: {e}")
+        return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 
 # testing purposes : 
@@ -13922,214 +14107,6 @@ def get_chat_history():
 
 #######################################################################################################
 
-# previous working system however it didnt saved sessions :
-
-@app.route('/api/start-tax-chatbot', methods=['POST'])
-def start_chatbot():
-    """
-    Starts the tax assessment chatbot by returning the first question.
-    """
-    try:
-        if not tax_questions:
-            return jsonify({"message": "No tax questions available"}), 500
-        
-        print("Starting tax assessment chatbot...")
-        print(tax_questions)
-        return jsonify({"message": "Tax Questions Passed successfully",
-                        "tax_questions": tax_questions}),200
-        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
-        # return jsonify({"message": first_question, "question_index": 0}), 200
-
-    except Exception as e:
-        print(f"❌ Error in chatbot start: {e}")
-        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-
-# #generate tax suggestions :
-
-@app.route('/api/generate-tax-suggestions', methods=['POST']) 
-def generate_tax_suggestions():
-    try:
-        # 🔹 Extract the user's answer from the request
-        data = request.json.get('data')
- 
-        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-            questions = [item.get('question', None) for item in data]
-            answers = [item.get('answer', None) for item in data]
-            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
-            print("Questions:", questions)
-            print("Answers:", answers)
-            
-        else:
-            return jsonify({"message": "Invalid data format"}), 400
- 
-        # 🔹 Validate that an answer was provided
-        if not answers:
-            return jsonify({"message": "Missing answers field."}), 400
-        
-    
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
-        
-        # Store User Responses : # need to map questions with the ans
-        # user_responses = {
-        #     "question": questions,
-        #     "answer": answers
-        # }
-        
-        # print("User Responses :", user_responses)
-        print("User Responses :", data)
-        
-        save_user_responses(client_id, data)
-        # save_user_responses(client_id, user_responses)
-        
-        # Get Tax Rates :
-        TAX_RATES = get_latest_tax_rates()
-        print("Final Tax Rates:", TAX_RATES)
-        
-        # Calculate Tax Details :
-        tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-        print("Generating Tax Calculations :",tax_result)
-        
-        # Generate Tax Suggestions :
-        tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
-        print("Generating Tax Suggestions",tax_advice)
-        
-        # revisit_assessment_count['client_id'] += 1
-
-        save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-        # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
-        
-        return jsonify({
-            "message": "Assessment completed.",
-            # "revisit_assessment_count": revisit_assessment_count,
-            "TAX_RATES": TAX_RATES,
-            "tax_details": tax_result,
-            "suggestions": tax_advice
-        }), 200
- 
-    except Exception as e:
-        print(f"❌ Error in chatbot: {e}")
-        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-
-# @app.route('/api/tax-chatbot', methods=['POST']) #generate-tax-suggestions
-# def tax_chatbot():
-#     """
-#     Handles the tax chatbot interaction by storing user responses and returning the next question.
-#     """
-#     try:
-#         # 🔹 Extract the user's answer from the request
-#         data = request.json.get('data')
- 
-#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-#             questions = [item.get('question', None) for item in data]
-#             answers = [item.get('answer', None) for item in data]
-#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
-#             print("Questions:", questions)
-#             print("Answers:", answers)
-            
-#         else:
-#             return jsonify({"message": "Invalid data format"}), 400
- 
-#         # 🔹 Validate that an answer was provided
-#         if not answers:
-#             return jsonify({"message": "Missing answers field."}), 400
-        
-    
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
-        
-#         # Store User Responses : # need to map questions with the ans
-#         # user_responses = {
-#         #     "question": questions,
-#         #     "answer": answers
-#         # }
-        
-#         # print("User Responses :", user_responses)
-#         print("User Responses :", data)
-        
-#         save_user_responses(client_id, data)
-#         # save_user_responses(client_id, user_responses)
-        
-#         # Get Tax Rates :
-#         TAX_RATES = get_latest_tax_rates()
-#         print("Final Tax Rates:", TAX_RATES)
-        
-#         # Calculate Tax Details :
-#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-#         print("Generating Tax Calculations :",tax_result)
-        
-#         # Generate Tax Suggestions :
-#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
-#         print("Generating Tax Suggestions",tax_advice)
-        
-#         # revisit_assessment_count['client_id'] += 1
-
-#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
-        
-#         return jsonify({
-#             "message": "Assessment completed.",
-#             # "revisit_assessment_count": revisit_assessment_count,
-#             "TAX_RATES": TAX_RATES,
-#             "tax_details": tax_result,
-#             "suggestions": tax_advice
-#         }), 200
- 
-#     except Exception as e:
-#         print(f"❌ Error in chatbot: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-     
-# retrive previous tax suggestions :
-
-@app.route('/api/get-tax-suggestions', methods=['POST'])
-def get_tax_suggestions():
-    """
-    Retrieves the tax suggestions for a given client_id.
-    """
-    try:
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
-    
-        suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
-    
-        if USE_AWS:
-            # Download from S3
-            # s3 = boto3.client('s3')
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-            suggestions_json = response['Body'].read().decode('utf-8')
-            print("Retrieved tax suggestions data:", suggestions_json)
-            return jsonify(json.loads(suggestions_json)),200
-    
-    except Exception as e:
-        print(f"�� No tax suggestions found: {e}")
-        return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
-    
-# Get Previous user responses :
-
-@app.route('/api/get-user-responses', methods=['POST'])
-def get_user_responses():
-    """
-    Retrieves the user responses for a given client_id.
-    """
-    try:
-        client_id = request.json.get('client_id', None)
-        print("Client ID:", client_id)
-        
-        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
-        
-        if USE_AWS:
-            # Download from S3
-            # s3 = boto3.client('s3')
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
-            responses_json = response['Body'].read().decode('utf-8')
-            print("Retrieved responses data:", responses_json)
-            return jsonify(json.loads(responses_json)),200
-    
-    except Exception as e:
-        print(f"�� No user responses found: {e}")
-        return jsonify({"message": f"No user responses found: {str(e)}"}), 404
 
 #################################################################################################################################
 
