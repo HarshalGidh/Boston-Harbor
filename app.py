@@ -6799,8 +6799,11 @@ def order_placed():
         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
         funds = request.json.get('funds')
         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+        assetClass = order_data.get("assetClass","").lower()
         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
         realized_gains_losses = request.json.get("realized_gains_losses", 0)
+        
+        print("assetClass : ", assetClass)
         
         try:
             available_funds = float(available_funds)
@@ -6849,11 +6852,18 @@ def order_placed():
             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
             
             # Find all matching orders (for this symbol and market)
-            matching_orders = [
-                order for order in client_transactions
-                if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
-                   (order.get("market") or order.get("Market")) == sell_market
-            ]
+            if assetClass == "stock" and assetClass == "etf":
+                matching_orders = [
+                    order for order in client_transactions
+                    if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+                    (order.get("market") or order.get("Market")) == sell_market
+                ]
+            else:
+                matching_orders = [
+                    order for order in client_transactions
+                    if (order.get("symbol") or order.get("Symbol")) == sell_symbol
+                ]
+                
             print("Matching orders for sell:", matching_orders)
             
             # Calculate total available units
@@ -6867,17 +6877,17 @@ def order_placed():
             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
             
             if total_units_bought == 0:
-                return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
+                return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
             if sell_units > available_units:
-                return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
+                return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
             
             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
             
-            # Check if TransactionAmount is greater than available funds
-            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
-            print(f"Transaction amount: {transactionAmount}")
-            if transactionAmount > available_funds:
-                return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            # Check if TransactionAmount is greater than available funds : no need to check while selling 
+            # transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            # print(f"Transaction amount: {transactionAmount}")
+            # if transactionAmount > available_funds:
+            #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
             
             # Update available funds
             available_funds = available_funds - transactionAmount
@@ -6909,6 +6919,13 @@ def order_placed():
             
             realized_gains_losses = realized_gains_losses + fifo_profit
             print(f"New realized gains/losses: {realized_gains_losses}")
+        
+        
+        # Check if TransactionAmount is greater than available funds
+        transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+        print(f"Transaction amount: {transactionAmount}")
+        if transactionAmount > available_funds:
+            return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
         
         # Standardize field names before saving the order
         formatted_order = {
@@ -13629,7 +13646,7 @@ multi_ai_agent = Agent(
 )
 
 # Function to generate tax-saving suggestions using Multi-AI Agent
-def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
+def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
     """
     Generate tax-saving suggestions using the multi-ai-agent (Groq + Phi).
     """
@@ -13713,6 +13730,7 @@ def generate_tax_suggestions(user_responses, client_id,TAX_RATES):
                         - **Investment Portfolio:** {portfolio_data}
                         - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
                         - **Business Details:** {client_data.get('business', 'N/A')}
+                        - **Some user information related to tax:** {user_responses}
 
                         Generate **a structured tax-saving strategy** that includes:
 
@@ -13980,31 +13998,46 @@ def generate_tax_suggestions():
     try:
         # 🔹 Extract the user's answer from the request
         data = request.json.get('data')
+
+        #previous format :
+        # if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+        #     questions = [item.get('question', None) for item in data]
+        #     answers = [item.get('answer', None) for item in data]
+        #     # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
  
-        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-            questions = [item.get('question', None) for item in data]
-            answers = [item.get('answer', None) for item in data]
-            # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
-            print("Questions:", questions)
-            print("Answers:", answers)
+        #     print("Questions:", questions)
+        #     print("Answers:", answers)
             
-        else:
-            return jsonify({"message": "Invalid data format"}), 400
- 
+        # else:
+        #     return jsonify({"message": "Invalid data format"}), 400
+
+        # new : 
+        # questions, answers = [], []
+
+        # # ✅ If data is a dictionary, flatten it
+        # for key, value in data.items():
+        #     if isinstance(value, dict) and "question" in value and "answer" in value:
+        #         questions.append(value["question"])
+        #         answers.append(value["answer"])
+        #     elif isinstance(value, str) and value.strip():  # Handle empty fields like "maintenanceCost": ""
+        #         questions.append(key)
+        #         answers.append(value)
+
+        # print("Questions:", questions)
+        # print("Answers:", answers)
+        
         # 🔹 Validate that an answer was provided
-        if not answers:
-            return jsonify({"message": "Missing answers field."}), 400
+        # if not answers:
+        #     return jsonify({"message": "Missing answers field."}), 400
+        
+        if not data:
+            return jsonify({"message": "Missing user responses field."}), 400
         
     
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
-        
-        # Store User Responses : # need to map questions with the ans
-        # user_responses = {
-        #     "question": questions,
-        #     "answer": answers
-        # }
+        if not client_id:
+            return jsonify({"message": "Missing client_id field."}), 400
         
         # print("User Responses :", user_responses)
         print("User Responses :", data)
@@ -14017,11 +14050,13 @@ def generate_tax_suggestions():
         print("Final Tax Rates:", TAX_RATES)
         
         # Calculate Tax Details :
-        tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        tax_result = calculate_taxes(data, client_id,TAX_RATES)
         print("Generating Tax Calculations :",tax_result)
         
         # Generate Tax Suggestions :
-        tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
+        # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
+        tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
         print("Generating Tax Suggestions",tax_advice)
         
         # revisit_assessment_count['client_id'] += 1
@@ -14159,7 +14194,108 @@ def get_user_responses():
     except Exception as e:
         print(f"�� No user responses found: {e}")
         return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+    
+# new tax questions :
+# {
+#     "incomeSource": {
+#         "question": "What is your Primary Source of Income?",
+#         "answer": "salaried"
+#     },
+#     "sideIncome": {
+#         "question": "Do you have any side income?",
+#         "answer": "yes"
+#     },
+#     "taxableIncome": {
+#         "question": "What is your Total Annual Taxable Income? ",
+#         "answer": "4000"
+#     },
+#     "state": {
+#         "question": "Which state do you reside in?",
+#         "answer": "Hawaii"
+#     },
+#     "dependents": {
+#         "question": "Do you have any Dependents?",
+#         "answer": "yes"
+#     },
+#     "deductions": {
+#         "question": "What Tax Deductions or Exemptions are you Eligible for?",
+#         "answer": [
+#             "Medical Expenses",
+#             "Mortgage Interest Deduction",
+#             "Education-related deductions"
+#         ]
+#     },
+#     "realEstateValue": {
+#         "question": "What is the Approximate Net Capital Value of All of Your Real Estate Properties?",
+#         "answer": "quo"
+#     },
+#     "rentalIncome": {
+#         "question": "Do you own rental properties?",
+#         "answer": "yes"
+#     },
+#     "propertyTax": {
+#         "question": "What is annual Property Tax Expenses?",
+#         "answer": "100"
+#     },
+#     "maintenanceCost": "",
+#     "medicalExpenses": {
+#         "question": "Do you have Medical Expenses Exceeding a Certain Percentage of Your Income?",
+#         "answer": "yes"
+#     },
+#     "charity": {
+#         "question": "Do you contribute to a charity or nonprofit organization?",
+#         "answer": "yes"
+#     },
+#     "largePurchase": {
+#         "question": "Have you made any large one-time purchases in the past year?",
+#         "answer": "yes"
+#     },
+#     "investmentAmounts": {
+#         "question": "What is the total invested you have?",
+#         "answer": {
+#             "stocks": "1",
+#             "realEstate": "2",
+#             "fixedDeposits": "3",
+#             "mutualFunds": "4",
+#             "businessInvestments": "5",
+#             "retirementAccounts": "6"
+#         }
+#     },
+#     "largePurchaseType": {
+#         "question": "What type of large one-time purchase did you make?",
+#         "answer": "5"
+#     },
+#     "charityAmount": {
+#         "question": "How much have you contributed to a charity or nonprofit organization?",
+#         "answer": "2000"
+#     },
+#     "charityOrganization": {
+#         "question": "What is the name of your charity or nonprofit organization?",
+#         "answer": "ANc"
+#     },
+#     "medicalExpenseAmount": {
+#         "question": "What is the total amount of your medical expenses?",
+#         "answer": "100"
+#     },
+#     "annualRentalIncome": {
+#         "question": "What is annual Rental Income?",
+#         "answer": "4000"
+#     },
+#     "sideIncomeAmount": {
+#         "question": "What is side income amount?",
+#         "answer": "3000"
+#     },
+#     "dependentCount": {
+#         "question": "What is number of dependents?",
+#         "answer": "1"
+#     },
+#     "largePurchaseAmount": {
+#         "question": "What is the total amount of your large one-time purchase?",
+#         "answer": "2000"
+#     }
+# }
 
+###############################################################################################
 
 # testing purposes : 
 # {
