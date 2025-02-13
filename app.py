@@ -14546,11 +14546,11 @@ multi_ai_chatbot = Agent(
     model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
     team=[duckduckgo_search_agent, stocks_agent],  # ✅ Use Gemini-based sub-agents
     instructions=[
-        "Always provide sources for your answers.",
+        "Provide concise, accurate, and well-formatted responses.",
         "Format your response in markdown with tables for clarity.",
-        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,etc).",
-        "For general queries, use DuckDuckGo search.",
-        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language."
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "For general queries, use DuckDuckGo search,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations."
     ],
     add_chat_history_to_messages=True,
     tools = [search_web,get_stock_info,get_company_info,get_analyst_recommendations,calculate_math],
@@ -14650,7 +14650,8 @@ def chatbot():
             decide whether the query is finance-related or general. Use the appropriate functions:
             - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
             - For general queries, use `search_web` to look up the information.
-            Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable.
+            Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+            provide a clear, straightforward answer without internal details.
             Do not use first-person language or mention internal task delegation.""",
             messages=[user_input],
             session_id=session_id,
