@@ -48,3 +48,5 @@ phidata
 duckduckgo-search
 openai
 mistune
+pytz
+calcom

@@ -6884,13 +6884,13 @@ def order_placed():
             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
             
             # Check if TransactionAmount is greater than available funds : no need to check while selling 
-            # transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
-            # print(f"Transaction amount: {transactionAmount}")
+            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            print(f"Transaction amount: {transactionAmount}")
             # if transactionAmount > available_funds:
             #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
             
             # Update available funds
-            available_funds = available_funds - transactionAmount
+            available_funds = available_funds + transactionAmount
             print(f"New available funds: {available_funds}")
             
             # Calculate realized gains/losses using FIFO
@@ -6920,12 +6920,17 @@ def order_placed():
             realized_gains_losses = realized_gains_losses + fifo_profit
             print(f"New realized gains/losses: {realized_gains_losses}")
         
-        
-        # Check if TransactionAmount is greater than available funds
-        transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
-        print(f"Transaction amount: {transactionAmount}")
-        if transactionAmount > available_funds:
-            return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+        else: # for buy :
+            
+            # Check if TransactionAmount is greater than available funds
+            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            print(f"Transaction amount: {transactionAmount}")
+            if transactionAmount > available_funds:
+                return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+            
+            # Update available funds
+            available_funds = available_funds - transactionAmount
+            print(f"New available funds: {available_funds}")
         
         # Standardize field names before saving the order
         formatted_order = {
@@ -6956,6 +6961,8 @@ def order_placed():
             try:
                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+                client_summary['available_funds'] = available_funds # update/create available funds
+                client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
                 client_summary['isNewClient'] = False
                 s3.put_object(
                     Bucket=S3_BUCKET_NAME,
@@ -7821,7 +7828,15 @@ def portfolio():
 
         # Process client orders:
         for order in client_orders:
-            action = order.get('Action', 'N/A').lower()
+            
+            try :
+                action = order.get('Action', 'buy').lower() or order.get('buy_or_sell','buy')
+                if not action :
+                    action = "buy" # failsafe so as to not throw error
+            except Exception as e:
+                logging.error(f"Error processing order for action: {e}")
+                action = "buy" # failsafe so as to not throw error
+            
             asset_class = order.get('AssetClass', 'N/A')
             name = order.get('Name', 'N/A')
             symbol = order.get('Symbol', 'N/A')
@@ -14351,19 +14366,6 @@ def get_user_responses():
 from phi.agent import Agent, AgentMemory,RunResponse
 phi_agent = Agent()
 
-
-# def search_web(query):
-#     """ Searches the web using DuckDuckGo and returns summarized results. """
-#     search_tool = DuckDuckGo()
-#     results = search_tool.run(query=query, max_results=5)  # Get top 5 results
-#     return results if results else "No relevant information found."
-
-# def get_stock_info(symbol):
-#     """ Fetches stock details using Yahoo Finance API. """
-#     stock_tool = YFinanceTools(stock_price=True)
-#     stock_info = stock_tool.get_current_stock_price(symbol)
-#     return stock_info if stock_info else "No stock data available."
-
 # ✅ Define Function Calls (Web Search & Stock Data)
 
 def search_web(query: str) -> str:
@@ -14691,28 +14693,101 @@ def chatbot():
         logging.error(f"Error in chatbot: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
+chat_history_folder = os.getenv("chat_history_folder")
 
-# 🔹 **Save Chat History**
+
+def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_assessment_count):
+   
+    # Define the filename
+    tax_data = {
+        "tax_suggestions": tax_suggestions,
+        "tax_details": tax_details
+    }
+    
+    # tax_data = {
+    #     "tax_suggestions": tax_suggestions,
+    #     "tax_details": tax_details,
+    #     "revisit_assessment_count":revisit_assessment_count
+    # }
+    suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+
+    try:
+        if USE_AWS:
+            # Convert tax suggestions to JSON
+            suggestions_json = json.dumps(tax_data, indent=4)
+            print(f"Suggestions json: {suggestions_json}\n")
+
+            # Upload to S3
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=suggestions_key,
+                Body=suggestions_json,
+                ContentType='application/json'
+            )
+            logging.info(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
+            print(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
+            return f"Saved tax suggestions for client_id: {client_id} in AWS S3."
+        
+        else:
+            # Ensure local directory exists
+            os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
+
+            # Save locally
+            local_file_path = os.path.join(LOCAL_SAVE_DIR, f"{client_id}_tax_suggestions.json")
+            with open(local_file_path, 'w') as file:
+                json.dump(tax_data, file, indent=4)
+            
+            logging.info(f"Saved tax suggestions for client_id: {client_id} locally.")
+            return f"Saved tax suggestions for client_id: {client_id} "
+
+    except Exception as e:
+        print(f"Error saving tax suggestions: {e}")
+        logging.error(f"Error saving tax suggestions: {e}")
+        return f"Error saving tax suggestions: {e}"
+
+
+
+# 🔹 **Save Chat History* into local*
 def save_chat_history(session_id, user_input, ai_response):
+    # Define the filename
     history_folder = "chat_history"
-    os.makedirs(history_folder, exist_ok=True)
-    file_path = os.path.join(history_folder, f"{session_id}.json")
-
+    chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+    
     chat_entry = {"user_input": user_input, "ai_response": ai_response}
+    
+    if USE_AWS:
+        chat_history_json = json.dumps(chat_entry, indent=4)
+        print(f"Chat History json: {chat_history_json}\n")
 
-    # Append to existing history
-    if os.path.exists(file_path):
-        with open(file_path, "r") as file:
-            chat_history = json.load(file)
-    else:
-        chat_history = []
+        # Upload to S3
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=chat_history_key,
+            Body=chat_history_json,
+            ContentType='application/json'
+        )
+        logging.info(f"Saved chat history for session_id: {session_id} in AWS S3.")
+        print(f"Saved chat history for session_id: {session_id} in AWS S3.")
+        return f"Saved chat history for session_id: {session_id} in AWS S3."
+    
+    else :
+        
+        os.makedirs(history_folder, exist_ok=True)
+        file_path = os.path.join(history_folder, f"{session_id}.json")
 
-    chat_history.append(chat_entry)
+        # Append to existing history
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                chat_history = json.load(file)
+        else:
+            chat_history = []
 
-    with open(file_path, "w") as file:
-        json.dump(chat_history, file, indent=4)
+        chat_history.append(chat_entry)
 
-    print(f"💾 Chat history saved for session: {session_id}")
+        with open(file_path, "w") as file:
+            json.dump(chat_history, file, indent=4)
+
+        print(f"💾 Chat history saved locally for session: {session_id}")
 
 
 # 🔹 **API to Fetch Chat History**
@@ -14736,6 +14811,164 @@ def get_chat_history():
 
 
 #######################################################################################################
+
+# Calendar API :
+# from phi.tools.calcom import CalCom 
+
+# calcom_agent = Agent(
+#     name="Calendar Assistant",
+#     instructions=[
+#         f"You're a scheduling assistant. Today is {datetime.now()}.",
+#         "You can help users by:",
+#         "- Finding available time slots",
+#         "- Creating new bookings using the Cal.com API",
+#         "- Managing existing bookings (view, reschedule, cancel)",
+#         "- Always confirm important details before scheduling a meeting."
+#     ],
+#     # model=OpenAIChat(id="gpt-4", api_key="YOUR_GOOGLE_API_KEY"),
+#     model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+#     tools=[CalCom(user_timezone="America/New_York")],
+#     show_tool_calls=True,
+#     markdown=True,
+# )
+
+
+# # --- Actionable Insights Endpoint ---
+# @app.route('/api/insights', methods=['POST'])
+# def get_insights():
+#     try:
+#         # Get today's date :
+#         today = datetime.date.today().strftime("%Y-%m-%d")
+        
+#         # Get todays tasks from the calendar:
+#         today_tasks = requests.json.get('tasks')
+        
+#         # Use the multi-AI agent to generate actionable insights/tasks for today.
+#         prompt = f"""Generate actionable insights and tasks for today {today}, including suggested meetings, follow-ups, and priorities.
+#                     Give user a Plan of action for the day from todays tasks : {today_tasks}.Give user priority for the day from todays tasks.
+#                     Give users how much time each tasks can take to complete approximately. 
+#                     Also Give user which client meetings should be taken first and how to approach the client based on the last meeting.
+#                 """
+                
+#         response = calcom_agent.run(message=prompt,
+#                                     session_id="insights_session",
+#                                     messages = [today,today_tasks],
+#                                     stream=False)
+        
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content
+#         else:
+#             response_text = str(response)
+#         return jsonify({"insights": response_text}), 200
+#     except Exception as e:
+#         logging.error(f"Error generating insights: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# # --- Schedule Meeting/Call Endpoint ---
+# @app.route('/api/schedule-meeting', methods=['POST'])
+# def schedule_meeting():
+#     try:
+#         data = request.json
+#         meeting_title = data.get("title")
+#         meeting_time = data.get("time")
+#         participants = data.get("participants")
+#         meeting_type = data.get("meeting_type", "team")  # e.g., "team" or "client"
+#         today_tasks = requests.json.get('tasks') # to see any tasks dont coincide with a previous task
+        
+#         if not meeting_title or not meeting_time or not participants:
+#             return jsonify({"error": "Missing required meeting details"}), 400
+
+#         meeting_entry = {
+#             "title": meeting_title,
+#             "time": meeting_time,
+#             "participants": participants,
+#             "type": meeting_type
+#         }
+#         meetings_file = "meetings.json"
+#         if os.path.exists(meetings_file):
+#             with open(meetings_file, "r") as f:
+#                 meetings = json.load(f)
+#         else:
+#             meetings = []
+#         meetings.append(meeting_entry)
+#         with open(meetings_file, "w") as f:
+#             json.dump(meetings, f, indent=4)
+#         return jsonify({"message": "Meeting scheduled successfully", "meeting": meeting_entry}), 200
+#     except Exception as e:
+#         logging.error(f"Error scheduling meeting: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+
+# # --- Schedule Meeting Endpoint Using Cal.com Agent ---
+# @app.route('/api/ai-schedule-meeting', methods=['POST'])
+# def ai_schedule_meeting():
+#     try:
+#         data = request.json
+#         meeting_title = data.get("title")
+#         meeting_time = data.get("time")  # Expect ISO8601 formatted datetime string
+#         meeting_type = data.get("meeting_type", "team")  # e.g., "team" or "client"
+#         participants = data.get("participants")  # List or string of participant emails
+#         today_tasks = requests.json.get('tasks') # to see any tasks dont coincide with a previous task
+#         additional_details = data.get("details", "")
+
+#         # Validate required fields
+#         if not meeting_title or not meeting_time or not participants:
+#             return jsonify({"error": "Missing required meeting details"}), 400
+
+#         # Build a prompt for the Cal.com agent that includes the meeting details.
+#         prompt = (
+#             f"Please create a new meeting booking with the following details:\n"
+#             f"- Title: {meeting_title}\n"
+#             f"- Time: {meeting_time}\n"
+#             f"- Participants: {participants}\n"
+#             f"- Meeting Type: {meeting_type}\n"
+#             f"- Existing Tasks: {today_tasks}\n"
+#             f"- Additional details: {additional_details}\n\n"
+#             "Ensure that the booking is created using the Cal.com API and return the booking confirmation details."
+#             "Make sure that there are no existing tasks conflicting with the new tasks."
+#         )
+
+#         # Call the Cal.com agent to schedule the meeting.
+#         response = calcom_agent.run(
+#             message=prompt,
+#             session_id=f"calcom_schedule_{time}",
+#             stream=False
+#         )
+
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content
+#         else:
+#             response_text = str(response)
+
+#         print("📅 Scheduled Meeting Response:", response_text)
+#         return jsonify({
+#             "message": "Meeting scheduled successfully via Cal.com agent.",
+#             "booking_details": response_text
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error scheduling meeting: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+# # --- Retrieve Scheduled Meetings Endpoint ---
+# @app.route('/api/meetings', methods=['GET'])
+# def get_meetings():
+#     try:
+#         meetings_file = "meetings.json"
+#         if os.path.exists(meetings_file):
+#             with open(meetings_file, "r") as f:
+#                 meetings = json.load(f)
+#             return jsonify(meetings), 200
+#         else:
+#             return jsonify({"message": "No meetings scheduled"}), 404
+#     except Exception as e:
+#         logging.error(f"Error retrieving meetings: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Notes from last meetings :
+
 
 
 #################################################################################################################################

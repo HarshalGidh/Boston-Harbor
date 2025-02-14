@@ -14,6 +14,7 @@ login_folder = os.getenv('login_folder')
 daily_changes_folder = os.getenv('daily_changes_folder')
 signUp_user_folder = os.getenv('signUp_user_folder')
 PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
+chat_history_folder = os.getenv("chat_history_folder")
 tax_assessment_folder = os.getenv('tax_assessment_folder')
 TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
 
@@ -126,13 +127,22 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # FILE_KEY = "order_list_folder/JR5059_orders.json"
 # FILE_KEY = "portfolio_list_folder//JM4162.json"
 # FILE_KEY = "portfolio_list_folder//JR5059.json"
+# FILE_KEY = "portfolio_list_folder//KK3893.json"
+# FILE_KEY = "portfolio_list_folder//JL5407.json"
 
-# FILE_KEY = "order_list_folder/SF3648_orders.json" 
+
+# FILE_KEY = "order_list_folder/KK3893_orders.json" 
+# FILE_KEY = "order_list_folder/J9488_orders.json" 
+# FILE_KEY = "order_list_folder/JL5407_orders.json" 
 
 # FILE_KEY = "order_list_folder/SF3648_orders.json" 
 # list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
-
 # FILE_KEY = "client_summary_folder/client-data/CM5657.json"
+# FILE_KEY = "client_summary_folder/client-data/JL5407.json"
+
+# FILE_KEY = "client_summary_folder/client-data/J9488.json"
+# FILE_KEY = "client_summary_folder/client-data/KK3893.json"
+
 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
@@ -159,7 +169,8 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 
 
 # list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
-# # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# #list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
+# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
 # list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
 
 
