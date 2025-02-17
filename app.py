@@ -13613,6 +13613,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # Initialize Phi agent
 phi_agent = Agent()
 
+###################################################################################################################
+
 # web search for the current tax rates :
 web_search_agent = Agent(
     name="Web Search Agent",
@@ -13660,7 +13662,166 @@ multi_ai_agent = Agent(
     markdown = True,
 )
 
-# Function to generate tax-saving suggestions using Multi-AI Agent
+# Back Up agents declaration :
+
+# 1. LLAMA 3.3 70b :
+
+# web search for the current tax rates :
+web_search_agent_llama = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_llama = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_llama = Agent(
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# 2. GPT-J 6B Fallback Agent :
+
+web_search_agent_gpt_j = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_gpt_j = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_gpt_j = Agent(
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+#3. using Bloom :
+
+# web search for the current tax rates :
+web_search_agent_bloom = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_bloom = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_bloom = Agent(
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+##################################################################################################################################
+
+# # Function to generate tax-saving suggestions using Multi-AI Agent 
+
+# new code : with multiple failsafe :
+
 def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
     """
     Generate tax-saving suggestions using the multi-ai-agent (Groq + Phi).
@@ -13780,29 +13941,168 @@ def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
 
         # Process the response from LLM
         response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
-        # response_text = markdown_to_text(html_suggestions) # format_suggestions
-        
-        # markdown_parser = mistune.create_markdown(renderer=mistune.HTMLRenderer())
-        # response_text = markdown_parser(response_text)
 
     except Exception as e:
         logging.error(f"Error during AI processing: {e}")
-        response_text = f"Error: {str(e)}"
+        # use llama as fail safe :
+        try:
+            response = multi_ai_agent_llama.run(
+                message=f"""
+                            Based on the available financial data:
+                            - **Annual Income:** {client_data.get('income', 'N/A')}
+                            - **Tax Bracket:** {TAX_RATES}
+                            - **Investment Portfolio:** {portfolio_data}
+                            - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                            - **Business Details:** {client_data.get('business', 'N/A')}
+                            - **Some user information related to tax:** {user_responses}
+
+                            Generate **a structured tax-saving strategy** that includes:
+
+                            1. **Investment Strategies for Tax Efficiency**
+                                - Tax-advantaged accounts (401(k), IRA, etc.).
+                                - Tax-efficient investing strategies.
+
+                            2. **Deductions, Exemptions, and Credits**
+                                - Identify applicable federal and Texas-specific deductions.
+                                - Highlight key tax credits that reduce liability.
+
+                            3. **State-Specific Tax Optimizations (Texas)**
+                                - Considerations based on local tax laws.
+
+                            4. **Tax-Loss Harvesting Opportunities**
+                                - Evaluate the investment portfolio for capital gains offsets.
+
+                            **Ensure the response is structured in markdown format with tables where applicable.**  
+                            - Do not request additional user input.  
+                            - Do not use first-person language.  
+                            - Do not mention AI agents or task delegation.  
+                            """,
+                messages=[input_data], 
+                stream=False  # Ensure it's not streamed, so we can capture it
+            )
+
+            # Extract response content safely
+            if isinstance(response, RunResponse) and hasattr(response, "content"):
+                response_text = response.content  # Extracting the actual response text
+            else:
+                response_text = "Error: Unexpected AI response format."
+
+            # Process the response from LLM
+            response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+            # response_text = f"Error: {str(e)}"
+            
+        except Exception as e:
+            logging.error(f"Error during LLAMA processing: {e}")
+            # using gpt j as fail safe :
+            try:
+                response = multi_ai_agent_gpt_j.run(
+                message=f"""
+                            Based on the available financial data:
+                            - **Annual Income:** {client_data.get('income', 'N/A')}
+                            - **Tax Bracket:** {TAX_RATES}
+                            - **Investment Portfolio:** {portfolio_data}
+                            - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                            - **Business Details:** {client_data.get('business', 'N/A')}
+                            - **Some user information related to tax:** {user_responses}
+
+                            Generate **a structured tax-saving strategy** that includes:
+
+                            1. **Investment Strategies for Tax Efficiency**
+                                - Tax-advantaged accounts (401(k), IRA, etc.).
+                                - Tax-efficient investing strategies.
+
+                            2. **Deductions, Exemptions, and Credits**
+                                - Identify applicable federal and Texas-specific deductions.
+                                - Highlight key tax credits that reduce liability.
+
+                            3. **State-Specific Tax Optimizations (Texas)**
+                                - Considerations based on local tax laws.
+
+                            4. **Tax-Loss Harvesting Opportunities**
+                                - Evaluate the investment portfolio for capital gains offsets.
+
+                            **Ensure the response is structured in markdown format with tables where applicable.**  
+                            - Do not request additional user input.  
+                            - Do not use first-person language.  
+                            - Do not mention AI agents or task delegation.  
+                            """,
+                    messages=[input_data], 
+                    stream=False  # Ensure it's not streamed, so we can capture it
+                )
+
+                # Extract response content safely
+                if isinstance(response, RunResponse) and hasattr(response, "content"):
+                    response_text = response.content  # Extracting the actual response text
+                else:
+                    response_text = "Error: Unexpected AI response format."
+
+                # Process the response from LLM
+                response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                # response_text = f"Error: {str(e)}"
+                
+            except Exception as e:
+                logging.error(f"Error during GPT-J processing: {e}")
+                # using bloom as fail safe :
+                try :
+                    response = multi_ai_agent_bloom.run(
+                        message=f"""
+                                    Based on the available financial data:
+                                    - **Annual Income:** {client_data.get('income', 'N/A')}
+                                    - **Tax Bracket:** {TAX_RATES}
+                                    - **Investment Portfolio:** {portfolio_data}
+                                    - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                                    - **Business Details:** {client_data.get('business', 'N/A')}
+                                    - **Some user information related to tax:** {user_responses}
+
+                                    Generate **a structured tax-saving strategy** that includes:
+
+                                    1. **Investment Strategies for Tax Efficiency**
+                                        - Tax-advantaged accounts (401(k), IRA, etc.).
+                                        - Tax-efficient investing strategies.
+
+                                    2. **Deductions, Exemptions, and Credits**
+                                        - Identify applicable federal and Texas-specific deductions.
+                                        - Highlight key tax credits that reduce liability.
+
+                                    3. **State-Specific Tax Optimizations (Texas)**
+                                        - Considerations based on local tax laws.
+
+                                    4. **Tax-Loss Harvesting Opportunities**
+                                        - Evaluate the investment portfolio for capital gains offsets.
+
+                                    **Ensure the response is structured in markdown format with tables where applicable.**  
+                                    - Do not request additional user input.  
+                                    - Do not use first-person language.  
+                                    - Do not mention AI agents or task delegation.  
+                                    """,
+                        messages=[input_data], 
+                        stream=False  # Ensure it's not streamed, so we can capture it
+                    )
+
+                    # Extract response content safely
+                    if isinstance(response, RunResponse) and hasattr(response, "content"):
+                        response_text = response.content  # Extracting the actual response text
+                    else:
+                        response_text = "Error: Unexpected AI response format."
+
+                    # Process the response from LLM
+                    response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                
+                except Exception as e:
+                    logging.error(f"Error during Bloom processing: {e}")
+                    response_text = "Error: Failed to generate a tax-saving strategy."
         
     # Step 4: Extract meaningful response
-      # 🔹 **Extract response content correctly**
-        if isinstance(response, RunResponse):
-            response_text = getattr(response, "content", None)  # Extract content safely
-            if response_text is None:
-                response_text = "Error: No content received from AI."
-        else:
-            response_text = str(response)  # Convert any unexpected response to string
+    # 🔹 **Extract response content correctly**
+    # The following block has been disabled to preserve the HTML conversion from markdown.
+    # if isinstance(response, RunResponse):
+    #     response_text = getattr(response, "content", None)  # Extract content safely
+    #     if response_text is None:
+    #         response_text = "Error: No content received from AI."
+    # else:
+    #     response_text = str(response)  # Convert any unexpected response to string
 
-    except Exception as e:
-        logging.error(f"Error during AI processing: {e}")
-        response_text = f"Error: {str(e)}"
-    
-     # Step 4: Save Response to a File
+    # Step 4: Save Response to a File
     output_file = f"tax_suggestions_{client_id}.txt"
     os.makedirs("output", exist_ok=True)
     try:
@@ -13814,6 +14114,305 @@ def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
     print("Response successfully stored at:", output_file)
     
     return response_text
+
+
+# previous code :
+
+# def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
+#     """
+#     Generate tax-saving suggestions using the multi-ai-agent (Groq + Phi).
+#     """
+#     # Step 1: Load client financial data
+#     client_data = None
+#     if USE_AWS:
+#         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except Exception as e:
+#             logging.error(f"Error retrieving client data from AWS: {e}")
+#             return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#     else:
+#         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#         if not os.path.exists(client_data_file_path):
+#             return {"error": f"No client data found for client ID: {client_id}"}
+
+#         try:
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#         except Exception as e:
+#             logging.error(f"Error loading local client data: {e}")
+#             return {"error": f"Failed to load client data: {str(e)}"}
+
+#     if not client_data:
+#         return {"error": "Client data could not be retrieved."}
+    
+#     # 🔹 **Step 2: Load Portfolio Data**
+#     portfolio_data = None
+#     if USE_AWS:
+#         portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#             portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except s3.exceptions.NoSuchKey:
+#             logging.warning(f"Portfolio file not found for client ID: {client_id}")
+#             portfolio_data = "No investments made"
+#     else:
+#         portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+#         if os.path.exists(portfolio_file_path):
+#             with open(portfolio_file_path, 'r') as file:
+#                 portfolio_data = json.load(file)
+#         else:
+#             logging.warning(f"Portfolio file not found for client ID: {client_id}")
+#             portfolio_data = "No investments made"
+
+#     # Step 2: Prepare input for Multi-AI Agent
+#     input_data = {
+#         "user_responses": user_responses,
+#         "client_data": client_data,
+#         "tax_rates": TAX_RATES,
+#         "portfolio_data": portfolio_data
+#     }
+
+#     # Step 3: Use Multi-AI Agent for Tax Optimization
+#     # response = multi_ai_agent.print_response(
+#     #     f"""
+#     #     Based on the following financial data, tax rates, and user responses,
+#     #     generate **actionable tax-saving strategies**:
+        
+#     #     ```json
+#     #     {json.dumps(input_data, indent=4)}
+#     #     ```
+        
+#     #     - Consider state-specific tax regulations.
+#     #     - Identify possible deductions or exemptions.
+#     #     - Suggest optimal investment strategies for tax efficiency.
+#     #     - Provide structured, markdown-formatted output.
+#     #     """
+#     # )
+    
+#     print(input_data)
+#     # Step 3: Use Multi-AI Agent for Tax Optimization
+#     try:
+#         response = multi_ai_agent.run(
+#              message=f"""
+#                         Based on the available financial data:
+#                         - **Annual Income:** {client_data.get('income', 'N/A')}
+#                         - **Tax Bracket:** {TAX_RATES}
+#                         - **Investment Portfolio:** {portfolio_data}
+#                         - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                         - **Business Details:** {client_data.get('business', 'N/A')}
+#                         - **Some user information related to tax:** {user_responses}
+
+#                         Generate **a structured tax-saving strategy** that includes:
+
+#                         1. **Investment Strategies for Tax Efficiency**
+#                             - Tax-advantaged accounts (401(k), IRA, etc.).
+#                             - Tax-efficient investing strategies.
+
+#                         2. **Deductions, Exemptions, and Credits**
+#                             - Identify applicable federal and Texas-specific deductions.
+#                             - Highlight key tax credits that reduce liability.
+
+#                         3. **State-Specific Tax Optimizations (Texas)**
+#                             - Considerations based on local tax laws.
+
+#                         4. **Tax-Loss Harvesting Opportunities**
+#                             - Evaluate the investment portfolio for capital gains offsets.
+
+#                         **Ensure the response is structured in markdown format with tables where applicable.**  
+#                         - Do not request additional user input.  
+#                         - Do not use first-person language.  
+#                         - Do not mention AI agents or task delegation.  
+#                         """,
+#             messages=[input_data], 
+#             stream=False  # Ensure it's not streamed, so we can capture it
+#         )
+
+#         # Extract response content safely
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content  # Extracting the actual response text
+#         else:
+#             response_text = "Error: Unexpected AI response format."
+
+#         # Process the response from LLM
+#         response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+
+#     except Exception as e:
+#         logging.error(f"Error during AI processing: {e}")
+#         # use llama as fail safe :
+#         try:
+#             response = multi_ai_agent_llama.run(
+#                 message=f"""
+#                             Based on the available financial data:
+#                             - **Annual Income:** {client_data.get('income', 'N/A')}
+#                             - **Tax Bracket:** {TAX_RATES}
+#                             - **Investment Portfolio:** {portfolio_data}
+#                             - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                             - **Business Details:** {client_data.get('business', 'N/A')}
+#                             - **Some user information related to tax:** {user_responses}
+
+#                             Generate **a structured tax-saving strategy** that includes:
+
+#                             1. **Investment Strategies for Tax Efficiency**
+#                                 - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                 - Tax-efficient investing strategies.
+
+#                             2. **Deductions, Exemptions, and Credits**
+#                                 - Identify applicable federal and Texas-specific deductions.
+#                                 - Highlight key tax credits that reduce liability.
+
+#                             3. **State-Specific Tax Optimizations (Texas)**
+#                                 - Considerations based on local tax laws.
+
+#                             4. **Tax-Loss Harvesting Opportunities**
+#                                 - Evaluate the investment portfolio for capital gains offsets.
+
+#                             **Ensure the response is structured in markdown format with tables where applicable.**  
+#                             - Do not request additional user input.  
+#                             - Do not use first-person language.  
+#                             - Do not mention AI agents or task delegation.  
+#                             """,
+#                 messages=[input_data], 
+#                 stream=False  # Ensure it's not streamed, so we can capture it
+#             )
+
+#             # Extract response content safely
+#             if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                 response_text = response.content  # Extracting the actual response text
+#             else:
+#                 response_text = "Error: Unexpected AI response format."
+
+#             # Process the response from LLM
+#             response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+#             # response_text = f"Error: {str(e)}"
+            
+#         except Exception as e:
+#             logging.error(f"Error during LLAMA processing: {e}")
+#             # using gpt j as fail safe :
+#             try:
+#                 response = multi_ai_agent_gpt_j.run(
+#                 message=f"""
+#                             Based on the available financial data:
+#                             - **Annual Income:** {client_data.get('income', 'N/A')}
+#                             - **Tax Bracket:** {TAX_RATES}
+#                             - **Investment Portfolio:** {portfolio_data}
+#                             - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                             - **Business Details:** {client_data.get('business', 'N/A')}
+#                             - **Some user information related to tax:** {user_responses}
+
+#                             Generate **a structured tax-saving strategy** that includes:
+
+#                             1. **Investment Strategies for Tax Efficiency**
+#                                 - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                 - Tax-efficient investing strategies.
+
+#                             2. **Deductions, Exemptions, and Credits**
+#                                 - Identify applicable federal and Texas-specific deductions.
+#                                 - Highlight key tax credits that reduce liability.
+
+#                             3. **State-Specific Tax Optimizations (Texas)**
+#                                 - Considerations based on local tax laws.
+
+#                             4. **Tax-Loss Harvesting Opportunities**
+#                                 - Evaluate the investment portfolio for capital gains offsets.
+
+#                             **Ensure the response is structured in markdown format with tables where applicable.**  
+#                             - Do not request additional user input.  
+#                             - Do not use first-person language.  
+#                             - Do not mention AI agents or task delegation.  
+#                             """,
+#                     messages=[input_data], 
+#                     stream=False  # Ensure it's not streamed, so we can capture it
+#                 )
+
+#                 # Extract response content safely
+#                 if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                     response_text = response.content  # Extracting the actual response text
+#                 else:
+#                     response_text = "Error: Unexpected AI response format."
+
+#                 # Process the response from LLM
+#                 response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+#                 # response_text = f"Error: {str(e)}"
+                
+#             except Exception as e:
+#                 logging.error(f"Error during GPT-J processing: {e}")
+#                 # using bloom as fail safe :
+#                 try :
+#                     response = multi_ai_agent_bloom.run(
+#                         message=f"""
+#                                     Based on the available financial data:
+#                                     - **Annual Income:** {client_data.get('income', 'N/A')}
+#                                     - **Tax Bracket:** {TAX_RATES}
+#                                     - **Investment Portfolio:** {portfolio_data}
+#                                     - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                                     - **Business Details:** {client_data.get('business', 'N/A')}
+#                                     - **Some user information related to tax:** {user_responses}
+
+#                                     Generate **a structured tax-saving strategy** that includes:
+
+#                                     1. **Investment Strategies for Tax Efficiency**
+#                                         - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                         - Tax-efficient investing strategies.
+
+#                                     2. **Deductions, Exemptions, and Credits**
+#                                         - Identify applicable federal and Texas-specific deductions.
+#                                         - Highlight key tax credits that reduce liability.
+
+#                                     3. **State-Specific Tax Optimizations (Texas)**
+#                                         - Considerations based on local tax laws.
+
+#                                     4. **Tax-Loss Harvesting Opportunities**
+#                                         - Evaluate the investment portfolio for capital gains offsets.
+
+#                                     **Ensure the response is structured in markdown format with tables where applicable.**  
+#                                     - Do not request additional user input.  
+#                                     - Do not use first-person language.  
+#                                     - Do not mention AI agents or task delegation.  
+#                                     """,
+#                         messages=[input_data], 
+#                         stream=False  # Ensure it's not streamed, so we can capture it
+#                     )
+
+#                     # Extract response content safely
+#                     if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                         response_text = response.content  # Extracting the actual response text
+#                     else:
+#                         response_text = "Error: Unexpected AI response format."
+
+#                     # Process the response from LLM
+#                     response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                
+#                 except Exception as e:
+#                     logging.error(f"Error during Bloom processing: {e}")
+#                     response_text = "Error: Failed to generate a tax-saving strategy."
+        
+#     # Step 4: Extract meaningful response
+#       # 🔹 **Extract response content correctly**
+#         if isinstance(response, RunResponse):
+#             response_text = getattr(response, "content", None)  # Extract content safely
+#             if response_text is None:
+#                 response_text = "Error: No content received from AI."
+#         else:
+#             response_text = str(response)  # Convert any unexpected response to string
+
+#     except Exception as e:
+#         logging.error(f"Error during AI processing: {e}")
+#         response_text = f"Error: {str(e)}"
+    
+#      # Step 4: Save Response to a File
+#     output_file = f"tax_suggestions_{client_id}.txt"
+#     os.makedirs("output", exist_ok=True)
+#     try:
+#         with open(output_file, "w", encoding="utf-8") as file:
+#             file.write(response_text)  # Write extracted response text
+#     except Exception as e:
+#         logging.error(f"Error saving response to file: {e}")
+    
+#     print("Response successfully stored at:", output_file)
+    
+#     return response_text
 
 
 # aws folder for taxes assessment :
@@ -14013,37 +14612,6 @@ def generate_tax_suggestions():
     try:
         # 🔹 Extract the user's answer from the request
         data = request.json.get('data')
-
-        #previous format :
-        # if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-        #     questions = [item.get('question', None) for item in data]
-        #     answers = [item.get('answer', None) for item in data]
-        #     # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
-        #     print("Questions:", questions)
-        #     print("Answers:", answers)
-            
-        # else:
-        #     return jsonify({"message": "Invalid data format"}), 400
-
-        # new : 
-        # questions, answers = [], []
-
-        # # ✅ If data is a dictionary, flatten it
-        # for key, value in data.items():
-        #     if isinstance(value, dict) and "question" in value and "answer" in value:
-        #         questions.append(value["question"])
-        #         answers.append(value["answer"])
-        #     elif isinstance(value, str) and value.strip():  # Handle empty fields like "maintenanceCost": ""
-        #         questions.append(key)
-        #         answers.append(value)
-
-        # print("Questions:", questions)
-        # print("Answers:", answers)
-        
-        # 🔹 Validate that an answer was provided
-        # if not answers:
-        #     return jsonify({"message": "Missing answers field."}), 400
         
         if not data:
             return jsonify({"message": "Missing user responses field."}), 400
@@ -14091,74 +14659,6 @@ def generate_tax_suggestions():
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-# @app.route('/api/tax-chatbot', methods=['POST']) #generate-tax-suggestions
-# def tax_chatbot():
-#     """
-#     Handles the tax chatbot interaction by storing user responses and returning the next question.
-#     """
-#     try:
-#         # 🔹 Extract the user's answer from the request
-#         data = request.json.get('data')
- 
-#         if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-#             questions = [item.get('question', None) for item in data]
-#             answers = [item.get('answer', None) for item in data]
-#             # client_id = data.get('client_id', None)  # Extract from the first item (if applicable)
- 
-#             print("Questions:", questions)
-#             print("Answers:", answers)
-            
-#         else:
-#             return jsonify({"message": "Invalid data format"}), 400
- 
-#         # 🔹 Validate that an answer was provided
-#         if not answers:
-#             return jsonify({"message": "Missing answers field."}), 400
-        
-    
-#         client_id = request.json.get('client_id', None)
-#         print("Client ID:", client_id)
-        
-#         # Store User Responses : # need to map questions with the ans
-#         # user_responses = {
-#         #     "question": questions,
-#         #     "answer": answers
-#         # }
-        
-#         # print("User Responses :", user_responses)
-#         print("User Responses :", data)
-        
-#         save_user_responses(client_id, data)
-#         # save_user_responses(client_id, user_responses)
-        
-#         # Get Tax Rates :
-#         TAX_RATES = get_latest_tax_rates()
-#         print("Final Tax Rates:", TAX_RATES)
-        
-#         # Calculate Tax Details :
-#         tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-#         print("Generating Tax Calculations :",tax_result)
-        
-#         # Generate Tax Suggestions :
-#         tax_advice = generate_tax_suggestions(answers,client_id,TAX_RATES)
-#         print("Generating Tax Suggestions",tax_advice)
-        
-#         # revisit_assessment_count['client_id'] += 1
-
-#         save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-#         # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
-        
-#         return jsonify({
-#             "message": "Assessment completed.",
-#             # "revisit_assessment_count": revisit_assessment_count,
-#             "TAX_RATES": TAX_RATES,
-#             "tax_details": tax_result,
-#             "suggestions": tax_advice
-#         }), 200
- 
-#     except Exception as e:
-#         print(f"❌ Error in chatbot: {e}")
-#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
      
 # retrive previous tax suggestions :
 
@@ -14631,6 +15131,141 @@ multi_ai_chatbot = Agent(
     # function_declarations	= Optional[List[FunctionDeclaration]]
 )
 
+# Fail safe methods :
+# 1. using llama 3.3 70b miodel :
+
+# ✅ Web Search Agent - Ensure it does not use OpenAI
+duckduckgo_search_agent_llama = Agent(
+    name="Web Search Agent",
+    role="Search Web for any general queries or facts.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    tools=[DuckDuckGo(),search_web],  # ✅ Ensure it does not fall back to OpenAI
+    instructions=["Always provide sources"],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+# ✅ Finance Agent - Ensure it does not use OpenAI
+stocks_agent_llama = Agent(
+    name="Stock Market Agent",
+    role="Provide stock/asset data, analysis, financial data, and suggestions.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    tools=[
+        YFinanceTools(
+            stock_price=True, analyst_recommendations=True,
+            stock_fundamentals=True, company_news=True,
+            company_info=True, key_financial_ratios=True,
+            income_statements=True, technical_indicators=True,
+            historical_prices=True
+        ),
+        get_stock_info,
+        get_company_info,
+        get_analyst_recommendations
+    ],
+    description="Format your response using markdown and use tables for clarity.",
+    instructions=[
+        "Always provide sources",
+        "Format responses using markdown and use tables where applicable."
+    ],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+# ✅ Multi-AI Chatbot - Ensuring Gemini Handles All Responses
+multi_ai_chatbot_llama = Agent(
+    name="Multi-AI Chatbot",
+    role="A chatbot that can search the web, fetch stock data, and answer general user queries.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    team=[duckduckgo_search_agent, stocks_agent],  # ✅ Use Gemini-based sub-agents
+    instructions=[
+        "Provide concise, accurate, and well-formatted responses.",
+        "Format your response in markdown with tables for clarity.",
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "For general queries, use DuckDuckGo search,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations."
+    ],
+    add_chat_history_to_messages=True,
+    tools = [search_web,get_stock_info,get_company_info,get_analyst_recommendations,calculate_math],
+    show_tools_calls=True,
+    markdown=True,
+    # reasoning=True,
+    # structured_outputs=True,
+    function_declarations=[
+        {
+            "name": "search_web",
+            "description": "Search the web for information and provide sources.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "get_stock_info",
+            "description": "Fetch current stock price data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_info",
+            "description": "Fetch detailed company information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_news",
+            "description": "Fetch recent company news.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_analyst_recommendations",
+            "description": "Fetch analyst recommendations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "calculate_math",
+            "description": "Evaluate a mathematical expression.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    ],
+    # function_declarations	= Optional[List[FunctionDeclaration]]
+)
+
+
+########################################################################################################################
 
 # 🔹 **API for Chatbot Conversation**
 @app.route('/api/chatbot', methods=['POST'])
@@ -14647,42 +15282,79 @@ def chatbot():
         print(f"�� Session ID: {session_id}")
 
         # 🔹 **Generate AI Response**
-        response = multi_ai_chatbot.run(
-            message=f"""Based on the user's query: "{user_input}"
-            decide whether the query is finance-related or general. Use the appropriate functions:
-            - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
-            - For general queries, use `search_web` to look up the information.
-            Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
-            provide a clear, straightforward answer without internal details.
-            Do not use first-person language or mention internal task delegation.""",
-            messages=[user_input],
-            session_id=session_id,
-            stream=False
-        )
-        
-        # response = multi_ai_agent.print_response(
-        #     f"""Based on the user's query: "{json.dumps(user_input, indent=4)}"
-        #     decide whether the query is finance-related or general. Use the appropriate functions:
-        #     - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
-        #     - For general queries, use `search_web` to look up the information.
-        #     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable.
-        #     Do not use first-person language or mention internal task delegation.""",
-        #     )
-        
-        # Extract response content safely
-        if isinstance(response, RunResponse) and hasattr(response, "content"):
-            response_text = response.content  # Extracting the actual response text
-        else:
-            response_text = str(response) # "Error: Unexpected AI response format."
-        
-        # Process the response from LLM
-        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
-        # response_text = markdown_to_text(html_suggestions) # format_suggestions
-        
-        print("ai_response", response_text)
-        
-        # 🔹 **Save Response History (Optional)**
-        save_chat_history(session_id, user_input, response_text)
+        try :
+            response = multi_ai_chatbot.run(
+                message=f"""Based on the user's query: "{user_input}"
+                decide whether the query is finance-related or general. Use the appropriate functions:
+                - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
+                - For general queries, use `search_web` to look up the information.
+                Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+                provide a clear, straightforward answer without internal details.
+                Do not use first-person language or mention internal task delegation.""",
+                messages=[user_input],
+                session_id=session_id,
+                stream=False
+            )
+            
+            # response = multi_ai_agent.print_response(
+            #     f"""Based on the user's query: "{json.dumps(user_input, indent=4)}"
+            #     decide whether the query is finance-related or general. Use the appropriate functions:
+            #     - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
+            #     - For general queries, use `search_web` to look up the information.
+            #     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable.
+            #     Do not use first-person language or mention internal task delegation.""",
+            #     )
+            
+            # Extract response content safely
+            if isinstance(response, RunResponse) and hasattr(response, "content"):
+                response_text = response.content  # Extracting the actual response text
+            else:
+                response_text = str(response) # "Error: Unexpected AI response format."
+            
+            # Process the response from LLM
+            response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+            # response_text = markdown_to_text(html_suggestions) # format_suggestions
+            
+            print("ai_response", response_text)
+            
+            # 🔹 **Save Response History (Optional)**
+            save_chat_history(session_id, user_input, response_text)
+            
+        except Exception as e:
+            logging.error(f"Error in processing Gemini response: {e}")
+            # using llama as failsafe :
+            try :
+                response = multi_ai_chatbot_llama.run(
+                    message=f"""Based on the user's query: "{user_input}"
+                    decide whether the query is finance-related or general. Use the appropriate functions:
+                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
+                    - For general queries, use `search_web` to look up the information.
+                    Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+                    provide a clear, straightforward answer without internal details.
+                    Do not use first-person language or mention internal task delegation.""",
+                    messages=[user_input],
+                    session_id=session_id,
+                    stream=False
+                )
+                
+                # Extract response content safely
+                if isinstance(response, RunResponse) and hasattr(response, "content"):
+                    response_text = response.content  # Extracting the actual response text
+                else:
+                    response_text = str(response) # "Error: Unexpected AI response format."
+                
+                # Process the response from LLM
+                response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+                # response_text = markdown_to_text(html_suggestions) # format_suggestions
+                
+                print("ai_response", response_text)
+                
+                # 🔹 **Save Response History (Optional)**
+                save_chat_history(session_id, user_input, response_text)
+                
+            except Exception as e:
+                logging.error(f"Error processing LLM response: {e}")
+                return jsonify({"error": f"Error processing LLAMA response: {str(e)}"}), 500
 
         return jsonify({
             "user_input": user_input,
@@ -14694,56 +15366,6 @@ def chatbot():
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 chat_history_folder = os.getenv("chat_history_folder")
-
-
-def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_assessment_count):
-   
-    # Define the filename
-    tax_data = {
-        "tax_suggestions": tax_suggestions,
-        "tax_details": tax_details
-    }
-    
-    # tax_data = {
-    #     "tax_suggestions": tax_suggestions,
-    #     "tax_details": tax_details,
-    #     "revisit_assessment_count":revisit_assessment_count
-    # }
-    suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
-
-    try:
-        if USE_AWS:
-            # Convert tax suggestions to JSON
-            suggestions_json = json.dumps(tax_data, indent=4)
-            print(f"Suggestions json: {suggestions_json}\n")
-
-            # Upload to S3
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=suggestions_key,
-                Body=suggestions_json,
-                ContentType='application/json'
-            )
-            logging.info(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
-            print(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
-            return f"Saved tax suggestions for client_id: {client_id} in AWS S3."
-        
-        else:
-            # Ensure local directory exists
-            os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
-
-            # Save locally
-            local_file_path = os.path.join(LOCAL_SAVE_DIR, f"{client_id}_tax_suggestions.json")
-            with open(local_file_path, 'w') as file:
-                json.dump(tax_data, file, indent=4)
-            
-            logging.info(f"Saved tax suggestions for client_id: {client_id} locally.")
-            return f"Saved tax suggestions for client_id: {client_id} "
-
-    except Exception as e:
-        print(f"Error saving tax suggestions: {e}")
-        logging.error(f"Error saving tax suggestions: {e}")
-        return f"Error saving tax suggestions: {e}"
 
 
 
