@@ -88,6 +88,25 @@ from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 # AWS Data Config
 from src.utils.aws_data import *
 
+#################################################################################
+
+import time
+import yfinance as yf
+import requests_cache
+from flask import Flask, jsonify, request
+
+
+def clear_yfinance_cache():
+    # This is the default cache folder; adjust if you use a custom location.
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "py-yfinance")
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+        print(f"Cleared yfinance cache at {cache_dir}")
+
+# Call clear_yfinance_cache() on startup (or before making requests)
+clear_yfinance_cache()
+
+###############################################################################
 # def load_from_local(filepath):
 #     try:
 #         if not os.path.exists(filepath):
@@ -5932,17 +5951,18 @@ def fetch_bonds():
             
         selected_ticker = data.get("ticker")
 
-        # testing mutual funds :
-        fetch_MutualFunds()
+        # testing mutual funds : (Assuming fetch_MutualFunds() is defined elsewhere)
+        # fetch_MutualFunds()
         
         # Function to fetch the latest closing price
         def fetch_price(ticker):
             try:
-                # Fetch historical data for the bond
+                # Fetch historical data for the bond without using any custom session.
                 data = yf.download(ticker, period="1mo", interval="1d")
                 if not data.empty:
-                    # Get the latest closing price
-                    return round(data['Close'].iloc[-1], 2)
+                    # Get the latest closing price and convert it to float.
+                    price = data['Close'].iloc[-1]
+                    return round(float(price), 2)
                 else:
                     return "Price not available"
             except Exception as e:
@@ -5962,6 +5982,57 @@ def fetch_bonds():
     except Exception as e:
         print(f"Error fetching bond prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+# prev :
+
+# @app.route('/api/fetch-bonds', methods=['POST'])
+# def fetch_bonds():
+#     """
+#     Fetches the price of a specific bond using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         category = data.get("category", "").lower()
+
+#         if not category:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+            
+#         selected_ticker = data.get("ticker")
+
+#         # testing mutual funds :
+#         # fetch_MutualFunds()
+        
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the bond
+#                 data = yf.download(ticker, period="1mo", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price
+#                     return round(data['Close'].iloc[-1], 2)
+#                 else:
+#                     return "Price not available"
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return "Price not available"
+
+#         # Fetch price for the selected Bond
+#         price = fetch_price(selected_ticker)
+#         print(f"Bond price for {selected_ticker}:\n{price}")
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "ticker": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching bond prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ##############################################################################
@@ -6067,7 +6138,7 @@ def fetch_commodities():
     """
     try:
         data = request.get_json()
-        selected_ticker = data.get("commodities")  
+        selected_ticker = data.get("commodities")
 
         if not selected_ticker:
             return jsonify({
@@ -6081,8 +6152,9 @@ def fetch_commodities():
                 # Fetch historical data for the commodity
                 data = yf.download(ticker, period="1d", interval="1d")
                 if not data.empty:
-                    # Get the latest closing price
-                    return round(data['Close'].iloc[-1], 2)
+                    # Get the latest closing price and convert it to a float
+                    price_value = data['Close'].iloc[-1]
+                    return round(float(price_value), 2)
                 else:
                     return "Price not available"
             except Exception as e:
@@ -6102,6 +6174,50 @@ def fetch_commodities():
     except Exception as e:
         print(f"Error fetching commodity prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+# @app.route('/api/fetch-commodities', methods=['POST'])
+# def fetch_commodities():
+#     """
+#     Fetches the price of a specific commodity using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         selected_ticker = data.get("commodities")  
+
+#         if not selected_ticker:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the commodity
+#                 data = yf.download(ticker, period="1d", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price
+#                     return round(data['Close'].iloc[-1], 2)
+#                 else:
+#                     return "Price not available"
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return "Price not available"
+
+#         # Fetch price for the selected commodity
+#         price = fetch_price(selected_ticker)
+#         print(f"Commodity price for {selected_ticker}:\n{price}")
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "symbol": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching commodity prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 
@@ -6224,6 +6340,24 @@ FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
 
 # v-2 :best version
 
+
+def get_with_retries(url, retries=3, delay=5, headers=None):
+    """
+    Makes a GET request to the specified URL with retries.
+    Returns the response object (even if status_code != 200 after retries).
+    """
+    attempts = 0
+    while attempts < retries:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response
+        else:
+            logging.info(f"Request to {url} failed with status {response.status_code}. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            attempts += 1
+    return response
+
+
 @app.route("/api/fetch-reits", methods=['POST'])
 def fetch_reits():
     try:
@@ -6239,10 +6373,9 @@ def fetch_reits():
         except s3.exceptions.NoSuchKey:
             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
 
-        # Fetch the list of US stocks from Finnhub
+        # Fetch the list of US stocks from Finnhub with retries
         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
-        response = requests.get(url)
-
+        response = get_with_retries(url, retries=3, delay=5)
         if response.status_code != 200:
             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
 
@@ -6255,10 +6388,9 @@ def fetch_reits():
                 symbol = item["symbol"]
                 name = item["description"]
 
-                # Fetch the price for the current REIT
+                # Fetch the price for the current REIT using retries
                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-                price_response = requests.get(price_url)
-
+                price_response = get_with_retries(price_url, retries=3, delay=5)
                 if price_response.status_code == 200:
                     price_data = price_response.json()
                     price = price_data.get("c", 0)  # "c" is the current price key
@@ -6305,15 +6437,14 @@ def get_reit_price():
         if not reit:
             return jsonify({"message": f"Symbol {symbol} is not a valid REIT."}), 400
 
-        # Fetch yield for the REIT
+        # Fetch yield for the REIT with retry
         yield_url = f"https://finnhub.io/api/v1/stock/metric?symbol={symbol}&metric=dividends&token={FINNHUB_API_KEY}"
-        yield_response = requests.get(yield_url)
-
+        yield_response = get_with_retries(yield_url, retries=3, delay=5)
         if yield_response.status_code == 200:
             yield_data = yield_response.json()
             dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
         else:
-            dividend_yield = 5 # default value
+            dividend_yield = 5  # default value
 
         # Return the REIT information
         return jsonify({
@@ -6324,6 +6455,109 @@ def get_reit_price():
     except Exception as e:
         logging.error(f"Error fetching REIT prices: {e}")
         return jsonify({"message": "An error occurred while fetching REIT prices", "error": str(e)}), 500
+
+
+
+# @app.route("/api/fetch-reits", methods=['POST'])
+# def fetch_reits():
+#     try:
+#         # AWS key for the REIT list
+#         reit_list_key = "reits/reit_list.json"
+
+#         # Check if the REIT list already exists in AWS
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
+#             reit_list = json.loads(response['Body'].read().decode('utf-8'))
+#             logging.info("REIT list loaded from AWS.")
+#             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
+#         except s3.exceptions.NoSuchKey:
+#             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
+
+#         # Fetch the list of US stocks from Finnhub
+#         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#         response = requests.get(url)
+
+#         if response.status_code != 200:
+#             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+#         data = response.json()
+#         valid_reits = []
+
+#         # Filter REITs and fetch prices in a single loop
+#         for item in data:
+#             if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+#                 symbol = item["symbol"]
+#                 name = item["description"]
+
+#                 # Fetch the price for the current REIT
+#                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+#                 price_response = requests.get(price_url)
+
+#                 if price_response.status_code == 200:
+#                     price_data = price_response.json()
+#                     price = price_data.get("c", 0)  # "c" is the current price key
+
+#                     # Only add to the list if the price is greater than 0
+#                     if price > 0:
+#                         valid_reits.append({"symbol": symbol, "name": name, "price": price})
+
+#         # Save the valid REITs list to AWS
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=reit_list_key,
+#             Body=json.dumps(valid_reits),
+#             ContentType='application/json'
+#         )
+#         logging.info("REIT list saved to AWS.")
+
+#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REITs from Finnhub: {e}")
+#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
+
+# @app.route("/api/get-reit-price", methods=['POST'])
+# def get_reit_price():
+#     try:
+#         # Ensure Content-Type is application/json
+#         if not request.is_json:
+#             return jsonify({"message": "Invalid Content-Type. Please set 'Content-Type: application/json'."}), 415
+
+#         # Parse the REIT symbol from the request
+#         symbol = request.json.get("symbol")
+#         if not symbol or not isinstance(symbol, str) or not symbol.strip():
+#             return jsonify({"message": "Invalid symbol provided. Must be a non-empty string."}), 400
+
+#         symbol = symbol.strip()  # Remove any leading/trailing spaces
+
+#         # Load the REIT list from AWS
+#         response = s3.get_object(Bucket=S3_BUCKET_NAME, Key="reits/reit_list.json")
+#         reit_list = json.loads(response['Body'].read())
+
+#         # Validate if the symbol exists in the REIT list
+#         reit = next((item for item in reit_list if item["symbol"] == symbol), None)
+#         if not reit:
+#             return jsonify({"message": f"Symbol {symbol} is not a valid REIT."}), 400
+
+#         # Fetch yield for the REIT
+#         yield_url = f"https://finnhub.io/api/v1/stock/metric?symbol={symbol}&metric=dividends&token={FINNHUB_API_KEY}"
+#         yield_response = requests.get(yield_url)
+
+#         if yield_response.status_code == 200:
+#             yield_data = yield_response.json()
+#             dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
+#         else:
+#             dividend_yield = 5 # default value
+
+#         # Return the REIT information
+#         return jsonify({
+#             "message": "Price and yield fetched successfully",
+#             "reit_info": {"symbol": reit["symbol"], "name": reit["name"], "price": reit["price"], "yield": dividend_yield}
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REIT prices: {e}")
+#         return jsonify({"message": "An error occurred while fetching REIT prices", "error": str(e)}), 500
 
 ####################################################################################
 
@@ -6342,8 +6576,9 @@ def fetch_price(ticker):
         # Fetch data for the mutual fund with valid period and interval
         data = yf.download(ticker, period="1mo", interval="1d")
         if not data.empty:
-            # Get the latest closing price
-            return round(data['Close'].iloc[-1], 2)
+            # Get the latest closing price and convert it to float
+            price_value = data['Close'].iloc[-1]
+            return round(float(price_value), 2)
         else:
             return "Price not available"
     except Exception as e:
@@ -6357,14 +6592,27 @@ def fetch_mutual_funds_from_yahoo():
     """
     try:
         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+        max_attempts = 3
+        attempts = 0
+        response = None
+        while attempts < max_attempts:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                break
+            else:
+                print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+                attempts += 1
+                time.sleep(5)
+        if not response or response.status_code != 200:
             return []
 
         soup = BeautifulSoup(response.content, "html.parser")
         table = soup.find("table")  # Locate the main table with mutual fund data
-
         if not table:
             print("No table found on the Yahoo Finance page.")
             return []
@@ -6405,7 +6653,6 @@ def fetch_MutualFunds():
     """
     try:
         mutual_funds = fetch_mutual_funds_from_yahoo()
-
         print(f"Mutual funds: {mutual_funds}")
         return jsonify({
             "message": "Mutual funds fetched successfully.",
@@ -6414,133 +6661,133 @@ def fetch_MutualFunds():
 
     except Exception as e:
         print(f"Failed to fetch mutual funds: {e}")
-        return jsonify({"error": "Failed to fetch mutual funds"}), 500
-
-
-# v-1 : fetched list but not price
-
-# def fetch_mutual_funds_from_yahoo():
-#     """
-#     Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
-#     """
-#     try:
-#         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
-#         response = requests.get(url)
-#         if response.status_code != 200:
-#             print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
-#             return []
-
-#         soup = BeautifulSoup(response.content, "html.parser")
-#         table = soup.find("table")  # Locate the main table with mutual fund data
-
-#         if not table:
-#             print("No table found on the Yahoo Finance page.")
-#             return []
-
-#         rows = table.find_all("tr")[1:]  # Skip the header row
-#         mutual_funds = []
-
-#         for row in rows:
-#             cols = row.find_all("td")
-#             if len(cols) < 3:  # Ensure required columns are present
-#                 continue
-
-#             symbol = cols[0].text.strip()
-#             name = cols[1].text.strip()
-#             price = cols[2].text.strip()
-
-#             mutual_funds.append({
-#                 "symbol": symbol,
-#                 "name": name,
-#                 "price": price
-#             })
-
-#         return mutual_funds
-
-#     except Exception as e:
-#         print(f"Error fetching mutual funds from Yahoo Finance: {e}")
-#         return []
-
-# def fetch_mutual_fund_details(symbol):
-#     """
-#     Fetch detailed information about a mutual fund using yfinance.
-#     :param symbol: Mutual fund symbol (e.g., "VASGX").
-#     :return: Detailed mutual fund information.
-#     """
-#     try:
-#         mutual_fund = yf.Ticker(symbol)
-#         info = mutual_fund.info
-#         return {
-#             "symbol": symbol,
-#             "name": info.get("shortName", "N/A"),
-#             "price": info.get("regularMarketPrice", "Price not available"),
-#             "category": info.get("category", "N/A"),
-#             "fundFamily": info.get("fundFamily", "N/A")
-#         }
-#     except Exception as e:
-#         print(f"Error fetching data for ticker {symbol}: {e}")
-#         return {}
-
-# # Endpoint to fetch mutual funds
-# # @app.route('/api/fetch-MutualFunds', methods=['GET'])
-# def fetch_MutualFunds():
-#     """
-#     Fetch and return mutual funds and their details.
-#     """
-#     try:
-#         mutual_funds = fetch_mutual_funds_from_yahoo()
-#         detailed_mutual_funds = []
-
-#         for fund in mutual_funds:
-#             print(f"Fetching details for {fund['symbol']}...")
-#             details = fetch_mutual_fund_details(fund["symbol"])
-#             if details:
-#                 detailed_mutual_funds.append(details)
-                
-#         print(f"Mutual funds {detailed_mutual_funds}")
-#         # return jsonify({
-#         #     "message": "Mutual funds fetched successfully.",
-#         #     "mutual_funds": detailed_mutual_funds
-#         # }), 200
-
-#     except Exception as e:
-#         print(f"Failed to fetch mutual funds: {e}")
-#         return jsonify({"error": "Failed to fetch mutual funds"}), 500
+        return jsonify({"error": f"Failed to fetch mutual funds: {e}"}), 500
 
 
 ####################################################################################
 # Fetch Current Stock Price :
+# shifted above
+# import time
+# import yfinance as yf
+# import requests_cache
+# from flask import Flask, jsonify, request
+
+
+# def clear_yfinance_cache():
+#     # This is the default cache folder; adjust if you use a custom location.
+#     cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "py-yfinance")
+#     if os.path.exists(cache_dir):
+#         shutil.rmtree(cache_dir)
+#         print(f"Cleared yfinance cache at {cache_dir}")
+
+# # Call clear_yfinance_cache() on startup (or before making requests)
+# clear_yfinance_cache()
+
+def get_stock_price(ticker, retries=3, delay=5):
+    """
+    Attempts to fetch the current stock price for the given ticker.
+    It first uses the regularMarketPrice from the ticker.info dictionary.
+    If that returns None or raises an exception (e.g. due to rate limiting),
+    it falls back to retrieving the latest closing price from historical data.
+    Retries up to 'retries' times with a 'delay' between attempts.
+    """
+    attempt = 0
+    while attempt < retries:
+        try:
+            # Create a Ticker object without passing a custom session.
+            stock = yf.Ticker(ticker)
+            
+            # Primary method: use the info field.
+            price = stock.info.get('regularMarketPrice')
+            if price is not None:
+                return price
+            
+            # Fallback: use historical data for the last day.
+            hist = stock.history(period='1d')
+            if not hist.empty:
+                return hist['Close'].iloc[-1]
+            
+            raise ValueError("No valid price data found.")
+        except Exception as e:
+            attempt += 1
+            print(f"Attempt {attempt} for {ticker} failed: {e}")
+            time.sleep(delay)
+    
+    # Final fallback: try once more using default Ticker.
+    stock = yf.Ticker(ticker)
+    current_price = stock.info.get('regularMarketPrice')
+    if not current_price:
+        print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+        current_price = stock.history(period='1d')['Close'].iloc[-1]
+        return current_price
+    
+    if current_price is None:
+        # Check for mutual fund-specific fields.
+        print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+        fund_close_price = stock.history(period="1d")['Close']
+        if len(fund_close_price) > 0:
+            current_price = fund_close_price.iloc[-1]
+        return current_price
+        
+    raise Exception(f"Failed to retrieve price for {ticker} after {retries} attempts.")
 
 @app.route('/api/current_stock_price', methods=['POST'])
 def current_stock_price():
+    data = request.get_json()
+    ticker = data.get('ticker')
+    if not ticker:
+        return jsonify({'error': 'Ticker not provided'}), 400
     try:
-        ticker = request.json.get('ticker')
+        price = get_stock_price(ticker)
+        return jsonify({"ticker": ticker, "current_price": price})
+    except Exception as e:
+        # Final fallback attempt inside the error handler.
         stock = yf.Ticker(ticker)
-        # Fetch the current stock price using the 'regularMarketPrice' field
         current_price = stock.info.get('regularMarketPrice')
-        
         if not current_price:
             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
             current_price = stock.history(period='1d')['Close'].iloc[-1]
-            return jsonify({"current_price":current_price})
+            return jsonify({"current_price": current_price})
         
         if current_price is None:
-            # If still None, check for mutual fund-specific fields
             print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
             fund_close_price = stock.history(period="1d")['Close']
             if len(fund_close_price) > 0:
-                current_price = fund_close_price.iloc[-1]  # Last available closing price
-            return jsonify({"current_price":current_price})
+                current_price = fund_close_price.iloc[-1]
+            return jsonify({"current_price": current_price})
+        
+        return jsonify({"error": str(e)}), 500
 
-        # If everything fails, raise an error
-        if current_price is None:
-            raise ValueError(f"Unable to retrieve price for {ticker}.")
+# @app.route('/api/current_stock_price', methods=['POST'])
+# def current_stock_price():
+#     try:
+#         ticker = request.json.get('ticker')
+        # stock = yf.Ticker(ticker)
+#         # Fetch the current stock price using the 'regularMarketPrice' field
+#         current_price = stock.info.get('regularMarketPrice')
+        
+        # if not current_price:
+        #     print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+        #     current_price = stock.history(period='1d')['Close'].iloc[-1]
+        #     return jsonify({"current_price":current_price})
+        
+        # if current_price is None:
+        #     # If still None, check for mutual fund-specific fields
+        #     print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+        #     fund_close_price = stock.history(period="1d")['Close']
+        #     if len(fund_close_price) > 0:
+        #         current_price = fund_close_price.iloc[-1]  # Last available closing price
+        #     return jsonify({"current_price":current_price})
 
-        return jsonify({"current_price":current_price})
+#         # If everything fails, raise an error
+#         if current_price is None:
+#             raise ValueError(f"Unable to retrieve price for {ticker}.")
+
+#         return jsonify({"current_price":current_price})
     
-    except Exception as e:
-        print(f"Failed to retrieve the current price for {ticker} : {e}")
-        return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
+#     except Exception as e:
+#         print(f"Failed to retrieve the current price for {ticker} : {e}")
+#         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
 
 @app.route('/api/dividend_yield', methods=['POST'])
