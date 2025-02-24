@@ -8013,6 +8013,7 @@ def portfolio():
         # Extract client ID and current date
         client_id = request.json.get('client_id')
         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+        realized_gains_losses = request.json.get("realized_gains_losses", 0)
 
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -8159,6 +8160,7 @@ def portfolio():
             "portfolio_daily_change_perc": portfolio_daily_change_perc,
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+            "realized_gains_losses":realized_gains_losses,
         }
 
         # Save daily changes and portfolio data
@@ -8207,6 +8209,7 @@ def portfolio():
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
             "daily_changes": daily_changes,
+            "realized_gains_losses":realized_gains_losses,
             "portfolio_data": portfolio_data,
         }
         print("Portfolio:\n\n",portfolio_response)
