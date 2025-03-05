@@ -198,166 +198,30 @@ clear_yfinance_cache()
 
 ###################################################################################
 
-
 # # ✅ Function to Send Email using Office 365 SMTP
-# import ssl
-# import urllib.request
 
-# import smtplib
-# import ssl
-# import os
-# from flask import Flask, request, jsonify
-# from flask_mail import Mail, Message
-# from email.mime.multipart import MIMEMultipart
-# from email.mime.text import MIMEText
+import urllib.request
+import smtplib
+import ssl
+import os
+from flask import Flask, request, jsonify
+from flask_mail import Mail, Message
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-# # ✅ Office 365 SMTP Configuration
-# SMTP_SERVER = "smtp.office365.com"
-# SMTP_PORT = 587
+# ✅ Office 365 SMTP Configuration
+SMTP_SERVER = "smtp.office365.com"
+SMTP_PORT = 587
 
-# # ✅ Get email credentials securely from environment variables
-# support_email = os.getenv("support_email", "wealth-mgmt-support@mresult.net")
-# support_password = os.getenv("support_password")  # Must be set in environment variables
+# ✅ Get email credentials securely from environment variables
+support_email = os.getenv("support_email", "wealth-mgmt-support@mresult.net")
+support_password = os.getenv("support_password")  # Must be set in environment variables
 
-# app.config['MAIL_SERVER'] = SMTP_SERVER
-# app.config['MAIL_PORT'] = SMTP_PORT
-# app.config['MAIL_USE_TLS'] = True
-# app.config['MAIL_USERNAME'] = support_email
-# app.config['MAIL_PASSWORD'] = support_password
-
-# mail = Mail(app)
-
-# # ✅ Function to Send Email using Office 365 SMTP
-# def send_email(to_email, subject, body):
-#     try:
-#         # Ensure credentials are set
-#         if not support_email or not support_password:
-#             print("❌ Email credentials are missing! Set environment variables `SUPPORT_EMAIL` and `SUPPORT_PASSWORD`.")
-#             return False
-
-#         # ✅ Construct the email message
-#         msg = MIMEMultipart()
-#         msg["From"] = support_email
-#         msg["To"] = to_email
-#         msg["Subject"] = subject
-#         msg.attach(MIMEText(body, "plain"))
-
-#         # ✅ Create a secure connection with TLS 1.2
-#         context = ssl.create_default_context()
-
-#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-#             server.ehlo()  # Identify ourselves to the SMTP server
-#             server.starttls(context=context)  # Secure the connection
-#             server.ehlo()  # Re-identify after securing the connection
-#             server.login(support_email, support_password)  # Login to SMTP server
-#             server.sendmail(support_email, to_email, msg.as_string())  # Send email
-
-#         print(f"✅ Email sent successfully to {to_email}")
-#         return True
-
-#     except smtplib.SMTPAuthenticationError:
-#         print("❌ Authentication Error: Check your username, password, or Office 365 security settings.")
-#     except smtplib.SMTPException as e:
-#         print(f"❌ SMTP Error: {e}")
-#     except Exception as e:
-#         print(f"❌ General Error: {e}")
-#     return False
-
-# # ✅ Email Verification API
-# @app.route('/api/email-verification', methods=['POST'])
-# def email_verification():
-#     try:
-#         email = request.json.get('email')
-#         url = request.json.get('url', 'http://wealth-management.mresult.net')
-
-#         if not email:
-#             return jsonify({"message": "Email is required"}), 400
-
-#         print(f"Processing email verification for: {email}")
-
-#         # ✅ Generate the sign-up link
-#         sign_up_link = f"{url}/signUp/{email}"
-
-#         # ✅ Construct email message
-#         msg = Message(
-#             "Sign-Up Link - Verify Your Email",
-#             sender=support_email,
-#             recipients=[email]
-#         )
-#         msg.body = (
-#             f"Dear User,\n\n"
-#             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
-#             f"Click the link below to finish setting up your account:\n"
-#             f"{sign_up_link}\n\n"
-#             f"Thank you for choosing us.\n\n"
-#         )
-
-#         print(f"Sending email to: {email}\nContent: {msg.body}")
-
-#         # ✅ Send Email Using Flask-Mail & Backup SMTP
-#         mail.send(msg)  # Using Flask-Mail
-#         send_email(email, "Sign-Up Link - Verify Your Email", msg.body)  # Backup SMTP
-
-#         print("✅ Email sent successfully.")
-#         return jsonify({"message": "Sign-up link sent successfully"}), 200
-
-#     except Exception as e:
-#         print(f"❌ Error sending email: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-#################################################################################################
-
-# Email verification :
- 
-# @app.route('/api/email-verification', methods=['POST'])
-# def email_verification():
-#     try:
-#         email = request.json.get('email')  # Extract email from the request
-#         url = request.json.get('url','http://wealth-management.mresult.net')
-#         if not email:
-#             return jsonify({"message": "Email is required"}), 400
-
-#         print(f"Processing email verification for: {email}")
-
-#         # Generate the sign-up link
-#         sign_up_link = f"{url}/signUp/{email}"
-        
-#         # sign_up_link = f"http://wealth-management.mresult.net/signUp/{email}"
-
-#         # Create the email message
-#         msg = Message(
-#             "Sign-Up Link - Verify Your Email",
-#             sender=app.config['support_email'],  # Use correct sender email
-#             recipients=[email]
-#         )
-#         msg.body = (
-#             f"Dear User,\n\n"
-#             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
-#             f"Click the link below to finish setting up your account:\n"
-#             f"{sign_up_link}\n\n"
-#             f"Thank you for choosing us.\n\n"
-#         )
-#         print(f"Sending email to: {email}\nContent: {msg.body}")
-       
-#         # Send the email
-#         mail.send(msg)
-#         send_email(email, "Sign-Up Link - Verify Your Email", msg.body)
-#         print("Email sent successfully.")
-
-#         return jsonify({"message": "Sign-up link sent successfully"}), 200
-
-#     except Exception as e:
-#         print(f"Error sending email: {e}")
-#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
-
-#####################################################################################################
-
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
+app.config['MAIL_SERVER'] = SMTP_SERVER
+app.config['MAIL_PORT'] = SMTP_PORT
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') # 'your_email@gmail.com'
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
+app.config['MAIL_USERNAME'] = support_email
+app.config['MAIL_PASSWORD'] = support_password
 
 mail = Mail(app)
 print(f"Mail object: {mail}")
@@ -365,23 +229,51 @@ print(f"Mail object: {mail}")
 # In-memory storage for email and OTP (for simplicity)
 otp_store = {}
 
-# API Endpoints
-from flask import Flask, request, jsonify
-import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+# ✅ Function to Send Email using Office 365 SMTP
+def send_email(to_email, otp):
+    try:
+        print(f"to_email{to_email}")
+        # Validate email format
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+            print(f"Invalid email address: {to_email}")
+            return False
+ 
+        # Setup email message
+        subject = "Reset Password Request – Your One-Time Password (OTP)"
+        message = (
+            "Dear Valued User,\n\n"
+            "We received a request to reset your password. To proceed with resetting your password, please use the following One-Time Password (OTP):\n\n"
+            f"    OTP: {otp}\n\n"
+            "This OTP is valid for the next 10 minutes. If you did not request a password reset, please disregard this email or contact our support team immediately.\n\n"
+            "Thank you,\n"
+            "Your Support Team"
+        )
+        
+        # Create a multipart message
+        msg = MIMEMultipart()
+        msg['From'] = support_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+ 
+        # Send email using SMTP
+        # ✅ Create a secure connection with TLS 1.2
+        context = ssl.create_default_context()
 
-# Replace with your email credentials
-EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
-EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.ehlo()  # Identify ourselves to the SMTP server
+            server.starttls(context=context)  # Secure the connection
+            server.ehlo()  # Re-identify after securing the connection
+            server.login(support_email, support_password)  # Login to SMTP server
+            server.sendmail(support_email, to_email, msg.as_string())  # Send email
+        
+        print(f"✅ Email sent successfully to {to_email}")
+        return True
+      
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
 
-# Previous Wroking Code with Personal Email Id : 
-# Send email :
-from src.user_login.send_emails import send_email
-
-
-# Email verification :
 import dns.resolver  # For checking email domain validity
 import string
 
@@ -408,15 +300,17 @@ import string
 def generate_otp():
     return str(random.randint(100000, 999999))
 
-# def generate_otp(length=6):
-#     """Generates a random OTP of given length."""
-#     return ''.join(random.choices(string.digits, k=length))
- 
+#################################################################################################
+
+# # 1. Email Verification :
+
+# ✅ Email Verification API : using support email :
 @app.route('/api/email-verification', methods=['POST'])
 def email_verification():
     try:
-        email = request.json.get('email')  # Extract email from the request
-        url = request.json.get('url','https://wealth-management.mresult.net')
+        email = request.json.get('email')
+        url = request.json.get('url', 'http://wealth-management.mresult.net')
+
         if not email:
             return jsonify({"message": "Email is required"}), 400
         
@@ -425,21 +319,21 @@ def email_verification():
             return jsonify({"message": "Invalid email address, please enter a valid email"}), 400
 
         print(f"Processing email verification for: {email}")
- 
-        # Generate the sign-up link
+
+        # ✅ Generate the sign-up link
         sign_up_link = f"{url}/signUp/{email}"
- 
-        # Create the email message
-        msg = Message(
-            "Sign-Up Link - Verify Your Email",
-            sender="your_email@gmail.com",
-            recipients=[email]
-        )
         
-        # add check whether the email is valid and verified :
+        # Generate OTP and store it (assuming generate_otp() and otp_store are defined)
         otp = generate_otp()
         otp_store[email] = otp
         print(f"Generated OTP for {email}: {otp}")
+
+        # ✅ Construct email message
+        msg = Message(
+            "Sign-Up Link - Verify Your Email",
+            sender=support_email,
+            recipients=[email]
+        )
         
         msg.body = (
             f"Dear User,\n\n"
@@ -449,23 +343,27 @@ def email_verification():
             f"{sign_up_link}\n\n"
             f"Thank you for choosing us.\n\n"
         )
-       
+
         print(f"Sending email to: {email}\nContent: {msg.body}")
-       
-        # Send the email
+
+        # ✅ Send Email Using Flask-Mail & Backup SMTP
         
-        mail.send(msg)
-        print("Email sent successfully.")
-        
-        otp_store[email] = otp
-        otps = otp_store[email]
-        print(f"otp store : {otps}")
-        return jsonify({"message": "Sign-up link and OTP sent successfully", "otp": otp}), 200
-        # return jsonify({"message": "Sign-up link sent successfully"}), 200
- 
+        try:
+            mail.send(msg)  # Using Flask-Mail
+        except Exception as e:
+            send_email(email,otp)  # Backup SMTP
+            print(f"Error sending email using Flask-Mail.Using Backup send_email to send email: {e}")
+
+        print("✅ Email sent successfully.")
+        return jsonify({"message": "Sign-up link sent successfully"}), 200
+
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"❌ Error sending email: {e}")
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+#####################################################################################################
 
 
 # 2. Sign Up
@@ -2664,8 +2562,8 @@ def save_to_word_file(data, file_name):
     # Adding client details
     client_details = data.get('clientDetail', {})
     doc.add_paragraph(f"Client Name: {client_details.get('clientName', '')}")
-    doc.add_paragraph(f"Client Mobile: {client_details.get('clientMoNo', '')}")
-    doc.add_paragraph(f"Client Age: {client_details.get('clientAge', '')}")
+    doc.add_paragraph(f"Client Mobile: {client_details.get('clientMoNo', '') or client_details.get('clientContact','')}")
+    doc.add_paragraph(f"Client Age: {client_details.get('clientAge', '') or client_details.get('clientDob','')}")
     doc.add_paragraph(f"Co-Client Name: {client_details.get('coClientName', '')}")
     doc.add_paragraph(f"Co-Client Mobile: {client_details.get('coMobileNo', '')}")
     doc.add_paragraph(f"Co-Client Age: {client_details.get('coClientAge', '')}")
@@ -2962,7 +2860,7 @@ def get_user_details():
 
     if user_identity in SUPER_ADMIN_EMAILS:
         role = "super_admin"
-        organization = None  # Super admin sees all data
+        organization = "MResult" #None  # Super admin sees all data
      # elif user_identity in ORGANIZATION_ADMIN_EMAILS:
         # organization = claims.get("organization", None)
         # role = f"{organization}_admin"
@@ -3039,37 +2937,113 @@ def get_client_data():
     
     
 # ✅ Submit Client Data (Super Admin & Admin Can Submit, Users Can Add Own)
+
+
+##########################################
+# Save-and-Next Endpoint: Save Progress
+##########################################
+@app.route('/api/save-progress', methods=['POST'])
+@jwt_required()
+def save_progress():
+    """
+    Save the current page’s progress for the client.
+    Expects a JSON payload with 'client_id' and 'page_data' (a dictionary of the current page’s data).
+    This data will be merged with any previously saved data.
+    """
+    try:
+        data = request.get_json()
+        page_data = data.get('page_data')
+        client_id = request.json.get('unique_id')
+        
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+        if not page_data:
+            return jsonify({"message": "No page data provided"}), 400
+
+        # Load existing data if present
+        if USE_AWS:
+            file_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                existing_data = {}
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+            else:
+                existing_data = {}
+
+        # Merge new page data with existing data (page_data keys will override)
+        existing_data.update(page_data)
+
+        # Save updated data
+        if USE_AWS:
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=file_key,
+                          Body=json.dumps(existing_data, indent=4),
+                          ContentType="application/json")
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(existing_data, f, indent=4)
+
+        return jsonify({"message": "Progress saved successfully."}), 200
+
+    except Exception as e:
+        logging.error(f"Error saving progress: {e}")
+        return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+
+##########################################
+# Updated Submit Client Data Endpoint
+
+##########################################
 @app.route('/api/submit-client-data', methods=['POST'])
 @jwt_required()
 def submit_client_data():
+    """
+    Finalizes and submits client data.
+    Expects a JSON payload containing the complete client data.
+    Verifies that all mandatory clientDetail fields are present.
+    Uses the same organization assignment logic as before.
+    """
     try:
-        email, role, organization = get_user_details()
-
-        # Parse JSON Payload
+        email, role, organization = get_user_details()  
         data = request.get_json()
         if not data:
             return jsonify({'message': 'Invalid or missing request payload'}), 400
 
-        client_name = data.get('clientDetail', {}).get('clientName')
-        unique_id = data.get('uniqueId')
-        client_org = data.get('organization')
+        # Mandatory fields for clientDetail
+        client_details = data.get("clientDetail", {})
+        required_fields = [
+            "clientName", "clientContact", "clientDob", "clientSsn",
+            "citizenship", "maritalStatus", "noOfDependency", "clientEmail",
+            "state", "city"
+        ]
+        missing_fields = [field for field in required_fields if not client_details.get(field)]
+        if missing_fields:
+            logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
+            return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
 
-        if not client_name or not unique_id:
-            return jsonify({'message': 'Client name and unique ID are required'}), 400
+        client_id = request.json.get('unique_id')
+        client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
+        
+        if not client_id:
+            return jsonify({"message": "Unique ID is required"}), 400
 
-        print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
+        print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
 
-        # 🔹 Assign Organization Field
+        # 🔹 Assign Organization Field (keep this logic as is)
         if role == "super_admin":
-            data['organization'] = client_org or "Unassigned"
+            data['organization'] = client_org or "MResult"
         else:
-            data['organization'] = organization  # Assign to the admin's organization
+            data['organization'] = organization # Assign to the admin's organization
+            
+        data['submittedBy'] = email
 
-        data['submittedBy'] = email  # Track who submitted it
-
-        # 🔹 Save Data to AWS S3 or Local Storage
+        # Load existing data if present and merge with final data
         if USE_AWS:
-            s3_key = f"{client_summary_folder}client-data/{unique_id}.json" 
+            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
@@ -3079,14 +3053,11 @@ def submit_client_data():
                 is_update = False
 
             existing_data.update(data)
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=s3_key,
-                Body=json.dumps(existing_data, indent=4),
-                ContentType="application/json"
-            )
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
+                          Body=json.dumps(existing_data, indent=4),
+                          ContentType="application/json")
         else:
-            file_path = os.path.join(CLIENT_DATA_DIR, f"{unique_id}.json")
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
             if os.path.exists(file_path):
                 with open(file_path, 'r') as f:
                     existing_data = json.load(f)
@@ -3100,11 +3071,86 @@ def submit_client_data():
                 json.dump(existing_data, f, indent=4)
 
         action = "updated" if is_update else "created"
-        return jsonify({'message': f'Client data successfully {action}.', 'uniqueId': unique_id}), 200
+        return jsonify({'message': f'Client data successfully {action}.', 'client_id': client_id}), 200
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+##########################################
+
+
+##########################################
+
+
+# previous working version :
+# @app.route('/api/submit-client-data', methods=['POST'])
+# @jwt_required()
+# def submit_client_data():
+#     try:
+#         email, role, organization = get_user_details()
+
+#         # Parse JSON Payload
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+#         client_name = data.get('clientDetail', {}).get('clientName')
+#         unique_id = data.get('uniqueId')
+#         client_org = data.get('organization')
+
+#         if not client_name or not unique_id:
+#             return jsonify({'message': 'Client name and unique ID are required'}), 400
+
+#         print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
+
+#         # 🔹 Assign Organization Field
+#         if role == "super_admin":
+#             data['organization'] = client_org or "Unassigned"
+#         else:
+#             data['organization'] = organization  # Assign to the admin's organization
+
+#         data['submittedBy'] = email  # Track who submitted it
+
+#         # 🔹 Save Data to AWS S3 or Local Storage
+#         if USE_AWS:
+#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json" 
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+
+#             existing_data.update(data)
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=s3_key,
+#                 Body=json.dumps(existing_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{unique_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 existing_data.update(data)
+#                 is_update = True
+#             else:
+#                 existing_data = data
+#                 is_update = False
+
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         return jsonify({'message': f'Client data successfully {action}.', 'uniqueId': unique_id}), 200
+
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
 # ✅ Get All Client Data Based on Role
@@ -15265,6 +15311,65 @@ duckduckgo_search_agent = Agent(
     markdown=True,
 )
 
+# Advanced Stock Analysis Function
+# -------------------------------
+def advanced_stock_analysis(symbol: str) -> str:
+    """
+    Perform advanced stock analysis for the given symbol by retrieving company info,
+    recent news, and analyst recommendations using YFinanceTools.
+    Returns a markdown-formatted response.
+    """
+    # Initialize a YFinanceTools instance with all desired options
+    yfinance_tool = YFinanceTools(
+        stock_price=True,
+        company_info=True,
+        company_news=True,
+        analyst_recommendations=True,
+        historical_prices=True,
+        key_financial_ratios=True
+    )
+    # Fetch company information
+    company_info = yfinance_tool.get_company_info(symbol)
+    if isinstance(company_info, dict):
+        info_table = "| Field | Value |\n| --- | --- |\n"
+        for key, value in company_info.items():
+            info_table += f"| {key} | {value} |\n"
+    else:
+        info_table = str(company_info)
+    
+    # Fetch recent company news
+    news = yfinance_tool.get_company_news(symbol)
+    if isinstance(news, list) and news:
+        news_table = "| Date | Title | URL |\n| --- | --- | --- |\n"
+        for article in news:
+            date = article.get("date", "N/A")
+            title = article.get("title", "N/A")
+            url = article.get("url", "N/A")
+            news_table += f"| {date} | {title} | {url} |\n"
+    else:
+        news_table = "No recent news available."
+
+    # Fetch analyst recommendations
+    rec = yfinance_tool.get_analyst_recommendations(symbol)
+    if isinstance(rec, list) and rec:
+        rec_table = "| Analyst | Recommendation | Target Price |\n| --- | --- | --- |\n"
+        for r in rec:
+            analyst = r.get("analyst", "N/A")
+            recommendation = r.get("recommendation", "N/A")
+            target_price = r.get("target_price", "N/A")
+            rec_table += f"| {analyst} | {recommendation} | {target_price} |\n"
+    else:
+        rec_table = "No analyst recommendations available."
+    
+    # Build the final markdown output
+    result = f"### Advanced Stock Analysis for {symbol.upper()}\n\n"
+    result += "**Company Information:**\n" + info_table + "\n\n"
+    result += "**Recent News:**\n" + news_table + "\n\n"
+    result += "**Analyst Recommendations:**\n" + rec_table + "\n"
+    return result
+
+#####################################################################################################
+
 # ✅ Finance Agent - Ensure it does not use OpenAI
 stocks_agent = Agent(
     name="Stock Market Agent",
@@ -15280,7 +15385,8 @@ stocks_agent = Agent(
         ),
         get_stock_info,
         get_company_info,
-        get_analyst_recommendations
+        get_analyst_recommendations,
+        advanced_stock_analysis
     ],
     description="Format your response using markdown and use tables for clarity.",
     instructions=[
@@ -15291,21 +15397,174 @@ stocks_agent = Agent(
     markdown=True,
 )
 
+
+##################################################################################################
+
+# --- New Tax Analysis Tool Function ---
+def tax_analysis_tool(params: str) -> str:
+    """
+    A tool that accepts parameters 'tax_query' (mandatory) and optional 'client_id'.
+    It loads client financial data and portfolio data if client_id is provided and
+    constructs a prompt to generate tax-saving strategies and tax analysis.
+    Returns the AI-generated response in a dictionary under the key "result".
+    """
+    # If params is a string, treat it as the tax query.
+    if isinstance(params, str):
+        tax_query = params
+        client_id = None
+    elif isinstance(params, dict):
+        tax_query = params.get("tax_query", "")
+        client_id = params.get("client id", None)
+    else:
+        return {"result": "Invalid input format."}
+
+    # Get the latest tax rates
+    TAX_RATES = get_latest_tax_rates()
+
+    if client_id:
+        print("Client id : ",client_id)
+        # Load client financial data
+        client_data = None
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return {"result": f"Error retrieving client data: {str(e)}"}
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return {"result": f"No client data found for client ID: {client_id}"}
+            try:
+                with open(client_data_file_path, 'r') as f:
+                    client_data = json.load(f)
+            except Exception as e:
+                logging.error(f"Error loading local client data: {e}")
+                return {"result": f"Error loading client data: {str(e)}"}
+
+        # Load portfolio data
+        portfolio_data = None
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception:
+                logging.warning(f"Portfolio file not found for client ID: {client_id}")
+                portfolio_data = "No investments made"
+        else:
+            portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+            if os.path.exists(portfolio_file_path):
+                with open(portfolio_file_path, 'r') as file:
+                    portfolio_data = json.load(file)
+            else:
+                logging.warning(f"Portfolio file not found for client ID: {client_id}")
+                portfolio_data = "No investments made"
+
+        prompt = f"""
+        Based on the following client financial data and portfolio information:
+
+        **Client Data:**
+        ```json
+        {json.dumps(client_data, indent=2)}
+        ```
+
+        **Portfolio Data:**
+        ```json
+        {json.dumps(portfolio_data, indent=2)}
+        ```
+
+        **Current Tax Rates:**
+        {TAX_RATES}
+
+        Answer the following tax-related query in detail:
+        {tax_query}
+
+        Provide detailed tax-saving strategies and actionable suggestions.
+        Format your response in markdown with tables where applicable.
+        Do not mention which tools you are using or which function you are using.
+        """
+    else:
+        prompt = f"""
+        Answer the following tax-related query generically, using the current tax rates {TAX_RATES}:
+        {tax_query}
+
+        Provide detailed tax-saving strategies and actionable suggestions.
+        Format your response in markdown with tables where applicable.
+        Do not mention which tools you are using or which function you are using.
+        """
+
+    return prompt
+
+    # try:
+    #     model = genai.GenerativeModel('gemini-1.5-flash')
+    #     response = model.generate_content(prompt)
+    #     # print(response)
+    #     result = markdown.markdown(response.text, extensions=["extra"])
+    #     print(f"Decorated Result:\n {result}")
+            
+    # except Exception as e:
+    #     logging.error(f"Error during tax analysis AI processing: {e}")
+    #     result = f"Error during AI processing: {str(e)}"
+
+    # return result
+
+# example prompt with client id : "What tax-saving strategies should I consider for client id : RD2447?"
+
+def process_chat_query(user_input: str, client_id: str = None) -> str:
+    """
+    Processes a user query using the multi_ai_chatbot.
+    If the query is tax related, it calls the tax analysis tool.
+    Otherwise, it processes it normally.
+    """
+    # A simple heuristic: if the query contains the word "tax", use the tax analysis tool.
+    if "tax" in user_input.lower():
+        params = {"tax_query": user_input}
+        if client_id:
+            params["client_id"] = client_id
+        result = tax_analysis_tool(params)
+        return result.get("result", "No result returned.")
+    else:
+        # Otherwise, simply pass the query to the multi_ai_chatbot.
+        response = multi_ai_chatbot.run(
+            message=user_input,
+            messages=[{"query": user_input}],
+            stream=False
+        )
+        if hasattr(response, "content"):
+            return response.content
+        else:
+            return str(response)
+
+# Example:
+# result = process_chat_query("What tax-saving strategies should a high-income individual consider?", client_id="VK3464")
+# print(result)
+
+#############################################################################################################
+
 # ✅ Multi-AI Chatbot - Ensuring Gemini Handles All Responses
 multi_ai_chatbot = Agent(
     name="Multi-AI Chatbot",
-    role="A chatbot that can search the web, fetch stock data, and answer general user queries.",
+    role="A chatbot that can search the web, fetch stock data,answer general user queries and handle tax-related questions.",
     model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
     team=[duckduckgo_search_agent, stocks_agent],  # ✅ Use Gemini-based sub-agents
     instructions=[
         "Provide concise, accurate, and well-formatted responses.",
         "Format your response in markdown with tables for clarity.",
-        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
-        "For general queries, use DuckDuckGo search,provide a clear, straightforward answer without internal details.",
-        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations."
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,advanced_stock_analysis,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "If a query is related to taxes, use the tax analysis tool tax_analysis_tool to provide detailed tax-saving strategies and calculations.",
+        "For general queries, use DuckDuckGo search for reliable information,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations.",
+        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations.",
+        "Do not mention which tools or functions you are using Only include relevant information in your answers."
     ],
     add_chat_history_to_messages=True,
-    tools = [search_web,get_stock_info,get_company_info,get_analyst_recommendations,calculate_math],
+    tools = [search_web,
+             get_stock_info,get_company_info,get_analyst_recommendations,advanced_stock_analysis,
+             tax_analysis_tool,
+             calculate_math],
     show_tools_calls=True,
     markdown=True,
     # reasoning=True,
@@ -15364,6 +15623,29 @@ multi_ai_chatbot = Agent(
                     "symbol": {"type": "string"}
                 },
                 "required": ["symbol"]
+            }
+        },
+        {
+            "name": "advanced_stock_analysis",
+            "description": "Perform advanced stock analysis for a given symbol (includes company info, recent news, and analyst recommendations) and return a markdown formatted response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "tax_analysis_tool",
+            "description": "Analyze tax-related queries using client financial data, portfolio data, and current tax rates to generate actionable tax-saving suggestions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tax_query": {"type": "string"},
+                    "client_id": {"type": "string"}
+                },
+                "required": ["tax_query"]
             }
         },
         {
@@ -15412,7 +15694,8 @@ stocks_agent_llama = Agent(
         ),
         get_stock_info,
         get_company_info,
-        get_analyst_recommendations
+        get_analyst_recommendations,
+        advanced_stock_analysis
     ],
     description="Format your response using markdown and use tables for clarity.",
     instructions=[
@@ -15433,12 +15716,15 @@ multi_ai_chatbot_llama = Agent(
     instructions=[
         "Provide concise, accurate, and well-formatted responses.",
         "Format your response in markdown with tables for clarity.",
-        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
-        "For general queries, use DuckDuckGo search,provide a clear, straightforward answer without internal details.",
-        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations."
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,advanced_stock_analysis,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "For general queries, use DuckDuckGo search for reliable information,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations.",
+        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations."
     ],
     add_chat_history_to_messages=True,
-    tools = [search_web,get_stock_info,get_company_info,get_analyst_recommendations,calculate_math],
+    tools = [search_web,
+             get_stock_info,get_company_info,get_analyst_recommendations,advanced_stock_analysis,
+             calculate_math],
     show_tools_calls=True,
     markdown=True,
     # reasoning=True,
@@ -15500,6 +15786,17 @@ multi_ai_chatbot_llama = Agent(
             }
         },
         {
+            "name": "advanced_stock_analysis",
+            "description": "Perform advanced stock analysis for a given symbol (includes company info, recent news, and analyst recommendations) and return a markdown formatted response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
             "name": "calculate_math",
             "description": "Evaluate a mathematical expression.",
             "parameters": {
@@ -15535,12 +15832,14 @@ def chatbot():
         try :
             response = multi_ai_chatbot.run(
                 message=f"""Based on the user's query: "{user_input}"
-                decide whether the query is finance-related or general. Use the appropriate functions:
-                - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
-                - For general queries, use `search_web` to look up the information.
-                Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
-                provide a clear, straightforward answer without internal details.
-                Do not use first-person language or mention internal task delegation.""",
+                    decide whether the query is finance-related or general. Use the appropriate functions:
+                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    - For general queries, use `search_web` to look up the information.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further..
+                    Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+                    provide a clear, straightforward answer without internal details.
+                    Do not mention which tools or functions you are using here only include relevant information to the user based on their queries.
+                    Do not use first-person language or mention internal task delegation.""",
                 messages=[user_input],
                 session_id=session_id,
                 stream=False
@@ -15577,10 +15876,12 @@ def chatbot():
                 response = multi_ai_chatbot_llama.run(
                     message=f"""Based on the user's query: "{user_input}"
                     decide whether the query is finance-related or general. Use the appropriate functions:
-                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
+                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
                     - For general queries, use `search_web` to look up the information.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further..
                     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
                     provide a clear, straightforward answer without internal details.
+                    Do not mention which tools you are using here only give relevant information to the user based on their queries.
                     Do not use first-person language or mention internal task delegation.""",
                     messages=[user_input],
                     session_id=session_id,
