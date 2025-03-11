@@ -14907,16 +14907,41 @@ def start_chatbot():
 def generate_tax_suggestions():
     try:
         # 🔹 Extract the user's answer from the request
-        data = request.json.get('data')
+        # data = request.json.get('data')
         
-        if not data:
-            return jsonify({"message": "Missing user responses field."}), 400
+        # if not data:
+        #     return jsonify({"message": "Missing user responses field."}), 400
         
     
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
         if not client_id:
             return jsonify({"message": "Missing client_id field."}), 400
+        
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return {"error": f"No client data found for client ID: {client_id}"}
+
+            try:
+                with open(client_data_file_path, 'r') as f:
+                    client_data = json.load(f)
+            except Exception as e:
+                logging.error(f"Error loading local client data: {e}")
+                return {"error": f"Failed to load client data: {str(e)}"}
+
+        if not client_data:
+            return {"error": "Client data could not be retrieved."}
+        
+        data = client_data
         
         # print("User Responses :", user_responses)
         print("User Responses :", data)
@@ -14956,7 +14981,7 @@ def generate_tax_suggestions():
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
      
-# retrive previous tax suggestions :
+# retrive previous tax suggestions : now it also generates if not geenerated before
 
 @app.route('/api/get-tax-suggestions', methods=['POST'])
 def get_tax_suggestions():
@@ -14978,8 +15003,82 @@ def get_tax_suggestions():
             return jsonify(json.loads(suggestions_json)),200
     
     except Exception as e:
-        print(f"�� No tax suggestions found: {e}")
-        return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+        print(f"�� No tax suggestions found generating tax suggestions: {e}")
+        try:
+            if USE_AWS:
+                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+                try:
+                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                    client_data = json.loads(response['Body'].read().decode('utf-8'))
+                except Exception as e:
+                    logging.error(f"Error retrieving client data from AWS: {e}")
+                    return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+            else:
+                client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+                if not os.path.exists(client_data_file_path):
+                    return {"error": f"No client data found for client ID: {client_id}"}
+
+                try:
+                    with open(client_data_file_path, 'r') as f:
+                        client_data = json.load(f)
+                except Exception as e:
+                    logging.error(f"Error loading local client data: {e}")
+                    return {"error": f"Failed to load client data: {str(e)}"}
+
+            if not client_data:
+                return {"error": "Client data could not be retrieved."}
+            
+            data = client_data
+            
+            # print("User Responses :", user_responses)
+            print("User Responses :", data)
+            
+            save_user_responses(client_id, data)
+            # save_user_responses(client_id, user_responses)
+            
+            # Get Tax Rates :
+            TAX_RATES = get_latest_tax_rates()
+            print("Final Tax Rates:", TAX_RATES)
+            
+            # Calculate Tax Details :
+            # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+            tax_result = calculate_taxes(data, client_id,TAX_RATES)
+            print("Generating Tax Calculations :",tax_result)
+            
+            # Generate Tax Suggestions :
+            # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
+            tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
+            print("Generating Tax Suggestions",tax_advice)
+            
+            # revisit_assessment_count['client_id'] += 1
+
+            save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+            # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+            
+            if USE_AWS:
+                # Download from S3
+                # s3 = boto3.client('s3')
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+                suggestions_json = response['Body'].read().decode('utf-8')
+                print("Retrieved tax suggestions data:", suggestions_json)
+                return jsonify(json.loads(suggestions_json)),200
+            
+            # return jsonify({
+            #     "message": "Assessment completed.",
+            #     # "revisit_assessment_count": revisit_assessment_count,
+            #     "TAX_RATES": TAX_RATES,
+            #     "tax_details": tax_result,
+            #     "suggestions": tax_advice
+            # }), 200
+        
+        except Exception as e:
+            print(f"❌ Error in chatbot: {e}")
+            return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    
+    except Exception as e:
+        print(f"❌ Error in chatbot: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+        # return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
     
 # Get Previous user responses :
 
