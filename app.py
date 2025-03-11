@@ -15498,18 +15498,6 @@ def tax_analysis_tool(params: str) -> str:
 
     return prompt
 
-    # try:
-    #     model = genai.GenerativeModel('gemini-1.5-flash')
-    #     response = model.generate_content(prompt)
-    #     # print(response)
-    #     result = markdown.markdown(response.text, extensions=["extra"])
-    #     print(f"Decorated Result:\n {result}")
-            
-    # except Exception as e:
-    #     logging.error(f"Error during tax analysis AI processing: {e}")
-    #     result = f"Error during AI processing: {str(e)}"
-
-    # return result
 
 # example prompt with client id : "What tax-saving strategies should I consider for client id : RD2447?"
 
@@ -15663,6 +15651,8 @@ multi_ai_chatbot = Agent(
     # function_declarations	= Optional[List[FunctionDeclaration]]
 )
 
+#####################################################################################################
+
 # Fail safe methods :
 # 1. using llama 3.3 70b miodel :
 
@@ -15712,18 +15702,21 @@ multi_ai_chatbot_llama = Agent(
     role="A chatbot that can search the web, fetch stock data, and answer general user queries.",
     # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
     model=Groq(id="llama-3.3-70b-versatile"),
-    team=[duckduckgo_search_agent, stocks_agent],  # ✅ Use Gemini-based sub-agents
+    team=[duckduckgo_search_agent_llama, stocks_agent_llama],  # ✅ Use LLAMA-based sub-agents
     instructions=[
         "Provide concise, accurate, and well-formatted responses.",
         "Format your response in markdown with tables for clarity.",
         "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,advanced_stock_analysis,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "If a query is related to taxes, use the tax analysis tool tax_analysis_tool to provide detailed tax-saving strategies and calculations.",
         "For general queries, use DuckDuckGo search for reliable information,provide a clear, straightforward answer without internal details.",
         "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations.",
-        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations."
+        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations.",
+        "Do not mention which tools or functions you are using Only include relevant information in your answers."
     ],
     add_chat_history_to_messages=True,
     tools = [search_web,
              get_stock_info,get_company_info,get_analyst_recommendations,advanced_stock_analysis,
+             tax_analysis_tool,
              calculate_math],
     show_tools_calls=True,
     markdown=True,
@@ -15797,6 +15790,18 @@ multi_ai_chatbot_llama = Agent(
             }
         },
         {
+            "name": "tax_analysis_tool",
+            "description": "Analyze tax-related queries using client financial data, portfolio data, and current tax rates to generate actionable tax-saving suggestions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tax_query": {"type": "string"},
+                    "client_id": {"type": "string"}
+                },
+                "required": ["tax_query"]
+            }
+        },
+        {
             "name": "calculate_math",
             "description": "Evaluate a mathematical expression.",
             "parameters": {
@@ -15814,33 +15819,111 @@ multi_ai_chatbot_llama = Agent(
 
 ########################################################################################################################
 
+# example i/p for testing :
+# {
+#     "user_input": "Give me investment strategy for client id : SB6064 ?",
+#     "session_id": "stock_query_1"
+# }
+
+import uuid
+
 # 🔹 **API for Chatbot Conversation**
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
     try:
         data = request.json
         user_input = data.get("user_input", "")
-        session_id = data.get("session_id", "default")
-
+        session_id = data.get("session_id",None)
+        chat_title = data.get("chat_title",None)
+        user_id = data.get("user_id",None)
+        
         if not user_input:
             return jsonify({"error": "No user input provided"}), 400
 
         print(f"📩 Received Query: {user_input}")
         print(f"�� Session ID: {session_id}")
+        
+         # Retrieve the chat history from the JSON file.
+        history = []
+        chat_history = []
+        time_of_chat_creation = None
+    
+        if not session_id:
+            session_id = uuid.uuid4().hex  # Generate a unique session_id.
+            # Generate a chat title from the first query (truncated to 20 characters).
+            chat_title = generate_chat_title(user_input) #
+            time_of_chat_creation = datetime.now().isoformat()
+            timestamp = datetime.now().isoformat()
+            # Store initial metadata as the first entry.
+            history.append({
+                "role": "system",
+                "chat_title": chat_title,
+                "time_of_chat_creation" : time_of_chat_creation,
+                "timestamp": timestamp,
+                "message": "New chat session started."
+            })
+            print(f"New session created: {session_id} with title: {chat_title}")
+        else:
+            # Load previous history.
+            history = load_chat_history_data(session_id)
+            
+            if not isinstance(history, list):
+                history = []
+            if history:
+                print(f"Chat History for Session ID {session_id}: {history}")
+            else:
+                print(f"No previous chat history available for session_id: {session_id}")
+        
+        # Save Time of Creation of Chat :
+        if not time_of_chat_creation:
+            first_entry = history[0]
+            time_of_chat_creation = first_entry.get("time_of_chat_creation", "timestamp")
+            print(f"Time of Chat Creation : {time_of_chat_creation}")
+            if not time_of_chat_creation:
+                time_of_chat_creation = datetime.now().isoformat()
+                print(f"Added Default Time of Chat Creation : {time_of_chat_creation}")
+                
+        # Extract chat title from history if not provided.
+        if not chat_title:
+            chat_title = ""
+            if isinstance(history, list) and len(history) > 0:
+                # Look for chat_title in the first system message.
+                first_entry = history[0]
+                chat_title = first_entry.get("chat_title", "")
+                print("Chat Title is : ",chat_title)
 
+        # #(Optional) Limit history to the last 5 entries.
+        if len(history) > 5:
+            chat_history = history[-5:]
+            
+        # Append the new user message with timestamp.
+        history.append({
+            "role": "user",
+            "text": user_input,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        chat_history.append({
+            "role": "user",
+            "text": user_input,
+            "timestamp": datetime.now().isoformat()
+        })
+            
         # 🔹 **Generate AI Response**
         try :
             response = multi_ai_chatbot.run(
                 message=f"""Based on the user's query: "{user_input}"
-                    decide whether the query is finance-related or general. Use the appropriate functions:
-                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    decide whether the query is finance-related,tax-related,stock related, a follow-up question to a previous question or a general question.
+                    Use the appropriate functions:
+                    - For finance-related or stock-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further.
+                    - Check if the query is a Follow Up question to a previous question refer to the chat history : {chat_history} and answer to the question correctly by using the provided tools.If history is none answer the question normally.
                     - For general queries, use `search_web` to look up the information.
-                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further..
                     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
                     provide a clear, straightforward answer without internal details.
                     Do not mention which tools or functions you are using here only include relevant information to the user based on their queries.
                     Do not use first-person language or mention internal task delegation.""",
-                messages=[user_input],
+                messages=[user_input,chat_history],
                 session_id=session_id,
                 stream=False
             )
@@ -15866,8 +15949,29 @@ def chatbot():
             
             print("ai_response", response_text)
             
-            # 🔹 **Save Response History (Optional)**
-            save_chat_history(session_id, user_input, response_text)
+            # Append the AI's response to the history.
+            history.append({
+                    "role": "assistant",
+                    "text": response_text,
+                    "timestamp": datetime.now().isoformat()
+                })
+            # history.append({"role": "assistant", "text": response_text})
+            
+            # user_id = "id"
+            chats = [
+                {
+                    "user_id": user_id,
+                    "chat_title": chat_title,
+                    "session_id": session_id,
+                    "time_of_chat_creation": time_of_chat_creation,
+                    "last_saved_timestamp": datetime.now().isoformat()
+                }
+            ]
+            # save chats 
+            save_chats(chats)
+            # save_chats(user_id,chats)
+            
+            save_chat_history(session_id, history)
             
         except Exception as e:
             logging.error(f"Error in processing Gemini response: {e}")
@@ -15875,15 +15979,17 @@ def chatbot():
             try :
                 response = multi_ai_chatbot_llama.run(
                     message=f"""Based on the user's query: "{user_input}"
-                    decide whether the query is finance-related or general. Use the appropriate functions:
-                    - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    decide whether the query is finance-related,tax-related,stock related, a follow-up question to a previous question or a general question.
+                    Use the appropriate functions:
+                    - For finance-related or stock-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further.
+                    - Check if the query is a Follow Up question to a previous question refer to the chat history : {history} and answer to the question correctly by using the provided tools.If history is none answer the question normally.
                     - For general queries, use `search_web` to look up the information.
-                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further..
                     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
                     provide a clear, straightforward answer without internal details.
-                    Do not mention which tools you are using here only give relevant information to the user based on their queries.
+                    Do not mention which tools or functions you are using here only include relevant information to the user based on their queries.
                     Do not use first-person language or mention internal task delegation.""",
-                    messages=[user_input],
+                    messages=[user_input,history],
                     session_id=session_id,
                     stream=False
                 )
@@ -15900,14 +16006,39 @@ def chatbot():
                 
                 print("ai_response", response_text)
                 
-                # 🔹 **Save Response History (Optional)**
-                save_chat_history(session_id, user_input, response_text)
+                # Append the AI's response to the history.
+                # history.append({"role": "assistant", "text": response_text})
+                history.append({
+                    "role": "assistant",
+                    "text": response_text,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                chats = [
+                {
+                    "user_id": user_id,
+                    "chat_title": chat_title,
+                    "session_id": session_id,
+                    "time_of_chat_creation": time_of_chat_creation,
+                    "last_saved_timestamp": datetime.now().isoformat()
+                }
+                ]
+                # save chats 
+                save_chats(chats)
+                # save_chats(user_id,chats)
+                
+                
+                # 🔹 **Save Response History **
+                save_chat_history(session_id, history)
                 
             except Exception as e:
                 logging.error(f"Error processing LLM response: {e}")
                 return jsonify({"error": f"Error processing LLAMA response: {str(e)}"}), 500
 
         return jsonify({
+            "session_id": session_id,
+            "chat_title": chat_title, #history[0].get("chat_title") if history and "chat_title" in history[0] else "",
+            "timestamp": datetime.now().isoformat(),
             "user_input": user_input,
             "ai_response": response_text
         }), 200
@@ -15916,23 +16047,181 @@ def chatbot():
         logging.error(f"Error in chatbot: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
+
+############################################################################################################
+
+
+# Get all Chats :
+
+# 🔹 **Save Chats** (store all chat session summaries in one file)
+def save_chats(chats):
+    if USE_AWS:
+        chats_key = f"{chat_history_folder}/chats.json"
+        chats_json = json.dumps(chats, indent=4)
+        print(f"Chats JSON: {chats_json}\n")
+        # Upload the chats summary to S3.
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=chats_key,
+            Body=chats_json,
+            ContentType='application/json'
+        )
+        logging.info("Saved chats in AWS S3.")
+        print("Saved chats in AWS S3.")
+        return "Saved chats in AWS S3."
+    else:
+        chats_folder_local = "chats"
+        os.makedirs(chats_folder_local, exist_ok=True)
+        file_path = os.path.join(chats_folder_local, "chats.json")
+        with open(file_path, "w") as file:
+            json.dump(chats, file, indent=4)
+        print("💾 Chats saved locally.")
+        return "Chats saved locally."
+
+# 🔹 **Load Chats** (load all chat session summaries)
+def load_chats():
+    if USE_AWS:
+        chats_key = f"{chat_history_folder}/chats.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
+            chats_json = json.loads(response['Body'].read().decode('utf-8'))
+            return chats_json
+        except Exception as e:
+            error_msg = str(e)
+            logging.error(f"Error retrieving chats from AWS: {error_msg}")
+            return []  # On error, return empty list.
+    else:
+        file_path = os.path.join("chats", "chats.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                chats = json.load(file)
+            return chats
+        else:
+            return []  # No chats found.
+
+# 🔹 **API Endpoint to Fetch Chats**
+@app.route("/get_chats", methods=["GET"])
+def get_chats_endpoint():
+    try:
+        chats = load_chats()
+        return jsonify({"chats": chats}), 200
+    except Exception as e:
+        logging.error(f"Error in get_chats: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# def save_chats(user_id, chats):
+    
+#     if USE_AWS:
+#         chats_key = f"{chat_history_folder}/{user_id}_chats.json"
+#         chats_json = json.dumps(chats, indent=4)
+#         print(f"Chats JSON: {chats_json}\n")
+#         # Upload the chats summary to S3.
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=chats_key,
+#             Body=chats_json,
+#             ContentType='application/json'
+#         )
+#         logging.info(f"Saved chats for user_id: {user_id} in AWS S3.")
+#         print(f"Saved chats for user_id: {user_id} in AWS S3.")
+#         return f"Saved chats for user_id: {user_id} in AWS S3."
+#     else:
+#         chats_folder_local = "chats"
+#         os.makedirs(chats_folder_local, exist_ok=True)
+#         file_path = os.path.join(chats_folder_local, f"{user_id}.json")
+#         with open(file_path, "w") as file:
+#             json.dump(chats, file, indent=4)
+#         print(f"💾 Chats saved locally for user: {user_id}")
+#         return f"Chats saved locally for user: {user_id}"
+
+# def load_chats(user_id):
+    
+#     if USE_AWS:
+#         # Download the chats summary from S3.
+        
+#         chats_key = f"{chat_history_folder}/{user_id}_chats.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
+#             chats_json = json.loads(response['Body'].read().decode('utf-8'))
+#             return chats_json
+        
+#         except Exception as e:
+#             error_msg = str(e)
+#             logging.error(f"Error retrieving chats from AWS: {error_msg}")
+#             return []  # On other errors, return empty chats.
+#     else:
+#         file_path = os.path.join("chats", f"{user_id}.json")
+#         if os.path.exists(file_path):
+#             with open(file_path, "r") as file:
+#                 chat_history = json.load(file)
+#             return chat_history
+#         else:
+#             return []  # No history found.
+
+
+# @app.route("/get_chats", methods=["GET"]) # do get method
+# def get_chats():
+#     try:
+#         # use auth token
+#         # user_id = request.json.get("user_id", None) # get user's email id to fetch the chats
+        
+#         # if not user_id :
+#         #     return jsonify({"error": "No User ID provided"}), 400
+        
+#         # chats = load_chats(user_id) #[]
+        
+#         chats = load_chats() #[]
+        
+#         return jsonify({"chats": chats}), 200
+#     except Exception as e:
+#         logging.error(f"Error in get_chats: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+
+###############################################################################################
+
+# Generate a unique title for the chat session based on the user's input.
+def generate_chat_title(user_input):
+    if not user_input:
+        print("No user input provided")
+        return None
+    
+    prompt = f"""Generate a concise and descriptive chat title for a session based solely on the user's input: \"{user_input}\". 
+                Use a concise and descriptive title that accurately describes the topic of the conversation.
+                Ensure the title is short, concise, and accurately describes the topic.
+                Output only one title as plain text with no additional commentary, bullet points, or formatting.
+            """
+    
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        # print(response)
+        title = markdown.markdown(response.text, extensions=["extra"])
+        print(f"Generated Title for Chat Session:\n {title}")
+            
+    except Exception as e:
+        logging.error(f"Error during Generating atitle : {e}")
+        title = f"Chat - {user_input[:20]}..." if len(user_input) > 20 else f"Chat - {user_input}"
+
+    return title
+
+
 chat_history_folder = os.getenv("chat_history_folder")
 
+# 🔹 **Save Chat History** (into local or AWS) :
 
-
-# 🔹 **Save Chat History* into local*
-def save_chat_history(session_id, user_input, ai_response):
-    # Define the filename
-    history_folder = "chat_history"
-    chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
-    
-    chat_entry = {"user_input": user_input, "ai_response": ai_response}
-    
+def save_chat_history(session_id, history):
+    # history is expected to be a list of chat entries.
     if USE_AWS:
-        chat_history_json = json.dumps(chat_entry, indent=4)
+        chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+        # (Optional) Limit history to the last 5 entries.
+        # if len(history) > 5:
+        #     history = history[-5:]
+        chat_history_json = json.dumps(history, indent=4)
         print(f"Chat History json: {chat_history_json}\n")
-
-        # Upload to S3
+        
+        # Upload the updated history to S3.
         s3.put_object(
             Bucket=S3_BUCKET_NAME,
             Key=chat_history_key,
@@ -15943,40 +16232,76 @@ def save_chat_history(session_id, user_input, ai_response):
         print(f"Saved chat history for session_id: {session_id} in AWS S3.")
         return f"Saved chat history for session_id: {session_id} in AWS S3."
     
-    else :
+    else:
+        history_folder_local = "chat_history"
+        os.makedirs(history_folder_local, exist_ok=True)
+        file_path = os.path.join(history_folder_local, f"{session_id}.json")
         
-        os.makedirs(history_folder, exist_ok=True)
-        file_path = os.path.join(history_folder, f"{session_id}.json")
+        # (Optional) Limit history to the last 5 entries.
+        # if len(history) > 5:
+        #     history = history[-5:]
+        
+        with open(file_path, "w") as file:
+            json.dump(history, file, indent=4)
+        
+        print(f"💾 Chat history saved locally for session: {session_id}")
+        return f"Chat history saved locally for session: {session_id}"
 
-        # Append to existing history
+
+def load_chat_history_data(session_id: str) -> list:
+    
+    if USE_AWS:
+        chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chat_history_key)
+            chat_history_json = json.loads(response['Body'].read().decode('utf-8'))
+            return chat_history_json
+        except Exception as e:
+            error_msg = str(e)
+            logging.error(f"Error retrieving chat history from AWS: {error_msg}")
+            if "NoSuchKey" in error_msg:
+                return []  # No previous chat history available.
+            else:
+                return []  # On other errors, return empty history.
+    else:
+        file_path = os.path.join("chat_history", f"{session_id}.json")
         if os.path.exists(file_path):
             with open(file_path, "r") as file:
                 chat_history = json.load(file)
+            return chat_history
         else:
-            chat_history = []
-
-        chat_history.append(chat_entry)
-
-        with open(file_path, "w") as file:
-            json.dump(chat_history, file, indent=4)
-
-        print(f"💾 Chat history saved locally for session: {session_id}")
+            return []  # No history found.
 
 
 # 🔹 **API to Fetch Chat History**
+
 @app.route('/api/chat-history', methods=['POST'])
 def get_chat_history():
     try:
         session_id = request.json.get("session_id", "default")
-        file_path = os.path.join("chat_history", f"{session_id}.json")
-
-        if os.path.exists(file_path):
-            with open(file_path, "r") as file:
-                chat_history = json.load(file)
-            return jsonify(chat_history), 200
+        if USE_AWS:
+            chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chat_history_key)
+                chat_history_json = json.loads(response['Body'].read().decode('utf-8'))
+                print("Returned Chat History of Session ID : ",session_id)
+                return jsonify(chat_history_json), 200
+            except Exception as e:
+                error_msg = str(e)
+                logging.error(f"Error retrieving chat history from AWS: {error_msg}")
+                # Check if the error indicates that the file (key) does not exist.
+                if "NoSuchKey" in error_msg:
+                    return jsonify({"message": "No previous chat history available."}), 404
+                else:
+                    return jsonify({"result": f"Error retrieving chat history from AWS: {error_msg}"}), 500
         else:
-            return jsonify({"message": "No chat history found."}), 404
-
+            file_path = os.path.join("chat_history", f"{session_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, "r") as file:
+                    chat_history = json.load(file)
+                return jsonify(chat_history), 200
+            else:
+                return jsonify({"message": "No chat history found."}), 404
     except Exception as e:
         logging.error(f"Error retrieving chat history: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
