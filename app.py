@@ -423,67 +423,98 @@ def sign_up():
    
 # 3. Sign in :
 
+from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+
+@app.route('/api/sign-in', methods=['POST'])
+def sign_in():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        if not all([email, password]):
+            return jsonify({"message": "Email and password are required"}), 400
+
+        user_data = load_user_data(email)  # Load user details from storage
+        if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
+            return jsonify({"message": "Invalid email or password"}), 401
+        
+        # Force correct role and organization based on email.
+        if email in SUPER_ADMIN_EMAILS:
+            role = "super_admin"
+            organization = "MResult"
+        elif email in ORGANIZATION_ADMIN_EMAILS:
+            organization = user_data.get("organization", "")
+            role = f"{organization}_admin" if organization else "admin"
+        else:
+            role = user_data.get("role", "user")
+            organization = user_data.get("organization", "")
+
+        # Update the user_data to reflect the correct role and organization.
+        user_data["role"] = role
+        user_data["organization"] = organization
+
+        print(f"User Role: {role} and Organization: {organization}\nUser Data: {user_data}\n")
+        # Create JWT tokens with identity set to email and extra claims for role and organization.
+        token = create_access_token(identity=email, additional_claims={"role": role, "organization": organization})
+        refresh_token = create_refresh_token(
+            identity=email,
+            additional_claims={"role": role, "organization": organization},
+            expires_delta=timedelta(days=7)
+        )
+
+        return jsonify({
+            "message": "Sign in successful",
+            "token": token,
+            "refresh_token": refresh_token
+        }), 200
+
+    except Exception as e:
+        print(f"Error during sign-in: {e}")
+        return jsonify({"message": "Internal server error"}), 500
+
+
 # @app.route('/api/sign-in', methods=['POST'])
 # def sign_in():
 #     try:
 #         data = request.get_json()
 #         email = data.get('email')
 #         password = data.get('password')
- 
+
 #         if not all([email, password]):
 #             return jsonify({"message": "Email and password are required"}), 400
- 
-#         user_data = load_user_data(email)
+
+#         user_data = load_user_data(email)  # Load user details
 #         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
 #             return jsonify({"message": "Invalid email or password"}), 401
- 
-#         token = jwt.encode(
-#             {"email": email, "exp": datetime.utcnow() + timedelta(hours=5)},
-#             app.config['JWT_SECRET_KEY'],
-#             algorithm="HS256"
+        
+#         # Get role and organization from user_data, with an optional override from input.
+#         role = data.get("role", user_data.get("role", "user"))
+#         organization = data.get("organization", user_data.get("organization", ""))
+
+#         # Update user_data to reflect the current role and organization.
+#         user_data["role"] = role
+#         user_data["organization"] = organization
+
+#         # Create JWT tokens using the email as the identity and role/organization as additional claims.
+#         token = create_access_token(identity=email, additional_claims={"role": role, "organization": organization})
+#         refresh_token = create_refresh_token(
+#             identity=email,
+#             additional_claims={"role": role, "organization": organization},
+#             expires_delta=timedelta(days=7)
 #         )
- 
-#         return jsonify({"message": "Sign in successful", "token": token}), 200
+
+#         return jsonify({
+#             "message": "Sign in successful",
+#             "token": token,
+#             "refresh_token": refresh_token
+#         }), 200
+
 #     except Exception as e:
 #         print(f"Error during sign-in: {e}")
 #         return jsonify({"message": "Internal server error"}), 500
 
-
-from flask_jwt_extended import create_access_token
-from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-
-
-@app.route('/api/sign-in', methods=['POST'])
-def sign_in():
-    try:
-        # Parse input data
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-
-        # Validate input
-        if not all([email, password]):
-            return jsonify({"message": "Email and password are required"}), 400
-
-        # Verify user credentials
-        user_data = load_user_data(email)  # Replace with your function to load user details
-        if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
-            return jsonify({"message": "Invalid email or password"}), 401
-
-        # Create JWT token
-        token = create_access_token(identity=email)  # `identity` will be stored as the `sub` claim
-        refresh_token = create_refresh_token(identity=email, expires_delta=timedelta(days=7))  # 🔹 Refresh token valid for 7 days
-
-        # Return the token
-        return jsonify({
-            "message": "Sign in successful",
-            "token": token,
-            "refresh_token": refresh_token  # Include the refresh token in the response for future use
-        }), 200
-
-    except Exception as e:
-        print(f"Error during sign-in: {e}")
-        return jsonify({"message": "Internal server error"}), 500
 
 # can be called to get a new access token when the current one expires.
 @app.route("/refresh", methods=["POST"])
@@ -604,6 +635,8 @@ PROFILE_PHOTOS_DIR = "local_data/profile_photos"
 def advisor_profile():
     try:
         email = get_jwt_identity()  # Extract email from JWT Token
+        # Extract user details from the JWT token using the helper.
+        email, role, organization = get_user_details()
         user_data = load_user_data(email)
         if not user_data:
             return jsonify({"message": "User not found"}), 404
@@ -634,7 +667,9 @@ def advisor_profile():
                 "first_name": user_data["first_name"],
                 "last_name": user_data["last_name"],
                 "client_count": client_count,
-                "profile_photo_url": profile_photo_url
+                "profile_photo_url": profile_photo_url,
+                "role": role,
+                "organization": organization
             }
 
             return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
@@ -665,6 +700,15 @@ def advisor_profile():
 
             # ✅ Update user data
             user_data["profile_photo_url"] = profile_photo_url
+            if "role" in data:
+                user_data["role"] = data["role"]
+            else:
+                user_data["role"] = role 
+            if "organization" in data:
+                user_data["organization"] = data["organization"]
+            else:
+                user_data["organization"] = organization
+                
             save_user_data(email, user_data)
 
             return jsonify({"message": "Profile photo uploaded successfully", "profile_photo_url": profile_photo_url}), 200
@@ -2854,21 +2898,37 @@ ORGANIZATION_ADMIN_EMAILS = []
 # ✅ Function to Extract User Details from JWT
 @jwt_required(optional=True)
 def get_user_details():
-    """Extracts email, role, and organization from JWT token."""
-    user_identity = get_jwt_identity()  # Get user email (None if missing)
-    claims = get_jwt() if user_identity else {}  # Get JWT claims (empty if missing)
+    """
+    Extracts user's email, role, and organization from the JWT token.
+    First, it tries get_jwt_identity(); if that returns None,
+    it falls back to the "sub" field from get_jwt() claims.
+    """
+    # Try to get the identity from the JWT token.
+    identity = get_jwt_identity()
+    if not identity:
+        # Fallback: get the "sub" claim from the token.
+        claims = get_jwt() or {}
+        identity = claims.get("sub")
+    
+    # Ensure identity is a string.
+    if not identity:
+        identity = None
 
-    if user_identity in SUPER_ADMIN_EMAILS:
+    # Get all JWT claims.
+    claims = get_jwt() or {}
+    
+    if identity in SUPER_ADMIN_EMAILS:
         role = "super_admin"
-        organization = "MResult" #None  # Super admin sees all data
-     # elif user_identity in ORGANIZATION_ADMIN_EMAILS:
-        # organization = claims.get("organization", None)
-        # role = f"{organization}_admin"
+        organization = "MResult"  # Super admin sees all data.
+    elif identity in ORGANIZATION_ADMIN_EMAILS:
+        organization = claims.get("organization", None)
+        role = f"{organization}_admin" if organization else "admin"
     else:
         role = claims.get("role", "user")  # Default to 'user'
         organization = claims.get("organization", None)
+    
+    return identity, role, organization
 
-    return user_identity, role, organization
 
 # new :
 
@@ -2952,7 +3012,7 @@ def save_progress():
     """
     try:
         data = request.get_json()
-        page_data = data.get('page_data')
+        # page_data = data.get('page_data')
         client_id = request.json.get('unique_id')
         
         if not client_id:
@@ -2977,7 +3037,7 @@ def save_progress():
                 existing_data = {}
 
         # Merge new page data with existing data (page_data keys will override)
-        existing_data.update(page_data)
+        existing_data.update(data)
 
         # Save updated data
         if USE_AWS:
@@ -3015,15 +3075,13 @@ def submit_client_data():
 
         # Mandatory fields for clientDetail
         client_details = data.get("clientDetail", {})
-        required_fields = [
-            "clientName", "clientContact", "clientDob", "clientSsn",
-            "citizenship", "maritalStatus", "noOfDependency", "clientEmail",
-            "state", "city"
-        ]
-        missing_fields = [field for field in required_fields if not client_details.get(field)]
-        if missing_fields:
-            logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
-            return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
+        # required_fields = [
+        #     "clientName", "clientSsn","state", "city"
+        # ]
+        # missing_fields = [field for field in required_fields if not client_details.get(field)]
+        # if missing_fields:
+        #     logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
+        #     return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
 
         client_id = request.json.get('unique_id')
         client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
@@ -16199,14 +16257,47 @@ def load_chats():
             return []  # No chats found.
 
 # 🔹 **API Endpoint to Fetch Chats**
-@app.route("/get_chats", methods=["GET"])
+
+@app.route("/api/get-chats", methods=["GET"])
+@jwt_required()  # Ensures only authenticated users can access this API
 def get_chats_endpoint():
     try:
-        chats = load_chats()
-        return jsonify({"chats": chats}), 200
+        # get_jwt_identity() returns the email (a string)
+        user_email = get_jwt_identity()
+        # Retrieve additional claims (including role and organization) from the token.
+        claims = get_jwt() or {}
+        print(claims)
+        user_role = claims.get("role", "user")
+        print("User role is : ",user_role)
+
+        # Load all chats (assuming each chat entry has a "user_email" field)
+        all_chats = load_chats()
+        print(f"Chats: {all_chats}")
+
+        # For regular users, return only their own chats.
+        if user_role not in ["admin", "super_admin"]:
+            user_chats = [chat for chat in all_chats if chat.get("user_email") == user_email]
+            print(f"Returning user chats: {user_chats}")
+            return jsonify({"chats": user_chats}), 200
+
+        # Admin and Super Admin can see all chats.
+        print(f"Returning all chats for {user_role}: {all_chats}")
+        return jsonify({"chats": all_chats}), 200
+
     except Exception as e:
         logging.error(f"Error in get_chats: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": "Internal server error"}), 500
+
+
+# @app.route("/api/get-chats", methods=["GET"])
+# def get_chats_endpoint():
+#     try:
+#         chats = load_chats()
+#         print(f"Chats:{chats}")
+#         return jsonify({"chats": chats}), 200
+#     except Exception as e:
+#         logging.error(f"Error in get_chats: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 # def save_chats(user_id, chats):

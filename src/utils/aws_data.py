@@ -64,6 +64,12 @@ def load_from_aws(filename):
         return None
  
 def save_user_data(data, email):
+    # Ensure that role and organization are part of data
+    if "role" not in data:
+        data["role"] = "user"  # default role
+    if "organization" not in data:
+        data["organization"] = ""
+        
     if USE_AWS:
         # Store in AWS under 'signUp_user_folder/<email>.json'
         filename = f"{signUp_user_folder}{email}.json"
