@@ -3017,8 +3017,6 @@ def save_progress():
         
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
-        if not page_data:
-            return jsonify({"message": "No page data provided"}), 400
 
         # Load existing data if present
         if USE_AWS:
