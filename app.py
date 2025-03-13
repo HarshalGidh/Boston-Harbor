@@ -3007,7 +3007,7 @@ def get_client_data():
 def save_progress():
     try:
         data = request.get_json()
-        client_id = data.get('unique_id','uniqueId')
+        client_id = data.get('unique_id') or data.get('uniqueId')
         
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -3129,7 +3129,7 @@ def submit_client_data():
         #     logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
         #     return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
 
-        client_id = request.json.get('unique_id','uniqueId')
+        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
         client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
         
         if not client_id:
