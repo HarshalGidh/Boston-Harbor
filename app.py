@@ -3005,20 +3005,14 @@ def get_client_data():
 @app.route('/api/save-progress', methods=['POST'])
 @jwt_required()
 def save_progress():
-    """
-    Save the current page’s progress for the client.
-    Expects a JSON payload with 'client_id' and 'page_data' (a dictionary of the current page’s data).
-    This data will be merged with any previously saved data.
-    """
     try:
         data = request.get_json()
-        # page_data = data.get('page_data')
-        client_id = request.json.get('unique_id')
+        client_id = data.get('unique_id')
         
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Load existing data if present
+        # Load existing data if present.
         if USE_AWS:
             file_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
@@ -3034,14 +3028,17 @@ def save_progress():
             else:
                 existing_data = {}
 
-        # Merge new page data with existing data (page_data keys will override)
+        # Merge the entire payload into existing_data.
         existing_data.update(data)
 
-        # Save updated data
+        # Save updated data.
         if USE_AWS:
-            s3.put_object(Bucket=S3_BUCKET_NAME, Key=file_key,
-                          Body=json.dumps(existing_data, indent=4),
-                          ContentType="application/json")
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(existing_data, indent=4),
+                ContentType="application/json"
+            )
         else:
             with open(file_path, 'w') as f:
                 json.dump(existing_data, f, indent=4)
@@ -3051,6 +3048,57 @@ def save_progress():
     except Exception as e:
         logging.error(f"Error saving progress: {e}")
         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+
+
+# @app.route('/api/save-progress', methods=['POST'])
+# @jwt_required()
+# def save_progress():
+#     """
+#     Save the current page’s progress for the client.
+#     Expects a JSON payload with 'client_id' and 'page_data' (a dictionary of the current page’s data).
+#     This data will be merged with any previously saved data.
+#     """
+#     try:
+#         data = request.get_json()
+#         # page_data = data.get('page_data')
+#         client_id = request.json.get('unique_id')
+        
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load existing data if present
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 existing_data = {}
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#             else:
+#                 existing_data = {}
+
+#         # Merge new page data with existing data (page_data keys will override)
+#         existing_data.update(data)
+
+#         # Save updated data
+#         if USE_AWS:
+#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=file_key,
+#                           Body=json.dumps(existing_data, indent=4),
+#                           ContentType="application/json")
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
+
+#         return jsonify({"message": "Progress saved successfully."}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving progress: {e}")
+#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
 
 ##########################################
 # Updated Submit Client Data Endpoint
