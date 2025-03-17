@@ -3002,12 +3002,116 @@ def get_client_data():
 ##########################################
 # Save-and-Next Endpoint: Save Progress
 ##########################################
+# def deep_merge(d1, d2):
+#     """
+#     Recursively merge dictionary d2 into d1.
+#     Keys in d2 will override those in d1.
+#     """
+#     for key, value in d2.items():
+#         if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+#             deep_merge(d1[key], value)
+#         else:
+#             d1[key] = value
+#     return d1
+
+# @app.route('/api/save-progress', methods=['POST'])
+# def save_progress():
+#     """
+#     Save the current page’s progress for the client.
+#     Expects a JSON payload containing the full client data.
+#     The new payload will be deep merged with any previously saved data,
+#     so that keys in the new payload overwrite the old ones without nesting them.
+#     """
+#     try:
+#         data = request.get_json()
+#         client_id = data.get('unique_id') or data.get('uniqueId')
+#         print("Incoming payload:", data)
+        
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load existing data if present.
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#         # Deep merge the incoming data into the existing data.
+#         merged_data = deep_merge(existing_data, data)
+
+#         # Optionally, update the "date" field to the current date/time.
+#         # merged_data["date"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+
+#         # Save the merged data.
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(merged_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         print(action)
+#         print("Progress saved successfully.")
+#         return jsonify({"message": "Progress saved successfully."}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving progress: {e}")
+#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+
+
+# ##########################################
+# # Updated Submit Client Data Endpoint
+
+# ##########################################
+def deep_merge(d1, d2):
+    """
+    Recursively merge dictionary d2 into dictionary d1.
+    For keys that require complete override (e.g., "data"),
+    the new value replaces the old value.
+    """
+    for key, value in d2.items():
+        if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+            # For keys that you don't want to merge recursively, override:
+            if key == "data":
+                d1[key] = value
+            else:
+                d1[key] = deep_merge(d1[key], value)
+        else:
+            d1[key] = value
+    return d1
+
+# ---------------- Save Progress Endpoint ----------------
 @app.route('/api/save-progress', methods=['POST'])
-@jwt_required()
 def save_progress():
+    """
+    Save the current page’s progress for the client.
+    Expects a JSON payload containing the full client data.
+    The new payload will be deep merged with any previously saved data,
+    with the "data" key replaced instead of merged.
+    """
     try:
         data = request.get_json()
         client_id = data.get('unique_id') or data.get('uniqueId')
+        print("Incoming payload:", data)
         
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -3018,134 +3122,82 @@ def save_progress():
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-            except s3.exceptions.NoSuchKey:
+                is_update = True
+            except Exception:
                 existing_data = {}
+                is_update = False
         else:
             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
             if os.path.exists(file_path):
                 with open(file_path, 'r') as f:
                     existing_data = json.load(f)
+                is_update = True
             else:
                 existing_data = {}
+                is_update = False
 
-        # Merge the entire payload into existing_data.
-        existing_data.update(data)
+        # Deep merge the incoming data into the existing data.
+        merged_data = deep_merge(existing_data, data)
 
-        # Save updated data.
+        # Optionally update the "date" field if needed.
+        # merged_data["date"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+
+        # Save the merged data.
         if USE_AWS:
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
                 Key=file_key,
-                Body=json.dumps(existing_data, indent=4),
+                Body=json.dumps(merged_data, indent=4),
                 ContentType="application/json"
             )
         else:
             with open(file_path, 'w') as f:
-                json.dump(existing_data, f, indent=4)
+                json.dump(merged_data, f, indent=4)
 
+        action = "updated" if is_update else "created"
+        print(action)
+        print("Progress saved successfully.")
         return jsonify({"message": "Progress saved successfully."}), 200
 
     except Exception as e:
         logging.error(f"Error saving progress: {e}")
         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
 
-
-# @app.route('/api/save-progress', methods=['POST'])
-# @jwt_required()
-# def save_progress():
-#     """
-#     Save the current page’s progress for the client.
-#     Expects a JSON payload with 'client_id' and 'page_data' (a dictionary of the current page’s data).
-#     This data will be merged with any previously saved data.
-#     """
-#     try:
-#         data = request.get_json()
-#         # page_data = data.get('page_data')
-#         client_id = request.json.get('unique_id')
-        
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Load existing data if present
-#         if USE_AWS:
-#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#             except s3.exceptions.NoSuchKey:
-#                 existing_data = {}
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#             else:
-#                 existing_data = {}
-
-#         # Merge new page data with existing data (page_data keys will override)
-#         existing_data.update(data)
-
-#         # Save updated data
-#         if USE_AWS:
-#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=file_key,
-#                           Body=json.dumps(existing_data, indent=4),
-#                           ContentType="application/json")
-#         else:
-#             with open(file_path, 'w') as f:
-#                 json.dump(existing_data, f, indent=4)
-
-#         return jsonify({"message": "Progress saved successfully."}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error saving progress: {e}")
-#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
-
-##########################################
-# Updated Submit Client Data Endpoint
-
-##########################################
+# ---------------- Submit Client Data Endpoint ----------------
 @app.route('/api/submit-client-data', methods=['POST'])
 @jwt_required()
 def submit_client_data():
     """
     Finalizes and submits client data.
     Expects a JSON payload containing the complete client data.
-    Verifies that all mandatory clientDetail fields are present.
-    Uses the same organization assignment logic as before.
+    Uses role and organization to assign the proper organization field.
+    Merges the incoming data with any existing data using deep_merge,
+    ensuring that keys such as "data" are replaced rather than nested.
     """
     try:
-        email, role, organization = get_user_details()  
+        email, role, organization = get_user_details()
         data = request.get_json()
         if not data:
             return jsonify({'message': 'Invalid or missing request payload'}), 400
 
-        # Mandatory fields for clientDetail
         client_details = data.get("clientDetail", {})
-        # required_fields = [
-        #     "clientName", "clientSsn","state", "city"
-        # ]
-        # missing_fields = [field for field in required_fields if not client_details.get(field)]
-        # if missing_fields:
-        #     logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
-        #     return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
-
-        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
-        client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
+        client_id = data.get('unique_id') or data.get('uniqueId')
+        client_org = data.get('organization', organization)
         
         if not client_id:
             return jsonify({"message": "Unique ID is required"}), 400
 
         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
 
-        # 🔹 Assign Organization Field (keep this logic as is)
+        # Assign organization field based on role.
         if role == "super_admin":
             data['organization'] = client_org or "MResult"
         else:
-            data['organization'] = organization # Assign to the admin's organization
-            
+            data['organization'] = organization
+        
         data['submittedBy'] = email
 
-        # Load existing data if present and merge with final data
+        # Load existing data if present.
         if USE_AWS:
             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
@@ -3156,23 +3208,24 @@ def submit_client_data():
                 existing_data = {}
                 is_update = False
 
-            existing_data.update(data)
+            # Merge using deep_merge so that the "data" key is replaced.
+            merged_data = deep_merge(existing_data, data)
             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
-                          Body=json.dumps(existing_data, indent=4),
+                          Body=json.dumps(merged_data, indent=4),
                           ContentType="application/json")
         else:
             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
             if os.path.exists(file_path):
                 with open(file_path, 'r') as f:
                     existing_data = json.load(f)
-                existing_data.update(data)
                 is_update = True
             else:
-                existing_data = data
+                existing_data = {}
                 is_update = False
 
+            merged_data = deep_merge(existing_data, data)
             with open(file_path, 'w') as f:
-                json.dump(existing_data, f, indent=4)
+                json.dump(merged_data, f, indent=4)
 
         action = "updated" if is_update else "created"
         return jsonify({'message': f'Client data successfully {action}.', 'client_id': client_id}), 200
@@ -3180,6 +3233,108 @@ def submit_client_data():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+# Example endpoint to load progress (for testing)
+@app.route('/api/load-progress', methods=['GET'])
+def load_progress():
+    try:
+        client_id = request.args.get('unique_id')
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+        
+        if USE_AWS:
+            file_key = f"{client_summary_folder}client-data/{client_id}.json"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+            data = json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+        return jsonify(data), 200
+    except Exception as e:
+        logging.error(f"Error loading progress: {e}")
+        return jsonify({"message": f"Error loading progress: {str(e)}"}), 500
+
+# @app.route('/api/submit-client-data', methods=['POST'])
+# @jwt_required()
+# def submit_client_data():
+#     """
+#     Finalizes and submits client data.
+#     Expects a JSON payload containing the complete client data.
+#     Verifies that all mandatory clientDetail fields are present.
+#     Uses the same organization assignment logic as before.
+#     """
+#     try:
+#         email, role, organization = get_user_details()  
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+#         # Mandatory fields for clientDetail
+#         client_details = data.get("clientDetail", {})
+#         # required_fields = [
+#         #     "clientName", "clientSsn","state", "city"
+#         # ]
+#         # missing_fields = [field for field in required_fields if not client_details.get(field)]
+#         # if missing_fields:
+#         #     logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
+#         #     return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
+
+#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
+#         client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
+        
+#         if not client_id:
+#             return jsonify({"message": "Unique ID is required"}), 400
+
+#         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
+
+#         # 🔹 Assign Organization Field (keep this logic as is)
+#         if role == "super_admin":
+#             data['organization'] = client_org or "MResult"
+#         else:
+#             data['organization'] = organization # Assign to the admin's organization
+            
+#         data['submittedBy'] = email
+
+#         # Load existing data if present and merge with final data
+#         if USE_AWS:
+#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+
+#             existing_data.update(data)
+#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
+#                           Body=json.dumps(existing_data, indent=4),
+#                           ContentType="application/json")
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 existing_data.update(data)
+#                 is_update = True
+#             else:
+#                 existing_data = data
+#                 is_update = False
+
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         return jsonify({'message': f'Client data successfully {action}.', 'client_id': client_id}), 200
+
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
 ##########################################
