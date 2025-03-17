@@ -3002,95 +3002,22 @@ def get_client_data():
 ##########################################
 # Save-and-Next Endpoint: Save Progress
 ##########################################
-# def deep_merge(d1, d2):
-#     """
-#     Recursively merge dictionary d2 into d1.
-#     Keys in d2 will override those in d1.
-#     """
-#     for key, value in d2.items():
-#         if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
-#             deep_merge(d1[key], value)
-#         else:
-#             d1[key] = value
-#     return d1
-
-# @app.route('/api/save-progress', methods=['POST'])
-# def save_progress():
-#     """
-#     Save the current page’s progress for the client.
-#     Expects a JSON payload containing the full client data.
-#     The new payload will be deep merged with any previously saved data,
-#     so that keys in the new payload overwrite the old ones without nesting them.
-#     """
-#     try:
-#         data = request.get_json()
-#         client_id = data.get('unique_id') or data.get('uniqueId')
-#         print("Incoming payload:", data)
-        
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Load existing data if present.
-#         if USE_AWS:
-#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 is_update = True
-#             else:
-#                 existing_data = {}
-#                 is_update = False
-
-#         # Deep merge the incoming data into the existing data.
-#         merged_data = deep_merge(existing_data, data)
-
-#         # Optionally, update the "date" field to the current date/time.
-#         # merged_data["date"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
-
-#         # Save the merged data.
-#         if USE_AWS:
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=file_key,
-#                 Body=json.dumps(merged_data, indent=4),
-#                 ContentType="application/json"
-#             )
-#         else:
-#             with open(file_path, 'w') as f:
-#                 json.dump(merged_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-#         print(action)
-#         print("Progress saved successfully.")
-#         return jsonify({"message": "Progress saved successfully."}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error saving progress: {e}")
-#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
-
 
 # ##########################################
 # # Updated Submit Client Data Endpoint
 
 # ##########################################
+
+# ---------------- Save Progress Endpoint ----------------
+
 def deep_merge(d1, d2):
     """
     Recursively merge dictionary d2 into dictionary d1.
-    For keys that require complete override (e.g., "data"),
-    the new value replaces the old value.
+    For keys that require complete replacement (e.g., "data"), d2's value overrides d1's.
     """
     for key, value in d2.items():
         if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
-            # For keys that you don't want to merge recursively, override:
+            # For keys that should be fully replaced, do not merge recursively.
             if key == "data":
                 d1[key] = value
             else:
@@ -3099,24 +3026,42 @@ def deep_merge(d1, d2):
             d1[key] = value
     return d1
 
-# ---------------- Save Progress Endpoint ----------------
+def deep_merge(d1, d2):
+    """
+    Recursively merge dictionary d2 into dictionary d1.
+    For the key "data", the new value completely overrides the old one.
+    """
+    for key, value in d2.items():
+        # For key "data", override completely instead of merging.
+        if key == "data":
+            d1[key] = value
+        elif key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+            d1[key] = deep_merge(d1[key], value)
+        else:
+            d1[key] = value
+    return d1
+
+# ------------------- Save Progress Endpoint -------------------
+
 @app.route('/api/save-progress', methods=['POST'])
 def save_progress():
     """
     Save the current page’s progress for the client.
     Expects a JSON payload containing the full client data.
-    The new payload will be deep merged with any previously saved data,
-    with the "data" key replaced instead of merged.
+    Ensures that data is saved correctly without unnecessary nesting.
     """
     try:
         data = request.get_json()
         client_id = data.get('unique_id') or data.get('uniqueId')
-        print("Incoming payload:", data)
-        
+
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Load existing data if present.
+        # Ensure we are not nesting "data" inside another "data" field
+        if "data" in data and isinstance(data["data"], dict):
+            data = data["data"]  # Extract the inner data
+
+        # Load existing data if present
         if USE_AWS:
             file_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
@@ -3136,13 +3081,10 @@ def save_progress():
                 existing_data = {}
                 is_update = False
 
-        # Deep merge the incoming data into the existing data.
-        merged_data = deep_merge(existing_data, data)
+        # Replace old data with new data (No nesting)
+        merged_data = data  
 
-        # Optionally update the "date" field if needed.
-        # merged_data["date"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
-
-        # Save the merged data.
+        # Save the updated data
         if USE_AWS:
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
@@ -3155,13 +3097,14 @@ def save_progress():
                 json.dump(merged_data, f, indent=4)
 
         action = "updated" if is_update else "created"
-        print(action)
-        print("Progress saved successfully.")
+        print(f"Progress {action} successfully.")
+
         return jsonify({"message": "Progress saved successfully."}), 200
 
     except Exception as e:
         logging.error(f"Error saving progress: {e}")
         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+
 
 # ---------------- Submit Client Data Endpoint ----------------
 @app.route('/api/submit-client-data', methods=['POST'])
@@ -3233,7 +3176,6 @@ def submit_client_data():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
-
 
 # Example endpoint to load progress (for testing)
 @app.route('/api/load-progress', methods=['GET'])
