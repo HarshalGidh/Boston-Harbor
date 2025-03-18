@@ -3048,26 +3048,27 @@ def save_progress():
     """
     Save the current page’s progress for the client.
     Expects a JSON payload containing the full client data.
-    Ensures that data is saved correctly without unnecessary nesting.
+    The new payload will be deep merged with any previously saved data,
+    ensuring that keys (like "data") are not nested.
+    Additionally, it appends the "date" and "unique_id" fields.
     """
     try:
         data = request.get_json()
-        # client_id = data.get('unique_id') or data.get('uniqueId')
-        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
-        date = request.json.get('date',None)
-
+        # Retrieve client_id from a consistent field
+        client_id = request.json.get('client_id') or data.get('unique_id') or data.get('uniqueId')
+        # Get the date from payload if provided
+        date = request.json.get('date')
+        
+        print("Incoming payload:", data)
+        
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Ensure we are not nesting "data" inside another "data" field
+        # Ensure we are not nesting "data" inside another "data" field.
         if "data" in data and isinstance(data["data"], dict):
-            data = data["data"]  # Extract the inner data
-            
-        # if not date :
-        #     print("Date not passed")
-        #     date = datetime.datetime.date
+            data = data["data"]  # Extract inner data
 
-        # Load existing data if present
+        # Load existing data if present.
         if USE_AWS:
             file_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
@@ -3087,10 +3088,19 @@ def save_progress():
                 existing_data = {}
                 is_update = False
 
-        # Replace old data with new data (No nesting)
-        merged_data = data  
+        # Deep merge the incoming data into the existing data.
+        merged_data = deep_merge(existing_data, data)
 
-        # Save the updated data
+        # Append "date": if not present, use provided date (if any), else create one.
+        if "date" not in merged_data or not merged_data["date"]:
+            merged_data["date"] = date if date else datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+     
+        if "unique_id" not in merged_data or not merged_data["unique_id"]:
+            merged_data["unique_id"] = client_id
+        
+        merged_data['is_submitted'] = False
+
+        # Save the merged data.
         if USE_AWS:
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
@@ -3104,12 +3114,76 @@ def save_progress():
 
         action = "updated" if is_update else "created"
         print(f"Progress {action} successfully.")
-
         return jsonify({"message": "Progress saved successfully."}), 200
 
     except Exception as e:
         logging.error(f"Error saving progress: {e}")
         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+    
+
+# @app.route('/api/save-progress', methods=['POST'])
+# def save_progress():
+#     """
+#     Save the current page’s progress for the client.
+#     Expects a JSON payload containing the full client data.
+#     Ensures that data is saved correctly without unnecessary nesting.
+#     """
+#     try:
+#         data = request.get_json()
+#         # client_id = data.get('unique_id') or data.get('uniqueId')
+#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
+#         date = request.json.get('date',None)
+
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Ensure we are not nesting "data" inside another "data" field
+#         if "data" in data and isinstance(data["data"], dict):
+#             data = data["data"]  # Extract the inner data
+
+#         # Load existing data if present
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#         # Replace old data with new data (No nesting)
+#         merged_data = data  
+
+#         # Save the updated data
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(merged_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         print(f"Progress {action} successfully.")
+
+#         return jsonify({"message": "Progress saved successfully."}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving progress: {e}")
+#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
 
 
 # ---------------- Submit Client Data Endpoint ----------------
@@ -3147,6 +3221,7 @@ def submit_client_data():
             data['organization'] = organization
         
         data['submittedBy'] = email
+        data['is_submitted'] = True
 
         # Load existing data if present.
         if USE_AWS:
@@ -3179,7 +3254,9 @@ def submit_client_data():
                 json.dump(merged_data, f, indent=4)
 
         action = "updated" if is_update else "created"
-        return jsonify({'message': f'Client data successfully {action}.', 'client_id': client_id}), 200
+        
+        return jsonify({'message': f'Client data successfully {action}.',
+                        'client_id': client_id}), 200
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
