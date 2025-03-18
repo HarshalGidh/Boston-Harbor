@@ -3052,7 +3052,9 @@ def save_progress():
     """
     try:
         data = request.get_json()
-        client_id = data.get('unique_id') or data.get('uniqueId')
+        # client_id = data.get('unique_id') or data.get('uniqueId')
+        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
+        date = request.json.get('date',None)
 
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -3060,6 +3062,10 @@ def save_progress():
         # Ensure we are not nesting "data" inside another "data" field
         if "data" in data and isinstance(data["data"], dict):
             data = data["data"]  # Extract the inner data
+            
+        # if not date :
+        #     print("Date not passed")
+        #     date = datetime.datetime.date
 
         # Load existing data if present
         if USE_AWS:
