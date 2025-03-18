@@ -3130,11 +3130,13 @@ def submit_client_data():
             return jsonify({'message': 'Invalid or missing request payload'}), 400
 
         client_details = data.get("clientDetail", {})
-        client_id = data.get('unique_id') or data.get('uniqueId')
+        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
         client_org = data.get('organization', organization)
         
         if not client_id:
-            return jsonify({"message": "Unique ID is required"}), 400
+            client_id = data.get('unique_id') or data.get('uniqueId')
+            if not client_id:
+                return jsonify({"message": "Unique ID is required"}), 400
 
         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
 
