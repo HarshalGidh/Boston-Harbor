@@ -3095,8 +3095,8 @@ def save_progress():
         if "date" not in merged_data or not merged_data["date"]:
             merged_data["date"] = date if date else datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
      
-        if "unique_id" not in merged_data or not merged_data["unique_id"]:
-            merged_data["unique_id"] = client_id
+        if "uniqueId" not in merged_data or "unique_id" not in merged_data or not merged_data["unique_id"] or not merged_data["uniqueId"]:
+            merged_data["uniqueId"] = client_id
         
         merged_data['is_submitted'] = False
 
