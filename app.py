@@ -3043,6 +3043,8 @@ def deep_merge(d1, d2):
 
 # ------------------- Save Progress Endpoint -------------------
 
+# modified date version :
+
 @app.route('/api/save-progress', methods=['POST'])
 def save_progress():
     """
@@ -3087,7 +3089,16 @@ def save_progress():
             else:
                 existing_data = {}
                 is_update = False
-
+        
+        # Manage previous and last modified dates
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if 'last_modified_date' in existing_data:
+            data['previous_modified_date'] = existing_data['last_modified_date']
+        # if previous_modified_date and last_modified_date are not present in current data add it in the new data:
+        else: 
+            data['previous_modified_date'] = current_time
+        data['last_modified_date'] = current_time
+        
         # Deep merge the incoming data into the existing data.
         merged_data = deep_merge(existing_data, data)
 
@@ -3120,71 +3131,6 @@ def save_progress():
         logging.error(f"Error saving progress: {e}")
         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
     
-
-# @app.route('/api/save-progress', methods=['POST'])
-# def save_progress():
-#     """
-#     Save the current page’s progress for the client.
-#     Expects a JSON payload containing the full client data.
-#     Ensures that data is saved correctly without unnecessary nesting.
-#     """
-#     try:
-#         data = request.get_json()
-#         # client_id = data.get('unique_id') or data.get('uniqueId')
-#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
-#         date = request.json.get('date',None)
-
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
-
-#         # Ensure we are not nesting "data" inside another "data" field
-#         if "data" in data and isinstance(data["data"], dict):
-#             data = data["data"]  # Extract the inner data
-
-#         # Load existing data if present
-#         if USE_AWS:
-#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 is_update = True
-#             else:
-#                 existing_data = {}
-#                 is_update = False
-
-#         # Replace old data with new data (No nesting)
-#         merged_data = data  
-
-#         # Save the updated data
-#         if USE_AWS:
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=file_key,
-#                 Body=json.dumps(merged_data, indent=4),
-#                 ContentType="application/json"
-#             )
-#         else:
-#             with open(file_path, 'w') as f:
-#                 json.dump(merged_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-#         print(f"Progress {action} successfully.")
-
-#         return jsonify({"message": "Progress saved successfully."}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error saving progress: {e}")
-#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
-
 
 # ---------------- Submit Client Data Endpoint ----------------
 @app.route('/api/submit-client-data', methods=['POST'])
@@ -3234,6 +3180,15 @@ def submit_client_data():
                 existing_data = {}
                 is_update = False
 
+            # Manage previous and last modified dates
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if 'last_modified_date' in existing_data:
+                data['previous_modified_date'] = existing_data['last_modified_date']
+            # if previous_modified_date and last_modified_date are not present in current data add it in the new data:
+            else: 
+                data['previous_modified_date'] = current_time
+            data['last_modified_date'] = current_time
+            
             # Merge using deep_merge so that the "data" key is replaced.
             merged_data = deep_merge(existing_data, data)
             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
@@ -3248,6 +3203,12 @@ def submit_client_data():
             else:
                 existing_data = {}
                 is_update = False
+                
+            # Manage previous and last modified dates
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if 'last_modified_date' in existing_data:
+                data['previous_modified_date'] = existing_data['last_modified_date']
+            data['last_modified_date'] = current_time
 
             merged_data = deep_merge(existing_data, data)
             with open(file_path, 'w') as f:
@@ -3261,6 +3222,163 @@ def submit_client_data():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+# Previous Complete Working Code :
+
+# @app.route('/api/save-progress', methods=['POST'])
+# def save_progress():
+#     """
+#     Save the current page’s progress for the client.
+#     Expects a JSON payload containing the full client data.
+#     The new payload will be deep merged with any previously saved data,
+#     ensuring that keys (like "data") are not nested.
+#     Additionally, it appends the "date" and "unique_id" fields.
+#     """
+#     try:
+#         data = request.get_json()
+#         # Retrieve client_id from a consistent field
+#         client_id = request.json.get('client_id') or data.get('unique_id') or data.get('uniqueId')
+#         # Get the date from payload if provided
+#         date = request.json.get('date')
+        
+#         print("Incoming payload:", data)
+        
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Ensure we are not nesting "data" inside another "data" field.
+#         if "data" in data and isinstance(data["data"], dict):
+#             data = data["data"]  # Extract inner data
+
+#         # Load existing data if present.
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#         # Deep merge the incoming data into the existing data.
+#         merged_data = deep_merge(existing_data, data)
+
+#         # Append "date": if not present, use provided date (if any), else create one.
+#         if "date" not in merged_data or not merged_data["date"]:
+#             merged_data["date"] = date if date else datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+     
+#         if "uniqueId" not in merged_data or "unique_id" not in merged_data or not merged_data["unique_id"] or not merged_data["uniqueId"]:
+#             merged_data["uniqueId"] = client_id
+        
+#         merged_data['is_submitted'] = False
+
+#         # Save the merged data.
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(merged_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         print(f"Progress {action} successfully.")
+#         return jsonify({"message": "Progress saved successfully."}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving progress: {e}")
+#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+    
+
+
+# # ---------------- Submit Client Data Endpoint ----------------
+# @app.route('/api/submit-client-data', methods=['POST'])
+# @jwt_required()
+# def submit_client_data():
+#     """
+#     Finalizes and submits client data.
+#     Expects a JSON payload containing the complete client data.
+#     Uses role and organization to assign the proper organization field.
+#     Merges the incoming data with any existing data using deep_merge,
+#     ensuring that keys such as "data" are replaced rather than nested.
+#     """
+#     try:
+#         email, role, organization = get_user_details()
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+#         client_details = data.get("clientDetail", {})
+#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
+#         client_org = data.get('organization', organization)
+        
+#         if not client_id:
+#             client_id = data.get('unique_id') or data.get('uniqueId')
+#             if not client_id:
+#                 return jsonify({"message": "Unique ID is required"}), 400
+
+#         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
+
+#         # Assign organization field based on role.
+#         if role == "super_admin":
+#             data['organization'] = client_org or "MResult"
+#         else:
+#             data['organization'] = organization
+        
+#         data['submittedBy'] = email
+#         data['is_submitted'] = True
+
+#         # Load existing data if present.
+#         if USE_AWS:
+#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+
+#             # Merge using deep_merge so that the "data" key is replaced.
+#             merged_data = deep_merge(existing_data, data)
+#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
+#                           Body=json.dumps(merged_data, indent=4),
+#                           ContentType="application/json")
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#             merged_data = deep_merge(existing_data, data)
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+        
+#         return jsonify({'message': f'Client data successfully {action}.',
+#                         'client_id': client_id}), 200
+
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 # Example endpoint to load progress (for testing)
 @app.route('/api/load-progress', methods=['GET'])
@@ -15045,12 +15163,13 @@ def save_user_responses(client_id,user_responses,question_index=0):
         return f"Error saving user responses : {e}"
     
 
-def save_tax_suggestions(client_id,tax_details, tax_suggestions): #,revisit_assessment_count):
+def save_tax_suggestions(client_id,tax_details, tax_suggestions,client_last_modified): #,revisit_assessment_count):
    
     # Define the filename
     tax_data = {
         "tax_suggestions": tax_suggestions,
-        "tax_details": tax_details
+        "tax_details": tax_details,
+        "client_last_modified":client_last_modified
     }
     
     # tax_data = {
@@ -15266,105 +15385,221 @@ def generate_tax_suggestions():
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
 
-     
-# retrive previous tax suggestions : now it also generates if not geenerated before
+# New Version :
 
 @app.route('/api/get-tax-suggestions', methods=['POST'])
 def get_tax_suggestions():
     """
     Retrieves the tax suggestions for a given client_id.
+    If the client's last_modified_date is newer than the suggestions' stored date,
+    new tax suggestions are generated; otherwise, previous suggestions are returned.
     """
     try:
         client_id = request.json.get('client_id', None)
         print("Client ID:", client_id)
-    
+        
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
-    
+        suggestions_exist = False
+        suggestions_data = None
+
+        # Try to load existing tax suggestions.
         if USE_AWS:
-            # Download from S3
-            # s3 = boto3.client('s3')
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-            suggestions_json = response['Body'].read().decode('utf-8')
-            print("Retrieved tax suggestions data:", suggestions_json)
-            return jsonify(json.loads(suggestions_json)),200
-    
-    except Exception as e:
-        print(f"�� No tax suggestions found generating tax suggestions: {e}")
-        try:
-            if USE_AWS:
-                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
-                try:
-                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
-                    client_data = json.loads(response['Body'].read().decode('utf-8'))
-                except Exception as e:
-                    logging.error(f"Error retrieving client data from AWS: {e}")
-                    return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+                suggestions_data = json.loads(response['Body'].read().decode('utf-8'))
+                suggestions_exist = True
+                print("Retrieved existing tax suggestions data:", suggestions_data)
+            except Exception as e:
+                print(f"No tax suggestions found: {e}")
+                suggestions_exist = False
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}_tax_suggestions.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    suggestions_data = json.load(f)
+                suggestions_exist = True
             else:
-                client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
-                if not os.path.exists(client_data_file_path):
-                    return {"error": f"No client data found for client ID: {client_id}"}
+                suggestions_exist = False
 
-                try:
-                    with open(client_data_file_path, 'r') as f:
-                        client_data = json.load(f)
-                except Exception as e:
-                    logging.error(f"Error loading local client data: {e}")
-                    return {"error": f"Failed to load client data: {str(e)}"}
+        # Load client data to check last modification.
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return jsonify({"error": f"Error retrieving client data from AWS: {str(e)}"}), 500
+        else:
+            client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({"error": f"No client data found for client ID: {client_id}"}), 404
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        
+        # Check if client data has been updated since last suggestions were generated.
+        client_last_modified = client_data.get("last_modified_date") or client_data.get("date") # incase client data do not have a "last_modified_date"
+        suggestions_last_modified = suggestions_data.get("client_last_modified_date") if suggestions_data else None
 
-            if not client_data:
-                return {"error": "Client data could not be retrieved."}
+        # Determine if new suggestions are needed:
+        generate_new = False
+        if not suggestions_exist:
+            generate_new = True
+            print("No previous suggestions found; generating new suggestions.")
+        elif not client_last_modified or client_last_modified != suggestions_last_modified:
+            generate_new = True
+            print("Client data has been updated; generating new suggestions.")
+        else:
+            print("Client data has not changed; using existing suggestions.")
+
+        if generate_new:
+            # Save user responses if needed
+            save_user_responses(client_id, client_data)
             
-            data = client_data
-            
-            # print("User Responses :", user_responses)
-            print("User Responses :", data)
-            
-            save_user_responses(client_id, data)
-            # save_user_responses(client_id, user_responses)
-            
-            # Get Tax Rates :
+            # Get the latest tax rates
             TAX_RATES = get_latest_tax_rates()
             print("Final Tax Rates:", TAX_RATES)
             
-            # Calculate Tax Details :
-            # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
-            tax_result = calculate_taxes(data, client_id,TAX_RATES)
-            print("Generating Tax Calculations :",tax_result)
+            # Calculate Tax Details.
+            tax_result = calculate_taxes(client_data, client_id, TAX_RATES)
+            print("Generating Tax Calculations:", tax_result)
             
-            # Generate Tax Suggestions :
-            # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
-            tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
-            print("Generating Tax Suggestions",tax_advice)
+            # Generate Tax Suggestions.
+            tax_advice = generate_tax_suggestions_and_advice(client_data, client_id, TAX_RATES)
+            print("Generating Tax Suggestions:", tax_advice)
             
-            # revisit_assessment_count['client_id'] += 1
-
-            save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
-            # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+            # Create a suggestions object.
+            suggestions_data = {
+                "tax_details": tax_result,
+                "tax_suggestions": tax_advice,
+                "client_last_modified_date": client_last_modified  # store client's last modification date
+            }
             
+            # Save the new suggestions.
+            save_tax_suggestions(client_id, tax_result, tax_advice,client_last_modified) #,revisit_assessment_count)
+            
+            # Save the new suggestions.
             if USE_AWS:
-                # Download from S3
-                # s3 = boto3.client('s3')
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
-                suggestions_json = response['Body'].read().decode('utf-8')
-                print("Retrieved tax suggestions data:", suggestions_json)
-                return jsonify(json.loads(suggestions_json)),200
-            
-            # return jsonify({
-            #     "message": "Assessment completed.",
-            #     # "revisit_assessment_count": revisit_assessment_count,
-            #     "TAX_RATES": TAX_RATES,
-            #     "tax_details": tax_result,
-            #     "suggestions": tax_advice
-            # }), 200
-        
-        except Exception as e:
-            print(f"❌ Error in chatbot: {e}")
-            return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-    
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=suggestions_key,
+                    Body=json.dumps(suggestions_data, indent=4),
+                    ContentType="application/json"
+                )
+            else:
+                file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}_tax_suggestions.json")
+                with open(file_path, 'w') as f:
+                    json.dump(suggestions_data, f, indent=4)
+
+        # Finally, return the suggestions.
+        return jsonify(suggestions_data), 200
+
     except Exception as e:
         print(f"❌ Error in chatbot: {e}")
         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
-        # return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+
+     
+# previous version : retrive previous tax suggestions : now it also generates if not geenerated before
+
+# @app.route('/api/get-tax-suggestions', methods=['POST'])
+# def get_tax_suggestions():
+#     """
+#     Retrieves the tax suggestions for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+    
+#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+    
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#             suggestions_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved tax suggestions data:", suggestions_json)
+#             return jsonify(json.loads(suggestions_json)),200
+    
+#     except Exception as e:
+#         print(f"�� No tax suggestions found generating tax suggestions: {e}")
+#         try:
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error retrieving client data from AWS: {e}")
+#                     return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     return {"error": f"No client data found for client ID: {client_id}"}
+
+#                 try:
+#                     with open(client_data_file_path, 'r') as f:
+#                         client_data = json.load(f)
+#                 except Exception as e:
+#                     logging.error(f"Error loading local client data: {e}")
+#                     return {"error": f"Failed to load client data: {str(e)}"}
+
+#             if not client_data:
+#                 return {"error": "Client data could not be retrieved."}
+            
+#             data = client_data
+            
+#             # print("User Responses :", user_responses)
+#             print("User Responses :", data)
+            
+#             save_user_responses(client_id, data)
+#             # save_user_responses(client_id, user_responses)
+            
+#             # Get Tax Rates :
+#             TAX_RATES = get_latest_tax_rates()
+#             print("Final Tax Rates:", TAX_RATES)
+            
+#             # Calculate Tax Details :
+#             # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+#             tax_result = calculate_taxes(data, client_id,TAX_RATES)
+#             print("Generating Tax Calculations :",tax_result)
+            
+#             # Generate Tax Suggestions :
+#             # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
+#             tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
+#             print("Generating Tax Suggestions",tax_advice)
+            
+#             # revisit_assessment_count['client_id'] += 1
+
+#             save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+#             # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+            
+#             if USE_AWS:
+#                 # Download from S3
+#                 # s3 = boto3.client('s3')
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#                 suggestions_json = response['Body'].read().decode('utf-8')
+#                 print("Retrieved tax suggestions data:", suggestions_json)
+#                 return jsonify(json.loads(suggestions_json)),200
+            
+#             # return jsonify({
+#             #     "message": "Assessment completed.",
+#             #     # "revisit_assessment_count": revisit_assessment_count,
+#             #     "TAX_RATES": TAX_RATES,
+#             #     "tax_details": tax_result,
+#             #     "suggestions": tax_advice
+#             # }), 200
+        
+#         except Exception as e:
+#             print(f"❌ Error in chatbot: {e}")
+#             return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+#         # return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
     
 # Get Previous user responses :
 

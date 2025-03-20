@@ -113,12 +113,13 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 
 # list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
 
-
 ######################################################################################
 
 
 # delete folders/files from bucket :
 
+# list all the files in the folder :
+# list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
 
 
 # S3 bucket and file details
@@ -143,7 +144,39 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # FILE_KEY = "client_summary_folder/client-data/J9488.json"
 # FILE_KEY = "client_summary_folder/client-data/KK3893.json"
 
+# FILE_KEY = "client_summary_folder/client-data/uniqueId.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/undefined.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/financialForm.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/TN4162.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/TN7550.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/TN1535.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/Tc5889.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SN7330.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/GR3389.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/JJ6307.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/JJ6723.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS4546.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS4590.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS1334.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS1420.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS5964.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS6447.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/RS9923.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/FT1589.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/NA4747.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/ST6402.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/TS1661.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/TS3145.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/Tc8158.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/df2465.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW1826.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW1901.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW2771.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW4467.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW7446.json" ## deleted
+# FILE_KEY = "client_summary_folder/client-data/SW9113.json" ## deleted
 
+# Delete files using file keys : 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
 #     Deletes a specified file from an S3 bucket.
@@ -164,7 +197,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 #     except Exception as e:
 #         print(f"Error deleting file: {e}")
 
-# # Call the function
+# # #Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 
 
