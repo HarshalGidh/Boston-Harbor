@@ -16449,13 +16449,15 @@ import uuid
 
 # 🔹 **API for Chatbot Conversation**
 @app.route('/api/chatbot', methods=['POST'])
+# @jwt_required()
 def chatbot():
     try:
         data = request.json
         user_input = data.get("user_input", "")
         session_id = data.get("session_id",None)
         chat_title = data.get("chat_title",None)
-        user_id = data.get("user_id",None)
+        user_id = data.get("user_email",None) 
+        print("user_id: ", user_id)
         
         if not user_input:
             return jsonify({"error": "No user input provided"}), 400
@@ -16467,7 +16469,8 @@ def chatbot():
         history = []
         chat_history = []
         time_of_chat_creation = None
-    
+
+        # for new chat : generate session_id and chat title :
         if not session_id:
             session_id = uuid.uuid4().hex  # Generate a unique session_id.
             # Generate a chat title from the first query (truncated to 20 characters).
@@ -16673,61 +16676,84 @@ def chatbot():
 
 # Get all Chats :
 
-# 🔹 **Save Chats** (store all chat session summaries in one file)
-def save_chats(chats):
-    if USE_AWS:
-        chats_key = f"{chat_history_folder}/chats.json"
-        chats_json = json.dumps(chats, indent=4)
-        print(f"Chats JSON: {chats_json}\n")
-        # Upload the chats summary to S3.
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=chats_key,
-            Body=chats_json,
-            ContentType='application/json'
-        )
-        logging.info("Saved chats in AWS S3.")
-        print("Saved chats in AWS S3.")
-        return "Saved chats in AWS S3."
-    else:
-        chats_folder_local = "chats"
-        os.makedirs(chats_folder_local, exist_ok=True)
-        file_path = os.path.join(chats_folder_local, "chats.json")
-        with open(file_path, "w") as file:
-            json.dump(chats, file, indent=4)
-        print("💾 Chats saved locally.")
-        return "Chats saved locally."
-
-# 🔹 **Load Chats** (load all chat session summaries)
+# 🔹 **Load Chats** (Ensure all stored chats are retrieved)
 def load_chats():
     if USE_AWS:
         chats_key = f"{chat_history_folder}/chats.json"
         try:
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
             chats_json = json.loads(response['Body'].read().decode('utf-8'))
-            return chats_json
+            print("loaded chats :",chats_json)
+            return chats_json if isinstance(chats_json, list) else []  # Ensure it's a list
+        except s3.exceptions.NoSuchKey:
+            return []  # No chats found
         except Exception as e:
-            error_msg = str(e)
-            logging.error(f"Error retrieving chats from AWS: {error_msg}")
-            return []  # On error, return empty list.
+            logging.error(f"Error retrieving chats from AWS: {str(e)}")
+            return []
     else:
         file_path = os.path.join("chats", "chats.json")
         if os.path.exists(file_path):
             with open(file_path, "r") as file:
-                chats = json.load(file)
-            return chats
-        else:
-            return []  # No chats found.
+                try:
+                    chats = json.load(file)
+                    return chats if isinstance(chats, list) else []  # Ensure it's a list
+                except json.JSONDecodeError:
+                    return []  # Return empty list if there's a decoding error
+        return []
+
+# 🔹 **Save Chats** (Ensure chats persist correctly)
+def save_chats(new_chat):
+    """
+    Appends a new chat to the existing chat history.
+    """
+    all_chats = load_chats()  # Load existing chats
+    
+    print("loaded chats :", all_chats)
+
+    # Ensure new_chat is a list of dicts
+    if not isinstance(new_chat, list):
+        logging.error("New chat data is not in the expected list format.")
+        return "Error: Invalid chat data format."
+    
+    # Ensure loaded chats are a list (avoid NoneType errors)
+    if not isinstance(all_chats, list):
+        all_chats = []
+
+    all_chats.append(new_chat)  # Append the new chat
+
+    if USE_AWS:
+        chats_key = f"{chat_history_folder}/chats.json"
+        chats_json = json.dumps(all_chats, indent=4)
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=chats_key,
+                Body=chats_json,
+                ContentType='application/json'
+            )
+            logging.info("Saved chats in AWS S3.")
+            return "Saved chats in AWS S3."
+        except Exception as e:
+            logging.error(f"Error saving chats to AWS: {e}")
+            return "Error saving chats to AWS."
+    else:
+        file_path = os.path.join("chats", "chats.json")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        try:
+            with open(file_path, "w") as file:
+                json.dump(all_chats, file, indent=4)
+            return "Chats saved locally."
+        except Exception as e:
+            logging.error(f"Error saving chats locally: {e}")
+            return "Error saving chats locally."
 
 # 🔹 **API Endpoint to Fetch Chats**
-
 @app.route("/api/get-chats", methods=["GET"])
-@jwt_required()  # Ensures only authenticated users can access this API
+@jwt_required()
 def get_chats_endpoint():
     try:
-        # get_jwt_identity() returns the email (a string)
         user_email = get_jwt_identity()
-        # Retrieve additional claims (including role and organization) from the token.
+        print("user_email: ", user_email)
         claims = get_jwt() or {}
         print(claims)
         user_role = claims.get("role", "user")
@@ -16736,7 +16762,7 @@ def get_chats_endpoint():
         # Load all chats (assuming each chat entry has a "user_email" field)
         all_chats = load_chats()
         print(f"Chats: {all_chats}")
-
+        
         # For regular users, return only their own chats.
         if user_role not in ["admin", "super_admin"]:
             user_chats = [chat for chat in all_chats if chat.get("user_email") == user_email]
@@ -16745,28 +16771,18 @@ def get_chats_endpoint():
 
         # Admin and Super Admin can see all chats.
         print(f"Returning all chats for {user_role}: {all_chats}")
-        return jsonify({"chats": all_chats}), 200
+        
+        return jsonify({"chats": all_chats}), 200  # Admins get all chats
 
     except Exception as e:
         logging.error(f"Error in get_chats: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
 
-# @app.route("/api/get-chats", methods=["GET"])
-# def get_chats_endpoint():
-#     try:
-#         chats = load_chats()
-#         print(f"Chats:{chats}")
-#         return jsonify({"chats": chats}), 200
-#     except Exception as e:
-#         logging.error(f"Error in get_chats: {e}")
-#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
-# def save_chats(user_id, chats):
-    
+# # 🔹 **Save Chats** (store all chat session summaries in one file)
+# def save_chats(chats):
 #     if USE_AWS:
-#         chats_key = f"{chat_history_folder}/{user_id}_chats.json"
+#         chats_key = f"{chat_history_folder}/chats.json"
 #         chats_json = json.dumps(chats, indent=4)
 #         print(f"Chats JSON: {chats_json}\n")
 #         # Upload the chats summary to S3.
@@ -16776,60 +16792,72 @@ def get_chats_endpoint():
 #             Body=chats_json,
 #             ContentType='application/json'
 #         )
-#         logging.info(f"Saved chats for user_id: {user_id} in AWS S3.")
-#         print(f"Saved chats for user_id: {user_id} in AWS S3.")
-#         return f"Saved chats for user_id: {user_id} in AWS S3."
+#         logging.info("Saved chats in AWS S3.")
+#         print("Saved chats in AWS S3.")
+#         return "Saved chats in AWS S3."
 #     else:
 #         chats_folder_local = "chats"
 #         os.makedirs(chats_folder_local, exist_ok=True)
-#         file_path = os.path.join(chats_folder_local, f"{user_id}.json")
+#         file_path = os.path.join(chats_folder_local, "chats.json")
 #         with open(file_path, "w") as file:
 #             json.dump(chats, file, indent=4)
-#         print(f"💾 Chats saved locally for user: {user_id}")
-#         return f"Chats saved locally for user: {user_id}"
+#         print("💾 Chats saved locally.")
+#         return "Chats saved locally."
 
-# def load_chats(user_id):
-    
+# # 🔹 **Load Chats** (load all chat session summaries)
+# def load_chats():
 #     if USE_AWS:
-#         # Download the chats summary from S3.
-        
-#         chats_key = f"{chat_history_folder}/{user_id}_chats.json"
+#         chats_key = f"{chat_history_folder}/chats.json"
 #         try:
 #             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
 #             chats_json = json.loads(response['Body'].read().decode('utf-8'))
 #             return chats_json
-        
 #         except Exception as e:
 #             error_msg = str(e)
 #             logging.error(f"Error retrieving chats from AWS: {error_msg}")
-#             return []  # On other errors, return empty chats.
+#             return []  # On error, return empty list.
 #     else:
-#         file_path = os.path.join("chats", f"{user_id}.json")
+#         file_path = os.path.join("chats", "chats.json")
 #         if os.path.exists(file_path):
 #             with open(file_path, "r") as file:
-#                 chat_history = json.load(file)
-#             return chat_history
+#                 chats = json.load(file)
+#             return chats
 #         else:
-#             return []  # No history found.
+#             return []  # No chats found.
 
+# # 🔹 **API Endpoint to Fetch Chats**
 
-# @app.route("/get_chats", methods=["GET"]) # do get method
-# def get_chats():
+# @app.route("/api/get-chats", methods=["GET"])
+# @jwt_required()  # Ensures only authenticated users can access this API
+# def get_chats_endpoint():
 #     try:
-#         # use auth token
-#         # user_id = request.json.get("user_id", None) # get user's email id to fetch the chats
-        
-#         # if not user_id :
-#         #     return jsonify({"error": "No User ID provided"}), 400
-        
-#         # chats = load_chats(user_id) #[]
-        
-#         chats = load_chats() #[]
-        
-#         return jsonify({"chats": chats}), 200
+#         # get_jwt_identity() returns the email (a string)
+#         user_email = get_jwt_identity()
+#         # Retrieve additional claims (including role and organization) from the token.
+#         claims = get_jwt() or {}
+        # print(claims)
+        # user_role = claims.get("role", "user")
+        # print("User role is : ",user_role)
+
+        # # Load all chats (assuming each chat entry has a "user_email" field)
+        # all_chats = load_chats()
+        # print(f"Chats: {all_chats}")
+
+        # # For regular users, return only their own chats.
+        # if user_role not in ["admin", "super_admin"]:
+        #     user_chats = [chat for chat in all_chats if chat.get("user_email") == user_email]
+        #     print(f"Returning user chats: {user_chats}")
+        #     return jsonify({"chats": user_chats}), 200
+
+        # # Admin and Super Admin can see all chats.
+        # print(f"Returning all chats for {user_role}: {all_chats}")
+        # return jsonify({"chats": all_chats}), 200
+
 #     except Exception as e:
 #         logging.error(f"Error in get_chats: {e}")
-#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+#         return jsonify({"error": "Internal server error"}), 500
+
+
     
 
 ###############################################################################################
