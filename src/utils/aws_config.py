@@ -175,8 +175,9 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # FILE_KEY = "client_summary_folder/client-data/SW4467.json" ## deleted
 # FILE_KEY = "client_summary_folder/client-data/SW7446.json" ## deleted
 # FILE_KEY = "client_summary_folder/client-data/SW9113.json" ## deleted
+# FILE_KEY = "chat_history_folder/chats.json"
 
-# Delete files using file keys : 
+# # #Delete files using file keys : 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
 #     Deletes a specified file from an S3 bucket.

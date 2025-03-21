@@ -16581,15 +16581,14 @@ def chatbot():
             # history.append({"role": "assistant", "text": response_text})
             
             # user_id = "id"
-            chats = [
-                {
+            chats = {
                     "user_id": user_id,
                     "chat_title": chat_title,
                     "session_id": session_id,
                     "time_of_chat_creation": time_of_chat_creation,
                     "last_saved_timestamp": datetime.now().isoformat()
                 }
-            ]
+            
             # save chats 
             save_chats(chats)
             # save_chats(user_id,chats)
@@ -16710,9 +16709,9 @@ def save_chats(new_chat):
     
     print("loaded chats :", all_chats)
 
-    # Ensure new_chat is a list of dicts
-    if not isinstance(new_chat, list):
-        logging.error("New chat data is not in the expected list format.")
+    # Ensure new_chat is a dictionary :
+    if not isinstance(new_chat, dict):
+        logging.error("New chat data is not in the expected dict format.")
         return "Error: Invalid chat data format."
     
     # Ensure loaded chats are a list (avoid NoneType errors)
