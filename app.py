@@ -16476,15 +16476,16 @@ def chatbot():
             # Generate a chat title from the first query (truncated to 20 characters).
             chat_title = generate_chat_title(user_input) #
             time_of_chat_creation = datetime.now().isoformat()
-            timestamp = datetime.now().isoformat()
+            # timestamp = datetime.now().isoformat()
             # Store initial metadata as the first entry.
-            history.append({
-                "role": "system",
-                "chat_title": chat_title,
-                "time_of_chat_creation" : time_of_chat_creation,
-                "timestamp": timestamp,
-                "message": "New chat session started."
-            })
+            
+            # history.append({
+            #     "role": "system",
+                # "chat_title": chat_title,
+                # "time_of_chat_creation" : time_of_chat_creation,
+                # "timestamp": timestamp,
+            #     "message": "New chat session started."
+            # })
             print(f"New session created: {session_id} with title: {chat_title}")
         else:
             # Load previous history.
@@ -16520,11 +16521,11 @@ def chatbot():
             chat_history = history[-5:]
             
         # Append the new user message with timestamp.
-        history.append({
-            "role": "user",
-            "text": user_input,
-            "timestamp": datetime.now().isoformat()
-        })
+        # history.append({
+        #     "role": "user",
+        #     "text": user_input,
+        #     "timestamp": datetime.now().isoformat()
+        # })
         
         chat_history.append({
             "role": "user",
@@ -16574,8 +16575,10 @@ def chatbot():
             
             # Append the AI's response to the history.
             history.append({
-                    "role": "assistant",
-                    "text": response_text,
+                    "user_input": user_input,
+                    "ai_response": response_text,
+                    "chat_title": chat_title,
+                    "time_of_chat_creation" : time_of_chat_creation,
                     "timestamp": datetime.now().isoformat()
                 })
             # history.append({"role": "assistant", "text": response_text})
@@ -16777,86 +16780,6 @@ def get_chats_endpoint():
         logging.error(f"Error in get_chats: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-
-# # 🔹 **Save Chats** (store all chat session summaries in one file)
-# def save_chats(chats):
-#     if USE_AWS:
-#         chats_key = f"{chat_history_folder}/chats.json"
-#         chats_json = json.dumps(chats, indent=4)
-#         print(f"Chats JSON: {chats_json}\n")
-#         # Upload the chats summary to S3.
-#         s3.put_object(
-#             Bucket=S3_BUCKET_NAME,
-#             Key=chats_key,
-#             Body=chats_json,
-#             ContentType='application/json'
-#         )
-#         logging.info("Saved chats in AWS S3.")
-#         print("Saved chats in AWS S3.")
-#         return "Saved chats in AWS S3."
-#     else:
-#         chats_folder_local = "chats"
-#         os.makedirs(chats_folder_local, exist_ok=True)
-#         file_path = os.path.join(chats_folder_local, "chats.json")
-#         with open(file_path, "w") as file:
-#             json.dump(chats, file, indent=4)
-#         print("💾 Chats saved locally.")
-#         return "Chats saved locally."
-
-# # 🔹 **Load Chats** (load all chat session summaries)
-# def load_chats():
-#     if USE_AWS:
-#         chats_key = f"{chat_history_folder}/chats.json"
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
-#             chats_json = json.loads(response['Body'].read().decode('utf-8'))
-#             return chats_json
-#         except Exception as e:
-#             error_msg = str(e)
-#             logging.error(f"Error retrieving chats from AWS: {error_msg}")
-#             return []  # On error, return empty list.
-#     else:
-#         file_path = os.path.join("chats", "chats.json")
-#         if os.path.exists(file_path):
-#             with open(file_path, "r") as file:
-#                 chats = json.load(file)
-#             return chats
-#         else:
-#             return []  # No chats found.
-
-# # 🔹 **API Endpoint to Fetch Chats**
-
-# @app.route("/api/get-chats", methods=["GET"])
-# @jwt_required()  # Ensures only authenticated users can access this API
-# def get_chats_endpoint():
-#     try:
-#         # get_jwt_identity() returns the email (a string)
-#         user_email = get_jwt_identity()
-#         # Retrieve additional claims (including role and organization) from the token.
-#         claims = get_jwt() or {}
-        # print(claims)
-        # user_role = claims.get("role", "user")
-        # print("User role is : ",user_role)
-
-        # # Load all chats (assuming each chat entry has a "user_email" field)
-        # all_chats = load_chats()
-        # print(f"Chats: {all_chats}")
-
-        # # For regular users, return only their own chats.
-        # if user_role not in ["admin", "super_admin"]:
-        #     user_chats = [chat for chat in all_chats if chat.get("user_email") == user_email]
-        #     print(f"Returning user chats: {user_chats}")
-        #     return jsonify({"chats": user_chats}), 200
-
-        # # Admin and Super Admin can see all chats.
-        # print(f"Returning all chats for {user_role}: {all_chats}")
-        # return jsonify({"chats": all_chats}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error in get_chats: {e}")
-#         return jsonify({"error": "Internal server error"}), 500
-
-
     
 
 ###############################################################################################
@@ -16971,7 +16894,7 @@ def get_chat_history():
                 logging.error(f"Error retrieving chat history from AWS: {error_msg}")
                 # Check if the error indicates that the file (key) does not exist.
                 if "NoSuchKey" in error_msg:
-                    return jsonify({"message": "No previous chat history available."}), 404
+                    return jsonify({"message": "No previous chat history available."}), 400
                 else:
                     return jsonify({"result": f"Error retrieving chat history from AWS: {error_msg}"}), 500
         else:
@@ -16981,7 +16904,7 @@ def get_chat_history():
                     chat_history = json.load(file)
                 return jsonify(chat_history), 200
             else:
-                return jsonify({"message": "No chat history found."}), 404
+                return jsonify({"message": "No chat history found."}), 400
     except Exception as e:
         logging.error(f"Error retrieving chat history: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
