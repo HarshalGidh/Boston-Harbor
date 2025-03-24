@@ -16476,6 +16476,19 @@ def chatbot():
             # Generate a chat title from the first query (truncated to 20 characters).
             chat_title = generate_chat_title(user_input) #
             time_of_chat_creation = datetime.now().isoformat()
+            # user_id = "id"
+            chats = {
+                    "user_id": user_id,
+                    "chat_title": chat_title,
+                    "session_id": session_id,
+                    "time_of_chat_creation": time_of_chat_creation,
+                    "last_saved_timestamp": datetime.now().isoformat()
+                }
+            
+            # save chats for one time :
+            save_chats(chats)
+            # save_chats(user_id,chats)
+            
             # timestamp = datetime.now().isoformat()
             # Store initial metadata as the first entry.
             
@@ -16582,19 +16595,6 @@ def chatbot():
                     "timestamp": datetime.now().isoformat()
                 })
             # history.append({"role": "assistant", "text": response_text})
-            
-            # user_id = "id"
-            chats = {
-                    "user_id": user_id,
-                    "chat_title": chat_title,
-                    "session_id": session_id,
-                    "time_of_chat_creation": time_of_chat_creation,
-                    "last_saved_timestamp": datetime.now().isoformat()
-                }
-            
-            # save chats 
-            save_chats(chats)
-            # save_chats(user_id,chats)
             
             save_chat_history(session_id, history)
             
