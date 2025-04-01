@@ -7570,17 +7570,13 @@ def order_placed():
     try:
         # Extract data from the request
         order_data = request.json.get('order_data', {})
-        client_name = request.json.get('client_name', None)  # Default client name
-        client_id = request.json.get('client_id', None)  # Default client ID
+        client_name = request.json.get('client_name', None)
+        client_id = request.json.get('client_id', None)
         funds = request.json.get('funds') or request.json.get('investmentAmount')
-        action = (order_data.get("buy_or_sell", "") or order_data.get("Action", "")).lower()
+        action = (order_data.get("buy_or_sell") or order_data.get("Action", "")).lower()
         assetClass = order_data.get("assetClass", "").strip().lower()
-        market = order_data.get("market", "").strip().lower()  # e.g., selectedFund
-        # Convert asset_funds to float if provided; if not, default to 0.0
-        try:
-            asset_funds = float(order_data.get("asset_funds", 0))
-        except (ValueError, TypeError):
-            asset_funds = 0.0
+        market = order_data.get("market", "").strip().lower()  # For reits this might be used; for mutual funds, may be empty.
+        ownership = order_data.get("ownership", "").strip().lower()  # e.g., "reit/fund" for REITs
         try:
             available_funds = float(request.json.get("available_funds", funds))
         except (ValueError, TypeError):
@@ -7589,12 +7585,15 @@ def order_placed():
             realized_gains_losses = float(request.json.get("realized_gains_losses", 0))
         except (ValueError, TypeError):
             realized_gains_losses = 0.0
+        try:
+            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
+        except (ValueError, TypeError):
+            transactionAmount = 0.0
 
         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
-        print("Available Funds:", available_funds)
-        print("Realized Gains/Losses:", realized_gains_losses)
+        print("Asset Class:", assetClass, "Ownership:", ownership)
 
-        # Load existing transactions from JSON file (AWS/local)
+        # Load existing transactions from storage
         if USE_AWS:
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
@@ -7614,87 +7613,70 @@ def order_placed():
                 print(f"Loaded existing transactions for client {client_id} from local storage")
             else:
                 client_transactions = []
-                print(f"No existing transactions for client {client_id}. Initializing new list.")
 
         print("client transactions:", client_transactions)
 
-        # Load allocated funds from client summary data
+        # Load client summary data (which contains investmentEntries)
         if USE_AWS:
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_data = json.loads(response['Body'].read().decode('utf-8'))
-                print(f"Loaded existing client data for client {client_id} from S3")
+                print(f"Loaded client data for client {client_id} from S3")
             except s3.exceptions.NoSuchKey:
                 client_data = {}
-                print(f"No existing client data for client {client_id}. Initializing new data.")
+                print(f"No client data for client {client_id}. Initializing new data.")
         else:
             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r') as file:
                     client_data = json.load(file)
-                print(f"Loaded existing client data for client {client_id} from local storage")
+                print(f"Loaded client data for client {client_id} from local storage")
             else:
                 client_data = {}
-                print(f"No existing client data for client {client_id}. Initializing new data.")
 
         print("client data:", client_data)
 
-        # Load Investment Entries from client_data
+        # Retrieve investment entries from client data
         client_investment_entries = client_data.get('investmentEntries', [])
         if not isinstance(client_investment_entries, list):
             client_investment_entries = []
 
-        # Process order based on action
+        # Process Buy/Sell order logic
         if action == "sell":
-            print("Sell Order Validation")
-            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
+            print("Processing sell order")
+            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")
             sell_units = float(order_data.get("units", 0))
             sell_market = order_data.get("market") or order_data.get("Market")
             sell_price = float(order_data.get("unit_price") or order_data.get("UnitPrice", 0))
-            print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            print(f"Sell order: {sell_symbol}, units: {sell_units}, market: {sell_market}, price: {sell_price}")
 
-            # Find all matching orders for sell using both "stock" and "etf" if applicable.
+            # Find matching orders for FIFO calculation (using both symbol and market)
             matching_orders = [
                 order for order in client_transactions
-                if ((order.get("symbol") or order.get("Symbol")) == sell_symbol and
-                    (order.get("market") or order.get("Market")) == sell_market)
+                if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+                   (order.get("market") or order.get("Market")) == sell_market
             ]
-                
             print("Matching orders for sell:", matching_orders)
-            
-            # Calculate total available units from buy orders (FIFO)
-            total_units_bought = sum(float(order.get("units", order.get("Units", 0)))
-                                     for order in matching_orders
-                                     if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
-            total_units_sold = sum(float(order.get("units", order.get("Units", 0)))
-                                   for order in matching_orders
-                                   if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+
+            total_units_bought = sum(float(order.get("units", order.get("Units", 0))) for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+            total_units_sold = sum(float(order.get("units", order.get("Units", 0))) for order in matching_orders if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
             available_units = total_units_bought - total_units_sold
-            print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
-            
-            if total_units_bought == 0:
-                return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
-            if sell_units > available_units:
-                return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
-            
-            print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}.")
-            
-            # No check for transaction amount vs available funds for sell orders
-            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
-            print(f"Transaction amount: {transactionAmount}")
-            
+            print(f"Total units bought: {total_units_bought}, sold: {total_units_sold}, available: {available_units}")
+
+            if total_units_bought == 0 or sell_units > available_units:
+                return jsonify({"message": f"Invalid sell order for {sell_symbol}. Insufficient units."}), 400
+
             # Update available funds for sell (add transaction amount)
             available_funds += transactionAmount
-            print(f"New available funds: {available_funds}")
-            
+            print(f"New available funds after sell: {available_funds}")
+
             # Calculate realized gains/losses using FIFO
             buy_orders = sorted(
                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
             )
             print("FIFO buy orders:", buy_orders)
-            
             units_to_sell = sell_units
             fifo_profit = 0.0
             for buy in buy_orders:
@@ -7706,13 +7688,13 @@ def order_placed():
                 profit = allocation_units * (sell_price - cost_basis)
                 fifo_profit += profit
                 units_to_sell -= allocation_units
-            print(f"Realized profit/loss for this sell order: {fifo_profit}")
-            
+            print(f"Realized profit/loss for sell: {fifo_profit}")
             realized_gains_losses += fifo_profit
-            print(f"New realized gains/losses: {realized_gains_losses}")
-            
-            # Iterate through investment entries to update asset_funds (for sell, add transaction amount)
+            print(f"Updated realized gains/losses: {realized_gains_losses}")
+
+            # Update investment entry for sell: add transaction amount to asset_funds.
             found_entry = False
+            # For REITs/mutual funds, we do not segregate by market if not applicable.
             for entry in client_investment_entries:
                 if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
                     entry.get("selectedFund", "").strip().lower() == market):
@@ -7724,37 +7706,35 @@ def order_placed():
                     found_entry = True
                     break
             if not found_entry:
-                return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
-        
+                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
+
         else:  # Buy order
-            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
-            print(f"Transaction amount: {transactionAmount}")
+            print("Processing buy order")
             if transactionAmount > available_funds:
-                return jsonify({"message": f"Insufficient Funds to place order. Available funds: {available_funds}."}), 400
-            
-            # Iterate through investment entries to update asset_funds (for buy, subtract transaction amount)
+                return jsonify({"message": f"Insufficient funds. Available funds: {available_funds}."}), 400
+            # Update available funds for buy (deduct transaction amount)
+            available_funds -= transactionAmount
+            print(f"New available funds after buy: {available_funds}")
+
+            # Update investment entry for buy: subtract transaction amount from asset_funds.
             found_entry = False
             for entry in client_investment_entries:
+                # For mutual funds or reits, we ignore market segregation if not provided
                 if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
                     entry.get("selectedFund", "").strip().lower() == market):
                     try:
                         current_asset_funds = float(entry.get("asset_funds", 0))
                     except (ValueError, TypeError):
                         current_asset_funds = 0.0
-                    # Check if asset_funds is sufficient for the buy order
                     if transactionAmount > current_asset_funds:
-                        return jsonify({"message": f"Insufficient Asset Funds to place order. Current asset funds: {current_asset_funds}."}), 400
+                        return jsonify({"message": f"Insufficient asset funds. Current asset funds: {current_asset_funds}."}), 400
                     entry["asset_funds"] = current_asset_funds - transactionAmount
                     found_entry = True
                     break
             if not found_entry:
-                return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
-            
-            # Update available funds for buy (deduct transaction amount)
-            available_funds -= transactionAmount
-            print(f"New available funds: {available_funds}")
-        
-        # Standardize field names before saving the order
+                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
+
+        # Standardize order fields for saving
         formatted_order = {
             "Action": (order_data.get("buy_or_sell") or order_data.get("Action", "")).lower(),
             "Date": order_data.get("date") or order_data.get("Date", ""),
@@ -7780,7 +7760,7 @@ def order_placed():
                 Body=json.dumps(client_transactions, indent=4),
                 ContentType="application/json"
             )
-            print(f"✅ Saved updated transactions for client {client_id} in S3.")
+            print(f"Saved updated transactions for client {client_id} in S3.")
             try:
                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
@@ -7794,13 +7774,13 @@ def order_placed():
                     Body=json.dumps(client_summary, indent=4),
                     ContentType="application/json"
                 )
-                print(f"✅ Updated client summary for {client_id} in S3.")
+                print(f"Updated client summary for {client_id} in S3.")
             except s3.exceptions.NoSuchKey:
                 print(f"No summary file found for client {client_id} in S3.")
         else:
             with open(order_file_path, 'w') as file:
                 json.dump(client_transactions, file, indent=4)
-            print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+            print(f"Saved updated transactions for client {client_id} in local storage.")
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r+') as summary_file:
                     client_summary = json.load(summary_file)
@@ -7811,20 +7791,21 @@ def order_placed():
                     summary_file.seek(0)
                     summary_file.write(json.dumps(client_summary, indent=4))
                     summary_file.truncate()
-                print(f"✅ Updated client summary for {client_id} in local storage")
+                print(f"Updated client summary for {client_id} in local storage")
             else:
                 print(f"No summary file found for client {client_id} in local storage.")
         
         return jsonify({
-            "message": "✅ Order placed successfully",
+            "message": "Order placed successfully",
             "status": 200,
             "available_funds": available_funds,
             "realized_gains_losses": realized_gains_losses
         }), 200
-
+    
     except Exception as e:
-        print(f"❌ Error occurred while placing order: {e}")
+        print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
 
 
 # v-1 
