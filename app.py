@@ -6210,23 +6210,66 @@ def save_to_aws_with_timestamp(data, filename):
 
 ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
+# Helper functions for local/AWS storage
+def load_from_local(filepath):
+    try:
+        if not os.path.exists(filepath):
+            return None
+        with open(filepath, 'r') as file:
+            return json.load(file)
+    except Exception as e:
+        print(f"Error loading file: {e}")
+        return None
+
+def save_to_local(data, filepath):
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, 'w') as file:
+            json.dump(data, file, indent=4)
+        print(f"Data saved at {filepath}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+        raise
+
+def save_to_aws_with_timestamp(data, filename):
+    try:
+        serialized_data = json.dumps(data, default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else obj)
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=filename,
+            Body=serialized_data,
+            ContentType='application/json'
+        )
+        print(f"Data saved to AWS at {filename}")
+    except Exception as e:
+        print(f"Error saving to AWS: {e}")
+        raise
+
+def load_from_aws(filename):
+    try:
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        print(f"Error loading from AWS: {e}")
+        return None
+
+
+# updated code :
+
 import requests
-
-# Fetch Stocks for NASDAQ,NYSE,S&P500 and DOW JONES :
-
-# # V-3 :
-
-# prev : working :
-# Updated :
+import csv
+from io import StringIO
+from bs4 import BeautifulSoup
 
 def fetch_all_assets_by_preference(market_name, preference=None):
     """
     Fetch assets for a given market and filter by type if preference is provided.
-    Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
-    Preferences: "stocks", "etfs", "bonds", "commodities", "mutual funds".
+    Handles NASDAQ, NYSE, and S&P500 dynamically.
+    Preferences: "stocks", "etfs".
     """
     try:
         market_name = market_name.lower()
+        # market_name = "dow_jones"
         preference = preference.lower() if preference else None
         assets = []
 
@@ -6235,43 +6278,51 @@ def fetch_all_assets_by_preference(market_name, preference=None):
             exchange_code = "NASDAQ" if market_name == "nasdaq" else "NYSE"
             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
             response = requests.get(url)
-            print(response)
             if response.status_code == 200:
-                stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
-                print(stocks)
-                for row in stocks[1:]:  # Skip header row
-                    data = row.split(",")
-                    if len(data) > 2 and data[2].strip() == exchange_code:
-                        symbol = data[0]
-                        name = data[1]
-
-                        # Filter based on preference
-                        # Determine asset type (heuristics for ETF or stock)
-                        asset_type = "stock"
-                        if "ETF" in name.upper() or "TRUST" in name.upper() or symbol.endswith("O"):
-                            asset_type = "etf"
-                            assets.append({"name": name, "symbol": symbol, "type": "ETF"})
-                            
-                        # Filter based on preference
-                        # if not preference or preference == asset_type:
-                        elif preference:
-                            assets.append({"name": name, "symbol": symbol, "type": preference})
-                            
-                        # if preference:  # Assuming preference is handled externally
-                        #     assets.append({"name": name, "symbol": symbol, "type": preference})
-                        
-                print(f"Assets in {market_name} :\n{assets}")
+                decoded_content = response.content.decode('utf-8')
+                print("Successfully decoded response content :\n\n",decoded_content)
+                csv_reader = csv.reader(decoded_content.splitlines(), delimiter=',')
+                next(csv_reader)  # Skip the header row
+                for row in csv_reader:
+                    symbol, name, exchange, asset_type = row[0], row[1], row[2], row[3]
+                    if exchange.upper() == exchange_code.upper():
+                        asset_type = 'stock' if asset_type.lower() == 'stock' else 'ETF'
+                        # if preference == ''
+                        assets.append({"symbol": symbol, "name": name, "type": asset_type})
                 return assets
             else:
                 print(f"Alpha Vantage API error: {response.status_code}")
                 return []
 
+        elif market_name.lower() == "dow_jones":
+            url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+            response = requests.get(url)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                table = soup.find("table", {"id": "constituents"})
+                if table:
+                    rows = table.find_all("tr")[1:]  # Skip header row
+                    for row in rows:
+                        cols = row.find_all("td")
+                        name = row.text.strip().splitlines()[0]
+                        # name = row.splitlines()[0]
+                        symbol = cols[1].text.strip()
+                        category = cols[2].text.strip()  # Industry/Category
+                        assets.append({"symbol": symbol, "name": name, "type": "stock", "category": category})
+                    return assets
+                else:
+                    print("Constituents table not found on the Wikipedia page.")
+                    return []
+                
+            else:
+                print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
+                
         # Fetch for S&P500 using Wikipedia
+        
         elif market_name == "s&p500":
             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
             response = requests.get(url)
             if response.status_code == 200:
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.content, "html.parser")
                 table = soup.find("table", {"id": "constituents"})
                 rows = table.find_all("tr")[1:]  # Skip header row
@@ -6280,12 +6331,22 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
                     if not preference or preference == "stocks":
-                        assets.append({"name": name, "symbol": symbol, "type": "stock"})
+                        assets.append({
+                            "name": name,
+                            "symbol": symbol,
+                            "type": "stock"
+                        })
+                    elif preference == "ETF":
+                        assets.append({
+                            "name": name,
+                            "symbol": symbol,
+                            "type": "ETF"
+                        })
                 return assets
             else:
                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
                 return []
-            
+
         # If no matching market is found
         return []
 
@@ -6295,11 +6356,14 @@ def fetch_all_assets_by_preference(market_name, preference=None):
 
 
 
+
+
 @app.route('/api/market-assets', methods=['POST'])
 def market_assets():
     try:
         data = request.get_json()
         market_name = data.get("market_name")
+        # market_name = "dow_jones"
         preference = data.get("preference")
         print(market_name)
         print(preference)
@@ -6333,7 +6397,7 @@ def market_assets():
             message = "Assets list updated successfully"
         else:
             message = "Assets list is up-to-date"
-
+        
         print(f"\nUpdated Assets :\n{updated_assets}")
         
         return jsonify({
@@ -6348,7 +6412,6 @@ def market_assets():
 
 
 ################################################ Fetch Bonds from Categories #################################################
-
 
 # # Api to fetch bonds :
 
@@ -6372,10 +6435,29 @@ def get_bonds():
             {"name":"PGIM High Yield R6","symbol":"PHYQX"},
             {"name":"Federated Hermes Instl High Yield Bd IS","symbol":"FIHBX"}
         ]
+        municipal_bonds = [
+            {"name": "iShares National Muni Bond ETF", "symbol": "MUB"},
+            {"name": "Vanguard Tax-Exempt Bond ETF", "symbol": "VTEB"},
+            {"name": "SPDR Nuveen Bloomberg Municipal Bond ETF", "symbol": "TFI"},
+            {"name": "Invesco BulletShares 2025 Municipal Bond ETF", "symbol": "BSMP"}
+        ]
+            # {"name": "iShares iBonds Dec 2025 Term Muni Bond ETF", "symbol": "IBML"} # relegated 
+
+        government_bonds = [
+            {"name": "iShares 7-10 Year Treasury Bond ETF", "symbol": "IEF"},
+            {"name": "Vanguard Total Bond Market ETF", "symbol": "BND"},
+            {"name": "SPDR Bloomberg 1-3 Month T-Bill ETF", "symbol": "BIL"},
+            {"name": "Schwab U.S. TIPS ETF", "symbol": "SCHP"}
+        ]
+
         if category == "treasury":
             return jsonify({"bonds":treasury_bonds}), 200
         elif category == "corporate":
             return jsonify({"bonds":corporate_bonds}), 200
+        elif category == "municipal":
+            return jsonify({"bonds":municipal_bonds}), 200
+        elif category == "government":
+            return jsonify({"bonds": government_bonds}), 200
         else:
             return jsonify({"message": "Invalid category. Choose between 'treasury' or 'corporate'."}), 400
             
@@ -6414,14 +6496,20 @@ def fetch_bonds():
                     price = data['Close'].iloc[-1]
                     return round(float(price), 2)
                 else:
-                    return "Price not available"
+                    return None
             except Exception as e:
                 print(f"Error fetching data for ticker {ticker}: {e}")
-                return "Price not available"
+                return None
 
         # Fetch price for the selected Bond
         price = fetch_price(selected_ticker)
         print(f"Bond price for {selected_ticker}:\n{price}")
+        if not price :
+            return jsonify({
+                "message": f"Price for {selected_ticker}  is not available.",
+                "ticker": selected_ticker,
+                "price": 0.0
+            }), 404
 
         return jsonify({
             "message": f"Price for {selected_ticker} fetched successfully",
@@ -6433,56 +6521,6 @@ def fetch_bonds():
         print(f"Error fetching bond prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
-
-# prev :
-
-# @app.route('/api/fetch-bonds', methods=['POST'])
-# def fetch_bonds():
-#     """
-#     Fetches the price of a specific bond using the ticker provided in the request payload.
-#     """
-#     try:
-#         data = request.get_json()
-#         category = data.get("category", "").lower()
-
-#         if not category:
-#             return jsonify({
-#                 "message": "Ticker not provided in the request.",
-#                 "price": "N/A"
-#             }), 400
-            
-#         selected_ticker = data.get("ticker")
-
-#         # testing mutual funds :
-#         # fetch_MutualFunds()
-        
-#         # Function to fetch the latest closing price
-#         def fetch_price(ticker):
-#             try:
-#                 # Fetch historical data for the bond
-#                 data = yf.download(ticker, period="1mo", interval="1d")
-#                 if not data.empty:
-#                     # Get the latest closing price
-#                     return round(data['Close'].iloc[-1], 2)
-#                 else:
-#                     return "Price not available"
-#             except Exception as e:
-#                 print(f"Error fetching data for ticker {ticker}: {e}")
-#                 return "Price not available"
-
-#         # Fetch price for the selected Bond
-#         price = fetch_price(selected_ticker)
-#         print(f"Bond price for {selected_ticker}:\n{price}")
-
-#         return jsonify({
-#             "message": f"Price for {selected_ticker} fetched successfully",
-#             "ticker": selected_ticker,
-#             "price": price
-#         }), 200
-
-#     except Exception as e:
-#         print(f"Error fetching bond prices: {e}")
-#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ##############################################################################
@@ -6626,159 +6664,114 @@ def fetch_commodities():
         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
-# @app.route('/api/fetch-commodities', methods=['POST'])
-# def fetch_commodities():
+##################################################### Fetch Cryptocurrencies from Exchanges ####################################
+
+# v-2 : # now not in use anymore :
+# @app.route('/api/crypto-assets', methods=['POST'])
+# def fetch_cryptos_from_exchange():
 #     """
-#     Fetches the price of a specific commodity using the ticker provided in the request payload.
+#     Fetch the list of cryptocurrencies available on a given exchange.
+#     Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
 #     """
 #     try:
 #         data = request.get_json()
-#         selected_ticker = data.get("commodities")  
+#         exchange_name = data.get("exchange_name", "").lower()
+#         cryptos = []
+#         #test reits :
+#         fetch_reits()
+#         if exchange_name == "coingecko":
+#             # Fetch data from CoinGecko
+#             url = "https://api.coingecko.com/api/v3/coins/markets"
+#             params = {
+#                 "vs_currency": "usd",
+#                 "order": "market_cap_desc",
+#                 "per_page": 250,
+#                 "page": 1,
+#             }
+#             response = requests.get(url, params=params)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for coin in data:
+#                     symbol = coin["symbol"].upper()
+#                     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+                    
+#                     # if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
+#                     #     symbol = coin["symbol"].upper()
+#                     #     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+#                     # else:
+#                     #     cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
 
-#         if not selected_ticker:
-#             return jsonify({
-#                 "message": "Ticker not provided in the request.",
-#                 "price": "N/A"
-#             }), 400
+#         elif exchange_name == "binance":
+#             # Fetch data from Binance
+#             url = "https://api.binance.com/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol_info in data["symbol"]:
+#                     base_asset = symbol_info["baseAsset"]
+#                     quote_asset = symbol_info["quoteAsset"]
+                    
+#                     # if base_asset == 'ETH' or base_asset == 'BTC':
+#                     if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-USD",
+#                             "name": f"{base_asset}"
+#                         })
+#                     elif base_asset == 'ALGO':
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-INR",
+#                             "name": f"{base_asset}"
+#                         })
+#                     else:
+#                         cryptos.append({
+#                             "symbol": base_asset,
+#                             "name": f"{base_asset}"
+#                         })
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from Binance: {response.status_code}"}), 500
 
-#         # Function to fetch the latest closing price
-#         def fetch_price(ticker):
-#             try:
-#                 # Fetch historical data for the commodity
-#                 data = yf.download(ticker, period="1d", interval="1d")
-#                 if not data.empty:
-#                     # Get the latest closing price
-#                     return round(data['Close'].iloc[-1], 2)
-#                 else:
-#                     return "Price not available"
-#             except Exception as e:
-#                 print(f"Error fetching data for ticker {ticker}: {e}")
-#                 return "Price not available"
+#         elif exchange_name == "binance.us":
+#             # Fetch data from Binance.US
+#             url = "https://api.binance.us/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol_info in data["symbol"]:
+#                     base_asset = symbol_info["baseAsset"]
+#                     quote_asset = symbol_info["quoteAsset"]
+                    
+#                     if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-USD",
+#                             "name": f"{base_asset}"
+#                         })
+#                     elif base_asset == 'ALGO':
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-INR",
+#                             "name": f"{base_asset}"
+#                         })
+#                     else:
+#                         cryptos.append({
+#                             "symbol": base_asset,
+#                             "name": f"{base_asset}"
+#                         })
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from Binance.US: {response.status_code}"}), 500
 
-#         # Fetch price for the selected commodity
-#         price = fetch_price(selected_ticker)
-#         print(f"Commodity price for {selected_ticker}:\n{price}")
+#         else:
+#             return jsonify({"message": "Exchange not supported."}), 404
 
+#         # Return the list of cryptos
 #         return jsonify({
-#             "message": f"Price for {selected_ticker} fetched successfully",
-#             "symbol": selected_ticker,
-#             "price": price
+#             "message": "Cryptos list fetched successfully.",
+#             "exchange_name": exchange_name,
+#             "cryptos": cryptos
 #         }), 200
 
 #     except Exception as e:
-#         print(f"Error fetching commodity prices: {e}")
 #         return jsonify({"message": f"Internal server error: {e}"}), 500
-
-
-
-##################################################### Fetch Cryptocurrencies from Exchanges ####################################
-
-# v-2 :
-@app.route('/api/crypto-assets', methods=['POST'])
-def fetch_cryptos_from_exchange():
-    """
-    Fetch the list of cryptocurrencies available on a given exchange.
-    Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
-    """
-    try:
-        data = request.get_json()
-        exchange_name = data.get("exchange_name", "").lower()
-        cryptos = []
-        #test reits :
-        fetch_reits()
-        if exchange_name == "coingecko":
-            # Fetch data from CoinGecko
-            url = "https://api.coingecko.com/api/v3/coins/markets"
-            params = {
-                "vs_currency": "usd",
-                "order": "market_cap_desc",
-                "per_page": 250,
-                "page": 1,
-            }
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
-                data = response.json()
-                for coin in data:
-                    symbol = coin["symbol"].upper()
-                    cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
-                    
-                    # if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
-                    #     symbol = coin["symbol"].upper()
-                    #     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
-                    # else:
-                    #     cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
-            else:
-                return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
-
-        elif exchange_name == "binance":
-            # Fetch data from Binance
-            url = "https://api.binance.com/api/v3/exchangeInfo"
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                for symbol_info in data["symbol"]:
-                    base_asset = symbol_info["baseAsset"]
-                    quote_asset = symbol_info["quoteAsset"]
-                    
-                    # if base_asset == 'ETH' or base_asset == 'BTC':
-                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
-                        cryptos.append({
-                            "symbol": f"{base_asset}-USD",
-                            "name": f"{base_asset}"
-                        })
-                    elif base_asset == 'ALGO':
-                        cryptos.append({
-                            "symbol": f"{base_asset}-INR",
-                            "name": f"{base_asset}"
-                        })
-                    else:
-                        cryptos.append({
-                            "symbol": base_asset,
-                            "name": f"{base_asset}"
-                        })
-            else:
-                return jsonify({"message": f"Failed to fetch data from Binance: {response.status_code}"}), 500
-
-        elif exchange_name == "binance.us":
-            # Fetch data from Binance.US
-            url = "https://api.binance.us/api/v3/exchangeInfo"
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                for symbol_info in data["symbol"]:
-                    base_asset = symbol_info["baseAsset"]
-                    quote_asset = symbol_info["quoteAsset"]
-                    
-                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
-                        cryptos.append({
-                            "symbol": f"{base_asset}-USD",
-                            "name": f"{base_asset}"
-                        })
-                    elif base_asset == 'ALGO':
-                        cryptos.append({
-                            "symbol": f"{base_asset}-INR",
-                            "name": f"{base_asset}"
-                        })
-                    else:
-                        cryptos.append({
-                            "symbol": base_asset,
-                            "name": f"{base_asset}"
-                        })
-            else:
-                return jsonify({"message": f"Failed to fetch data from Binance.US: {response.status_code}"}), 500
-
-        else:
-            return jsonify({"message": "Exchange not supported."}), 404
-
-        # Return the list of cryptos
-        return jsonify({
-            "message": "Cryptos list fetched successfully.",
-            "exchange_name": exchange_name,
-            "cryptos": cryptos
-        }), 200
-
-    except Exception as e:
-        return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ####################################################################################
@@ -6807,6 +6800,110 @@ def get_with_retries(url, retries=3, delay=5, headers=None):
             attempts += 1
     return response
 
+# # updated version :
+# @app.route("/api/fetch-reits", methods=['POST'])
+# def fetch_reits():
+#     try:
+#         asset_category = request.json.get("asset_category")
+#         if asset_category == "reits":
+#             # AWS key for the REIT list
+#             reit_list_key = "reits/reit_list.json"
+
+#             # Check if the REIT list already exists in AWS
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
+#                 reit_list = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info("REIT list loaded from AWS.")
+#                 return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
+#             except s3.exceptions.NoSuchKey:
+#                 logging.info("REIT list not found in AWS. Fetching from Finnhub.")
+
+#             # Fetch the list of US stocks from Finnhub with retries
+#             url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#             response = get_with_retries(url, retries=3, delay=5)
+#             if response.status_code != 200:
+#                 return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+#             data = response.json()
+#             valid_reits = []
+
+#             # Filter REITs / Real Estate funds and fetch prices in a single loop
+#             for item in data:
+#                 description = item.get("description", "")
+#                 if "REIT" in description.upper() or "REAL ESTATE" in description.upper():
+#                     symbol = item["symbol"]
+#                     name = description
+#                     # Determine type based on whether "GROWTH" is present in description.
+#                     if "GROWTH" in description.upper():
+#                         asset_type = "real estate growth fund"
+#                     else:
+#                         asset_type = "reit"
+
+#                     # Fetch the current price for the asset
+#                     price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+#                     price_response = get_with_retries(price_url, retries=3, delay=5)
+#                     if price_response.status_code == 200:
+#                         price_data = price_response.json()
+#                         price = price_data.get("c", 0)  # "c" is the current price key
+#                         if price > 0:
+#                             valid_reits.append({
+#                                 "symbol": symbol,
+#                                 "name": name,
+#                                 "price": price,
+#                                 "type": asset_type
+#                             })
+
+#             # Save the valid REITs list to AWS (or locally)
+#             if USE_AWS:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=reit_list_key,
+#                     Body=json.dumps(valid_reits),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info("REIT list saved to AWS.")
+#             else:
+#                 filepath = os.path.join(LOCAL_STORAGE_PATH, "reits", "reit_list.json")
+#                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
+#                 with open(filepath, "w") as f:
+#                     json.dump(valid_reits, f, indent=4)
+#                 logging.info("REIT list saved locally.")
+        
+#         elif asset_category == "real_estate_mf":
+            
+#             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
+#             response = requests.get(url)
+#             assets = []
+            
+#             if response.status_code == 200:
+#                 csv_text = response.content.decode('utf-8')
+#                 reader = csv.DictReader(StringIO(csv_text))
+#                 for row in reader:
+#                     asset_type = row.get('assetType', '').lower()  # e.g., 'etf' or 'mutual fund'
+#                     name = row.get('name', '')
+#                     symbol = row.get('symbol')
+#                     # For mutual funds, if you want exclusively real estate mutual funds, then check for 'real estate' in the name.
+#                     if asset_type == 'mutual fund' and "real estate" in name.lower():
+#                         assets.append({
+#                             "symbol": symbol,
+#                             "name": name,
+#                             "type": "real estate mutual fund"
+#                         })
+#                 print("Real Estate Mutual funds :\n", assets)
+#                 valid_reits = assets
+#             else:
+#                 print(f"Alpha Vantage API error: {response.status_code}")
+#                 valid_reits = []
+
+#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REITs from Finnhub: {e}")
+#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500\
+
+# Previous Version :
+
+# Fetch REITs and Real Estate Growth Funds using Finnhub
 
 @app.route("/api/fetch-reits", methods=['POST'])
 def fetch_reits():
@@ -6819,6 +6916,8 @@ def fetch_reits():
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
             reit_list = json.loads(response['Body'].read().decode('utf-8'))
             logging.info("REIT list loaded from AWS.")
+            # print(reit_list)
+            # fetch_real_estate_growth_funds()
             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
         except s3.exceptions.NoSuchKey:
             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
@@ -6832,37 +6931,112 @@ def fetch_reits():
         data = response.json()
         valid_reits = []
 
-        # Filter REITs and fetch prices in a single loop
+        # Filter REITs / Real Estate funds and fetch prices in a single loop
         for item in data:
-            if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+            description = item.get("description", "")
+            if "REIT" in description.upper() or "REAL ESTATE" in description.upper():
                 symbol = item["symbol"]
-                name = item["description"]
+                name = description
+                # Determine type based on whether "GROWTH" is present in description.
+                if "GROWTH" in description.upper():
+                    asset_type = "real estate growth fund"
+                else:
+                    asset_type = "reit"
 
-                # Fetch the price for the current REIT using retries
+                # Fetch the current price for the asset
                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
                 price_response = get_with_retries(price_url, retries=3, delay=5)
                 if price_response.status_code == 200:
                     price_data = price_response.json()
                     price = price_data.get("c", 0)  # "c" is the current price key
-
-                    # Only add to the list if the price is greater than 0
                     if price > 0:
-                        valid_reits.append({"symbol": symbol, "name": name, "price": price})
+                        valid_reits.append({
+                            "symbol": symbol,
+                            "name": name,
+                            "price": price,
+                            "type": asset_type
+                        })
 
-        # Save the valid REITs list to AWS
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=reit_list_key,
-            Body=json.dumps(valid_reits),
-            ContentType='application/json'
-        )
-        logging.info("REIT list saved to AWS.")
+        # Save the valid REITs list to AWS (or locally)
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=reit_list_key,
+                Body=json.dumps(valid_reits),
+                ContentType='application/json'
+            )
+            logging.info("REIT list saved to AWS.")
+        else:
+            filepath = os.path.join(LOCAL_STORAGE_PATH, "reits", "reit_list.json")
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, "w") as f:
+                json.dump(valid_reits, f, indent=4)
+            logging.info("REIT list saved locally.")
 
         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
 
     except Exception as e:
         logging.error(f"Error fetching REITs from Finnhub: {e}")
         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
+
+ 
+
+# previous working logic :
+# @app.route("/api/fetch-reits", methods=['POST'])
+# def fetch_reits():
+#     try:
+#         # AWS key for the REIT list
+#         reit_list_key = "reits/reit_list.json"
+
+#         # Check if the REIT list already exists in AWS
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
+#             reit_list = json.loads(response['Body'].read().decode('utf-8'))
+#             logging.info("REIT list loaded from AWS.")
+#             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
+#         except s3.exceptions.NoSuchKey:
+#             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
+
+#         # Fetch the list of US stocks from Finnhub with retries
+#         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#         response = get_with_retries(url, retries=3, delay=5)
+#         if response.status_code != 200:
+#             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+#         data = response.json()
+#         valid_reits = []
+
+#         # Filter REITs and fetch prices in a single loop
+#         for item in data:
+#             if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+#                 symbol = item["symbol"]
+#                 name = item["description"]
+
+#                 # Fetch the price for the current REIT using retries
+#                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+#                 price_response = get_with_retries(price_url, retries=3, delay=5)
+#                 if price_response.status_code == 200:
+#                     price_data = price_response.json()
+#                     price = price_data.get("c", 0)  # "c" is the current price key
+
+#                     # Only add to the list if the price is greater than 0
+#                     if price > 0:
+#                         valid_reits.append({"symbol": symbol, "name": name, "price": price})
+
+#         # Save the valid REITs list to AWS
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=reit_list_key,
+#             Body=json.dumps(valid_reits),
+#             ContentType='application/json'
+#         )
+#         logging.info("REIT list saved to AWS.")
+
+#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REITs from Finnhub: {e}")
+#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
 
 @app.route("/api/get-reit-price", methods=['POST'])
 def get_reit_price():
@@ -6908,112 +7082,14 @@ def get_reit_price():
 
 
 
-# @app.route("/api/fetch-reits", methods=['POST'])
-# def fetch_reits():
-#     try:
-#         # AWS key for the REIT list
-#         reit_list_key = "reits/reit_list.json"
-
-#         # Check if the REIT list already exists in AWS
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
-#             reit_list = json.loads(response['Body'].read().decode('utf-8'))
-#             logging.info("REIT list loaded from AWS.")
-#             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
-#         except s3.exceptions.NoSuchKey:
-#             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
-
-#         # Fetch the list of US stocks from Finnhub
-#         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
-#         response = requests.get(url)
-
-#         if response.status_code != 200:
-#             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
-
-#         data = response.json()
-#         valid_reits = []
-
-#         # Filter REITs and fetch prices in a single loop
-#         for item in data:
-#             if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
-#                 symbol = item["symbol"]
-#                 name = item["description"]
-
-#                 # Fetch the price for the current REIT
-#                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-#                 price_response = requests.get(price_url)
-
-#                 if price_response.status_code == 200:
-#                     price_data = price_response.json()
-#                     price = price_data.get("c", 0)  # "c" is the current price key
-
-#                     # Only add to the list if the price is greater than 0
-#                     if price > 0:
-#                         valid_reits.append({"symbol": symbol, "name": name, "price": price})
-
-#         # Save the valid REITs list to AWS
-#         s3.put_object(
-#             Bucket=S3_BUCKET_NAME,
-#             Key=reit_list_key,
-#             Body=json.dumps(valid_reits),
-#             ContentType='application/json'
-#         )
-#         logging.info("REIT list saved to AWS.")
-
-#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error fetching REITs from Finnhub: {e}")
-#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
-
-# @app.route("/api/get-reit-price", methods=['POST'])
-# def get_reit_price():
-#     try:
-#         # Ensure Content-Type is application/json
-#         if not request.is_json:
-#             return jsonify({"message": "Invalid Content-Type. Please set 'Content-Type: application/json'."}), 415
-
-#         # Parse the REIT symbol from the request
-#         symbol = request.json.get("symbol")
-#         if not symbol or not isinstance(symbol, str) or not symbol.strip():
-#             return jsonify({"message": "Invalid symbol provided. Must be a non-empty string."}), 400
-
-#         symbol = symbol.strip()  # Remove any leading/trailing spaces
-
-#         # Load the REIT list from AWS
-#         response = s3.get_object(Bucket=S3_BUCKET_NAME, Key="reits/reit_list.json")
-#         reit_list = json.loads(response['Body'].read())
-
-#         # Validate if the symbol exists in the REIT list
-#         reit = next((item for item in reit_list if item["symbol"] == symbol), None)
-#         if not reit:
-#             return jsonify({"message": f"Symbol {symbol} is not a valid REIT."}), 400
-
-#         # Fetch yield for the REIT
-#         yield_url = f"https://finnhub.io/api/v1/stock/metric?symbol={symbol}&metric=dividends&token={FINNHUB_API_KEY}"
-#         yield_response = requests.get(yield_url)
-
-#         if yield_response.status_code == 200:
-#             yield_data = yield_response.json()
-#             dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
-#         else:
-#             dividend_yield = 5 # default value
-
-#         # Return the REIT information
-#         return jsonify({
-#             "message": "Price and yield fetched successfully",
-#             "reit_info": {"symbol": reit["symbol"], "name": reit["name"], "price": reit["price"], "yield": dividend_yield}
-#         }), 200
-
-#     except Exception as e:
-#         logging.error(f"Error fetching REIT prices: {e}")
-#         return jsonify({"message": "An error occurred while fetching REIT prices", "error": str(e)}), 500
-
 ####################################################################################
 
 
 # Fetch Mutual Funds :
-# V-2 : best version fetches all the list and prices
+
+# updated version :
+
+# V-1 : best version fetches all the list and prices
 
 # Function to fetch the latest price
 def fetch_price(ticker):
@@ -7487,34 +7563,37 @@ def parse_date(date_str):
         logging.error(f"Error parsing date '{date_str}': {e}")
         return datetime.min
 
+# New Version : For new Funds Field :
+# v-2 : corrected logical mistakes :
 @app.route('/api/order_placed', methods=['POST'])
 def order_placed():
     try:
         # Extract data from the request
         order_data = request.json.get('order_data', {})
-        client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-        client_id = request.json.get('client_id', 'RS4603')  # Default client ID
-        funds = request.json.get('funds')
-        action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
-        assetClass = order_data.get("assetClass","").lower()
-        available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
-        realized_gains_losses = request.json.get("realized_gains_losses", 0)
-        
-        print("assetClass : ", assetClass)
-        
+        client_name = request.json.get('client_name', None)  # Default client name
+        client_id = request.json.get('client_id', None)  # Default client ID
+        funds = request.json.get('funds') or request.json.get('investmentAmount')
+        action = (order_data.get("buy_or_sell", "") or order_data.get("Action", "")).lower()
+        assetClass = order_data.get("assetClass", "").strip().lower()
+        market = order_data.get("market", "").strip().lower()  # e.g., selectedFund
+        # Convert asset_funds to float if provided; if not, default to 0.0
         try:
-            available_funds = float(available_funds)
+            asset_funds = float(order_data.get("asset_funds", 0))
+        except (ValueError, TypeError):
+            asset_funds = 0.0
+        try:
+            available_funds = float(request.json.get("available_funds", funds))
         except (ValueError, TypeError):
             available_funds = 0.0
         try:
-            realized_gains_losses = float(realized_gains_losses)
+            realized_gains_losses = float(request.json.get("realized_gains_losses", 0))
         except (ValueError, TypeError):
             realized_gains_losses = 0.0
-        
+
         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
         print("Available Funds:", available_funds)
         print("Realized Gains/Losses:", realized_gains_losses)
-        
+
         # Load existing transactions from JSON file (AWS/local)
         if USE_AWS:
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
@@ -7536,38 +7615,59 @@ def order_placed():
             else:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-        
+
         print("client transactions:", client_transactions)
-        
-        # Sell Order Validation and FIFO Realized Gain/Loss Calculation
+
+        # Load allocated funds from client summary data
+        if USE_AWS:
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Loaded existing client data for client {client_id} from S3")
+            except s3.exceptions.NoSuchKey:
+                client_data = {}
+                print(f"No existing client data for client {client_id}. Initializing new data.")
+        else:
+            summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+            if os.path.exists(summary_file_path):
+                with open(summary_file_path, 'r') as file:
+                    client_data = json.load(file)
+                print(f"Loaded existing client data for client {client_id} from local storage")
+            else:
+                client_data = {}
+                print(f"No existing client data for client {client_id}. Initializing new data.")
+
+        print("client data:", client_data)
+
+        # Load Investment Entries from client_data
+        client_investment_entries = client_data.get('investmentEntries', [])
+        if not isinstance(client_investment_entries, list):
+            client_investment_entries = []
+
+        # Process order based on action
         if action == "sell":
             print("Sell Order Validation")
             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
-            sell_units = order_data.get("units", 0)
+            sell_units = float(order_data.get("units", 0))
             sell_market = order_data.get("market") or order_data.get("Market")
-            sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+            sell_price = float(order_data.get("unit_price") or order_data.get("UnitPrice", 0))
             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
-            
-            # Find all matching orders (for this symbol and market)
-            if assetClass == "stock" and assetClass == "etf":
-                matching_orders = [
-                    order for order in client_transactions
-                    if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
-                    (order.get("market") or order.get("Market")) == sell_market
-                ]
-            else:
-                matching_orders = [
-                    order for order in client_transactions
-                    if (order.get("symbol") or order.get("Symbol")) == sell_symbol
-                ]
+
+            # Find all matching orders for sell using both "stock" and "etf" if applicable.
+            matching_orders = [
+                order for order in client_transactions
+                if ((order.get("symbol") or order.get("Symbol")) == sell_symbol and
+                    (order.get("market") or order.get("Market")) == sell_market)
+            ]
                 
             print("Matching orders for sell:", matching_orders)
             
-            # Calculate total available units
-            total_units_bought = sum(order.get("units", order.get("Units", 0))
+            # Calculate total available units from buy orders (FIFO)
+            total_units_bought = sum(float(order.get("units", order.get("Units", 0)))
                                      for order in matching_orders
                                      if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
-            total_units_sold = sum(order.get("units", order.get("Units", 0))
+            total_units_sold = sum(float(order.get("units", order.get("Units", 0)))
                                    for order in matching_orders
                                    if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
             available_units = total_units_bought - total_units_sold
@@ -7578,20 +7678,17 @@ def order_placed():
             if sell_units > available_units:
                 return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
             
-            print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+            print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}.")
             
-            # Check if TransactionAmount is greater than available funds : no need to check while selling 
-            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            # No check for transaction amount vs available funds for sell orders
+            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
             print(f"Transaction amount: {transactionAmount}")
-            # if transactionAmount > available_funds:
-            #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
             
-            # Update available funds
-            available_funds = available_funds + transactionAmount
+            # Update available funds for sell (add transaction amount)
+            available_funds += transactionAmount
             print(f"New available funds: {available_funds}")
             
             # Calculate realized gains/losses using FIFO
-            # Get all buy orders (for the asset in this market) and sort them in FIFO order
             buy_orders = sorted(
                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
@@ -7601,10 +7698,7 @@ def order_placed():
             units_to_sell = sell_units
             fifo_profit = 0.0
             for buy in buy_orders:
-                # Available units in this buy order
                 buy_units = float(buy.get("units", buy.get("Units", 0)))
-                # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
-                # For now, assume the buy order's full units are available in FIFO order.
                 if units_to_sell <= 0:
                     break
                 allocation_units = min(buy_units, units_to_sell)
@@ -7614,38 +7708,71 @@ def order_placed():
                 units_to_sell -= allocation_units
             print(f"Realized profit/loss for this sell order: {fifo_profit}")
             
-            realized_gains_losses = realized_gains_losses + fifo_profit
+            realized_gains_losses += fifo_profit
             print(f"New realized gains/losses: {realized_gains_losses}")
-        
-        else: # for buy :
             
-            # Check if TransactionAmount is greater than available funds
-            transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+            # Iterate through investment entries to update asset_funds (for sell, add transaction amount)
+            found_entry = False
+            for entry in client_investment_entries:
+                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
+                    entry.get("selectedFund", "").strip().lower() == market):
+                    try:
+                        current_asset_funds = float(entry.get("asset_funds", 0))
+                    except (ValueError, TypeError):
+                        current_asset_funds = 0.0
+                    entry["asset_funds"] = current_asset_funds + transactionAmount
+                    found_entry = True
+                    break
+            if not found_entry:
+                return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+        
+        else:  # Buy order
+            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
             print(f"Transaction amount: {transactionAmount}")
             if transactionAmount > available_funds:
-                return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+                return jsonify({"message": f"Insufficient Funds to place order. Available funds: {available_funds}."}), 400
             
-            # Update available funds
-            available_funds = available_funds - transactionAmount
+            # Iterate through investment entries to update asset_funds (for buy, subtract transaction amount)
+            found_entry = False
+            for entry in client_investment_entries:
+                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
+                    entry.get("selectedFund", "").strip().lower() == market):
+                    try:
+                        current_asset_funds = float(entry.get("asset_funds", 0))
+                    except (ValueError, TypeError):
+                        current_asset_funds = 0.0
+                    # Check if asset_funds is sufficient for the buy order
+                    if transactionAmount > current_asset_funds:
+                        return jsonify({"message": f"Insufficient Asset Funds to place order. Current asset funds: {current_asset_funds}."}), 400
+                    entry["asset_funds"] = current_asset_funds - transactionAmount
+                    found_entry = True
+                    break
+            if not found_entry:
+                return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+            
+            # Update available funds for buy (deduct transaction amount)
+            available_funds -= transactionAmount
             print(f"New available funds: {available_funds}")
         
         # Standardize field names before saving the order
         formatted_order = {
-            "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+            "Action": (order_data.get("buy_or_sell") or order_data.get("Action", "")).lower(),
             "Date": order_data.get("date") or order_data.get("Date", ""),
-            "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+            "TransactionAmount": transactionAmount,
             "Name": order_data.get("name") or order_data.get("Name", ""),
             "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
             "Market": order_data.get("market") or order_data.get("Market", ""),
             "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
-            "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
-            "Units": order_data.get("units") or order_data.get("Units", 0)
+            "UnitPrice": float(order_data.get("unit_price") or order_data.get("UnitPrice", 0)),
+            "Units": float(order_data.get("units") or order_data.get("Units", 0))
         }
         
-        # Append the formatted order to the transaction list
         client_transactions.append(formatted_order)
         
-        # Save updated transactions
+        # Update client data with modified investment entries
+        client_data['investmentEntries'] = client_investment_entries
+        
+        # Save updated transactions and client summary
         if USE_AWS:
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
@@ -7654,76 +7781,87 @@ def order_placed():
                 ContentType="application/json"
             )
             print(f"✅ Saved updated transactions for client {client_id} in S3.")
-            
             try:
                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-                client_summary['available_funds'] = available_funds # update/create available funds
-                client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
+                client_summary['available_funds'] = available_funds
+                client_summary['realized_gains_losses'] = realized_gains_losses
                 client_summary['isNewClient'] = False
+                client_summary['investmentEntries'] = client_investment_entries
                 s3.put_object(
                     Bucket=S3_BUCKET_NAME,
                     Key=client_summary_key,
                     Body=json.dumps(client_summary, indent=4),
                     ContentType="application/json"
                 )
-                print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+                print(f"✅ Updated client summary for {client_id} in S3.")
             except s3.exceptions.NoSuchKey:
                 print(f"No summary file found for client {client_id} in S3.")
         else:
             with open(order_file_path, 'w') as file:
                 json.dump(client_transactions, file, indent=4)
             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
-            
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r+') as summary_file:
                     client_summary = json.load(summary_file)
                     client_summary['isNewClient'] = False
+                    client_summary['available_funds'] = available_funds
+                    client_summary['realized_gains_losses'] = realized_gains_losses
+                    client_summary['investmentEntries'] = client_investment_entries
                     summary_file.seek(0)
                     summary_file.write(json.dumps(client_summary, indent=4))
                     summary_file.truncate()
-                print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
+                print(f"✅ Updated client summary for {client_id} in local storage")
             else:
                 print(f"No summary file found for client {client_id} in local storage.")
         
-        return jsonify({"message": "✅ Order placed successfully",
-                        "status": 200,
-                        "available_funds": available_funds,
-                        "realized_gains_losses": realized_gains_losses}), 200
-    
+        return jsonify({
+            "message": "✅ Order placed successfully",
+            "status": 200,
+            "available_funds": available_funds,
+            "realized_gains_losses": realized_gains_losses
+        }), 200
+
     except Exception as e:
         print(f"❌ Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 
-# New Version : adding available funds and managing it through order placement 
-
+# v-1 
 # @app.route('/api/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
 #         # Extract data from the request
 #         order_data = request.json.get('order_data', {})
-#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
-#         funds = request.json.get('funds')
-#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
-#         available_funds = request.json.get("available_funds","") # get the available funds
-#         realized_gains_losses = request.json.get("realized_gains_losses","") # get the realized gains/losses
+#         client_name = request.json.get('client_name',None)  # Default client name
+#         client_id = request.json.get('client_id', None)  # Default client ID
+#         funds = request.json.get('funds') or request.json.get('investmentAmount')
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+#         assetClass = order_data.get("assetClass","").lower()
+#         market = order_data.get("market","").lower() # order_data.get("selectedFund","").lower()
+#         asset_funds = order_data.get("asset_funds","").lower() # to get allocated asset funds
+#         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
+#         realized_gains_losses = request.json.get("realized_gains_losses", 0)
         
-#         if not available_funds:
-#             print("No available funds available, taking investment amount as available funds.")
-#             available_funds = funds #order_data.get("investmentAmount","") # get the available funds from investmentAmount
+#         print("assetClass : ", assetClass)
         
-#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
-#         print("Available Funds : ", available_funds)
+#         try:
+#             available_funds = float(available_funds)
+#         except (ValueError, TypeError):
+#             available_funds = 0.0
+#         try:
+#             realized_gains_losses = float(realized_gains_losses)
+#         except (ValueError, TypeError):
+#             realized_gains_losses = 0.0
         
-#         print("Realized Gains/Losses : ",realized_gains_losses)
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+#         print("Available Funds:", available_funds)
+#         print("Realized Gains/Losses:", realized_gains_losses)
         
-#         # ✅ Load existing transactions from JSON file (AWS/local)
+#         # Load existing transactions from JSON file (AWS/local)
 #         if USE_AWS:
 #             order_list_key = f"{order_list_folder}{client_id}_orders.json"
 #             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-
 #             try:
 #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
 #                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -7731,11 +7869,9 @@ def order_placed():
 #             except s3.exceptions.NoSuchKey:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
 #         else:
 #             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
 #             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-
 #             if os.path.exists(order_file_path):
 #                 with open(order_file_path, 'r') as file:
 #                     client_transactions = json.load(file)
@@ -7743,66 +7879,184 @@ def order_placed():
 #             else:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
+        
 #         print("client transactions:", client_transactions)
-
-#         # 🔹 **Sell Order Validation (Now Checks File Data)**
+        
+#         # Load Allocated Funds from Financial Form :
+        
+#         if USE_AWS:
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing client data for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_data = []
+#                 print(f"No existing client data for client {client_id}. Initializing new list.")
+#         else:
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r') as file:
+#                     client_data = json.load(file)
+#                 print(f"Loaded existing client data for client {client_id} from local storage")
+#             else:
+#                 client_data = []
+#                 print(f"No existing client data for client {client_id}. Initializing new list.")
+        
+#         print("client data :", client_data)
+        
+#         # #Load Investment Entries to get data of all the funds for each assets 
+#         client_investment_entries = client_data['investmentEntries']
+        
+#         # check asset class whether it is Mutual Funds or REITs/real estate as it doesnt have a market
+        
+            
+#         # Sell Order Validation and FIFO Realized Gain/Loss Calculation
 #         if action == "sell":
 #             print("Sell Order Validation")
-#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
 #             sell_units = order_data.get("units", 0)
 #             sell_market = order_data.get("market") or order_data.get("Market")
-
-#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
-
-#             # ✅ Find all transactions of the asset (same market)
-#             matching_orders = [
-#                 order for order in client_transactions
-#                 if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
-#                 and (order.get("market") or order.get("Market")) == sell_market
-#             ]
-
-#             print("Matching orders of sell:", matching_orders)
-
-#             # ✅ Prevent selling an asset that was never bought
-#             total_units_bought = sum(order.get("units", order.get("Units", 0)) 
-#                                      for order in matching_orders 
-#                                      if (order.get("buy_or_sell", "").lower() == "buy" 
-#                                          or order.get("Action", "").lower() == "buy"))
-
-#             total_units_sold = sum(order.get("units", order.get("Units", 0)) 
-#                                    for order in matching_orders 
-#                                    if (order.get("buy_or_sell", "").lower() == "sell" 
-#                                        or order.get("Action", "").lower() == "sell"))
-
-#             available_units = total_units_bought - total_units_sold  # ✅ Net available units
-
+#             sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            
+#             # Find all matching orders (for this symbol and market)
+#             if assetClass == "stock" and assetClass == "etf":
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+#                     (order.get("market") or order.get("Market")) == sell_market
+#                 ]
+#             else:
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol
+#                 ]
+                
+#             print("Matching orders for sell:", matching_orders)
+            
+#             # Calculate total available units
+#             total_units_bought = sum(order.get("units", order.get("Units", 0))
+#                                      for order in matching_orders
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+#             total_units_sold = sum(order.get("units", order.get("Units", 0))
+#                                    for order in matching_orders
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+#             available_units = total_units_bought - total_units_sold
 #             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
-
+            
 #             if total_units_bought == 0:
-#                 return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
-
+#                 return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
 #             if sell_units > available_units:
-#                 return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
-
+#                 return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
+            
 #             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
             
-#             # ✅ Update available funds :
+#             # Check if TransactionAmount is greater than available funds : no need to check while selling 
 #             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
 #             print(f"Transaction amount: {transactionAmount}")
             
-#             # check if Transaction Amount is greater than available funds :
-#             if transactionAmount > available_funds:
-#                 return jsonify({"message": f"�� Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+#             # if transactionAmount > available_funds: no need to check while selling
+#             #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
             
-#             # update available funds :
-#             available_funds = available_funds - transactionAmount #(sell_units * order_data.get("unit_price", 0))
+#             # Iterate through investment entries to find a matching entry (for sell order)
+#             found_entry = False
+#             for entry in client_investment_entries:
+#                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
+#                     # Get current allocated funds; default to 0 if not present.
+#                     try:
+#                         asset_funds = float(entry.get("asset_funds", 0))
+#                         asset_funds = asset_funds + transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     except ValueError:
+#                         asset_funds = asset_funds + transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     # Update the entry with the new asset funds 
+#                     entry["asset_funds"] = asset_funds      
+#                     found_entry = True
+#                     break
+            
+#             # If no matching entry is found, give error message of entry not found.
+#             if not found_entry:
+#                 return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+            
+#             # Update available funds
+#             available_funds = available_funds + transactionAmount
 #             print(f"New available funds: {available_funds}")
             
-#             # update the realized gains/losses :
-#             realized_gains_losses = realized_gains_losses + transactionAmount #(sell_units * order_data.get("unit_price", 0)) - (transactionAmount * order_data.get("unit_price", 0))
-#             print(f"New realized gains/losses: {realized_gains_losses}")
+#             # Calculate realized gains/losses using FIFO
+#             # Get all buy orders (for the asset in this market) and sort them in FIFO order
+#             buy_orders = sorted(
+#                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+#                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+#             )
+#             print("FIFO buy orders:", buy_orders)
             
+#             units_to_sell = sell_units
+#             fifo_profit = 0.0
+#             for buy in buy_orders:
+#                 # Available units in this buy order
+#                 buy_units = float(buy.get("units", buy.get("Units", 0)))
+#                 # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
+#                 # For now, assume the buy order's full units are available in FIFO order.
+#                 if units_to_sell <= 0:
+#                     break
+#                 allocation_units = min(buy_units, units_to_sell)
+#                 cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+#                 profit = allocation_units * (sell_price - cost_basis)
+#                 fifo_profit += profit
+#                 units_to_sell -= allocation_units
+#             print(f"Realized profit/loss for this sell order: {fifo_profit}")
+            
+#             realized_gains_losses = realized_gains_losses + fifo_profit
+#             print(f"New realized gains/losses: {realized_gains_losses}")
+        
+#         else: # for buy :
+            
+#             # Check if TransactionAmount is greater than available funds
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             if transactionAmount > available_funds:
+#                 return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+            
+#             # Iterate through investment entries to find a matching entry (for buy order)
+#             found_entry = False
+#             for entry in client_investment_entries:
+#                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
+#                     # Get current allocated funds; default to 0 if not present.
+#                     try:
+#                         asset_funds = float(entry.get("asset_funds", 0))
+#                         asset_funds = asset_funds - transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     except ValueError:
+#                         asset_funds = asset_funds - transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                    
+#                     # Check if transaction amount > asset_funds :
+#                     if transactionAmount > asset_funds:
+#                         return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","asset_funds":asset_funds}), 400
+                        
+#                     # Update the entry with the new asset funds 
+#                     entry["asset_funds"] = asset_funds   
+#                     found_entry = True
+#                     break
+            
+#             # If no matching entry is found, give error message of entry not found.
+#             if not found_entry:
+#                 return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+            
+#             # # Check if transaction amount > asset_funds :
+#             # if transactionAmount > asset_funds:
+#             #     return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","asset_funds":asset_funds}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds - transactionAmount
+#             print(f"New available funds: {available_funds}")
+        
+#         # Standardize field names before saving the order
 #         formatted_order = {
 #             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
 #             "Date": order_data.get("date") or order_data.get("Date", ""),
@@ -7814,35 +8068,44 @@ def order_placed():
 #             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
 #             "Units": order_data.get("units") or order_data.get("Units", 0)
 #         }
-
-#         # ✅ Append the formatted order to the transaction list
+        
+#         # Append the formatted order to the transaction list
 #         client_transactions.append(formatted_order)
-
-#         # 🔹 **Save updated transactions**
+        
+#         # Update client data with modified investment entries
+#         client_data['investmentEntries'] = client_investment_entries
+        
+#         # Save updated transactions
 #         if USE_AWS:
 #             s3.put_object(
 #                 Bucket=S3_BUCKET_NAME,
 #                 Key=order_list_key,
-#                 Body=json.dumps(client_transactions, indent=4)
+#                 Body=json.dumps(client_transactions, indent=4),
+#                 ContentType="application/json"
 #             )
 #             print(f"✅ Saved updated transactions for client {client_id} in S3.")
-
-#             # ✅ Update client summary to set isNewClient to False
+            
 #             try:
 #                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
 #                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-#                 client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
-#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+#                 client_summary['available_funds'] = available_funds # update/create available funds
+#                 client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
+#                 client_summary['isNewClient'] = False
+#                 client_summary['investmentEntries'] = client_investment_entries
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=client_summary_key,
+#                     Body=json.dumps(client_summary, indent=4),
+#                     ContentType="application/json"
+#                 )
 #                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
 #             except s3.exceptions.NoSuchKey:
 #                 print(f"No summary file found for client {client_id} in S3.")
-
 #         else:
 #             with open(order_file_path, 'w') as file:
 #                 json.dump(client_transactions, file, indent=4)
 #             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
-
-#             # ✅ Update client summary to set isNewClient to False
+            
 #             if os.path.exists(summary_file_path):
 #                 with open(summary_file_path, 'r+') as summary_file:
 #                     client_summary = json.load(summary_file)
@@ -7853,33 +8116,51 @@ def order_placed():
 #                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
 #             else:
 #                 print(f"No summary file found for client {client_id} in local storage.")
-
-#         return jsonify({"message": "✅ Order placed successfully", "status": 200})
-
+        
+#         return jsonify({"message": "✅ Order placed successfully",
+#                         "status": 200,
+#                         "available_funds": available_funds,
+#                         "realized_gains_losses": realized_gains_losses}), 200
+    
 #     except Exception as e:
 #         print(f"❌ Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
 
 
-# new version : updated sell logic correctly 
+# Previous Version : adding available funds and managing it through order placement 
 
 # @app.route('/api/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
 #         # Extract data from the request
 #         order_data = request.json.get('order_data', {})
-#         client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-#         client_id = request.json.get('client_id', 'RS4603')  # Default client ID
+#         client_name = request.json.get('client_name',None)  # Default client name
+#         client_id = request.json.get('client_id', None)  # Default client ID
 #         funds = request.json.get('funds')
-#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower() # ✅ Get action from request
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+#         assetClass = order_data.get("assetClass","").lower()
+#         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
+#         realized_gains_losses = request.json.get("realized_gains_losses", 0)
         
-#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}, Action: {action}")
-
-#         # ✅ Load existing transactions from JSON file (AWS/local)
+#         print("assetClass : ", assetClass)
+        
+#         try:
+#             available_funds = float(available_funds)
+#         except (ValueError, TypeError):
+#             available_funds = 0.0
+#         try:
+#             realized_gains_losses = float(realized_gains_losses)
+#         except (ValueError, TypeError):
+#             realized_gains_losses = 0.0
+        
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+#         print("Available Funds:", available_funds)
+#         print("Realized Gains/Losses:", realized_gains_losses)
+        
+#         # Load existing transactions from JSON file (AWS/local)
 #         if USE_AWS:
 #             order_list_key = f"{order_list_folder}{client_id}_orders.json"
 #             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-
 #             try:
 #                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
 #                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -7887,11 +8168,9 @@ def order_placed():
 #             except s3.exceptions.NoSuchKey:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
 #         else:
 #             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
 #             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-
 #             if os.path.exists(order_file_path):
 #                 with open(order_file_path, 'r') as file:
 #                     client_transactions = json.load(file)
@@ -7899,51 +8178,100 @@ def order_placed():
 #             else:
 #                 client_transactions = []
 #                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-
+        
 #         print("client transactions:", client_transactions)
-
-#         # 🔹 **Sell Order Validation (Now Checks File Data)**
+        
+#         # Sell Order Validation and FIFO Realized Gain/Loss Calculation
 #         if action == "sell":
 #             print("Sell Order Validation")
-#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # ✅ Handle inconsistent casing
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
 #             sell_units = order_data.get("units", 0)
 #             sell_market = order_data.get("market") or order_data.get("Market")
-
-#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}")
-
-#             # ✅ Find all transactions of the asset (same market)
-#             matching_orders = [
-#                 order for order in client_transactions
-#                 if (order.get("symbol") or order.get("Symbol")) == sell_symbol 
-#                 and (order.get("market") or order.get("Market")) == sell_market
-#             ]
-
-#             print("Matching orders of sell:", matching_orders)
-
-#             # ✅ Prevent selling an asset that was never bought
-#             total_units_bought = sum(order.get("units", order.get("Units", 0)) 
-#                                      for order in matching_orders 
-#                                      if (order.get("buy_or_sell", "").lower() == "buy" 
-#                                          or order.get("Action", "").lower() == "buy"))
-
-#             total_units_sold = sum(order.get("units", order.get("Units", 0)) 
-#                                    for order in matching_orders 
-#                                    if (order.get("buy_or_sell", "").lower() == "sell" 
-#                                        or order.get("Action", "").lower() == "sell"))
-
-#             available_units = total_units_bought - total_units_sold  # ✅ Net available units
-
+#             sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            
+#             # Find all matching orders (for this symbol and market)
+#             if assetClass == "stock" and assetClass == "etf":
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+#                     (order.get("market") or order.get("Market")) == sell_market
+#                 ]
+#             else:
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol
+#                 ]
+                
+#             print("Matching orders for sell:", matching_orders)
+            
+#             # Calculate total available units
+#             total_units_bought = sum(order.get("units", order.get("Units", 0))
+#                                      for order in matching_orders
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+#             total_units_sold = sum(order.get("units", order.get("Units", 0))
+#                                    for order in matching_orders
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+#             available_units = total_units_bought - total_units_sold
 #             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
-
+            
 #             if total_units_bought == 0:
-#                 return jsonify({"message": f"❌ Cannot sell {sell_symbol}. You never bought this asset in market {sell_market}."}), 400
-
+#                 return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
 #             if sell_units > available_units:
-#                 return jsonify({"message": f"❌ Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units} available in market {sell_market}."}), 400
-
+#                 return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
+            
 #             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
-
-#         # ✅ Standardize field names before saving (ensuring uniform format for "buy" and "sell")
+            
+#             # Check if TransactionAmount is greater than available funds : no need to check while selling 
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             # if transactionAmount > available_funds:
+#             #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds + transactionAmount
+#             print(f"New available funds: {available_funds}")
+            
+#             # Calculate realized gains/losses using FIFO
+#             # Get all buy orders (for the asset in this market) and sort them in FIFO order
+#             buy_orders = sorted(
+#                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+#                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+#             )
+#             print("FIFO buy orders:", buy_orders)
+            
+#             units_to_sell = sell_units
+#             fifo_profit = 0.0
+#             for buy in buy_orders:
+#                 # Available units in this buy order
+#                 buy_units = float(buy.get("units", buy.get("Units", 0)))
+#                 # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
+#                 # For now, assume the buy order's full units are available in FIFO order.
+#                 if units_to_sell <= 0:
+#                     break
+#                 allocation_units = min(buy_units, units_to_sell)
+#                 cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+#                 profit = allocation_units * (sell_price - cost_basis)
+#                 fifo_profit += profit
+#                 units_to_sell -= allocation_units
+#             print(f"Realized profit/loss for this sell order: {fifo_profit}")
+            
+#             realized_gains_losses = realized_gains_losses + fifo_profit
+#             print(f"New realized gains/losses: {realized_gains_losses}")
+        
+#         else: # for buy :
+            
+#             # Check if TransactionAmount is greater than available funds
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             if transactionAmount > available_funds:
+#                 return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds - transactionAmount
+#             print(f"New available funds: {available_funds}")
+        
+#         # Standardize field names before saving the order
 #         formatted_order = {
 #             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
 #             "Date": order_data.get("date") or order_data.get("Date", ""),
@@ -7955,35 +8283,40 @@ def order_placed():
 #             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
 #             "Units": order_data.get("units") or order_data.get("Units", 0)
 #         }
-
-#         # ✅ Append the formatted order to the transaction list
+        
+#         # Append the formatted order to the transaction list
 #         client_transactions.append(formatted_order)
-
-#         # 🔹 **Save updated transactions**
+        
+#         # Save updated transactions
 #         if USE_AWS:
 #             s3.put_object(
 #                 Bucket=S3_BUCKET_NAME,
 #                 Key=order_list_key,
-#                 Body=json.dumps(client_transactions, indent=4)
+#                 Body=json.dumps(client_transactions, indent=4),
+#                 ContentType="application/json"
 #             )
 #             print(f"✅ Saved updated transactions for client {client_id} in S3.")
-
-#             # ✅ Update client summary to set isNewClient to False
+            
 #             try:
 #                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
 #                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-#                 client_summary['isNewClient'] = False  # ✅ Set isNewClient to False
-#                 s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary, indent=4))
+#                 client_summary['available_funds'] = available_funds # update/create available funds
+#                 client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
+#                 client_summary['isNewClient'] = False
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=client_summary_key,
+#                     Body=json.dumps(client_summary, indent=4),
+#                     ContentType="application/json"
+#                 )
 #                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
 #             except s3.exceptions.NoSuchKey:
 #                 print(f"No summary file found for client {client_id} in S3.")
-
 #         else:
 #             with open(order_file_path, 'w') as file:
 #                 json.dump(client_transactions, file, indent=4)
 #             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
-
-#             # ✅ Update client summary to set isNewClient to False
+            
 #             if os.path.exists(summary_file_path):
 #                 with open(summary_file_path, 'r+') as summary_file:
 #                     client_summary = json.load(summary_file)
@@ -7994,9 +8327,12 @@ def order_placed():
 #                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
 #             else:
 #                 print(f"No summary file found for client {client_id} in local storage.")
-
-#         return jsonify({"message": "✅ Order placed successfully", "status": 200})
-
+        
+#         return jsonify({"message": "✅ Order placed successfully",
+#                         "status": 200,
+#                         "available_funds": available_funds,
+#                         "realized_gains_losses": realized_gains_losses}), 200
+    
 #     except Exception as e:
 #         print(f"❌ Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
@@ -14212,83 +14548,197 @@ def get_latest_tax_rates():
     print("Successfully retrieved rates" if rates != DEFAULT_TAX_RATES else "Using default rates")
     return rates
 
-def calculate_taxes(user_responses, client_id,TAX_RATES):
+def calculate_taxes(user_responses, client_id, TAX_RATES):
     """
     Calculate total taxes based on user's chatbot responses and financial data.
-   
+    
     :param user_responses: Dictionary of user-provided responses from chatbot
     :param client_id: Client's unique identifier
+    :param TAX_RATES: Dictionary with current tax rates
     :return: Dictionary with total tax amount and detailed breakdown
     """
-    total_taxes = 0
+    total_taxes = 0.0
     tax_details = {}
- 
+    
     # 🔹 Load client financial data (from AWS or local based on USE_AWS)
-    client_data = None  # Initialize to avoid reference errors
- 
+    client_data = None
     if USE_AWS:
         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
         try:
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
             client_data = json.loads(response['Body'].read().decode('utf-8'))
         except Exception as e:
-            logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+            logging.error(f"Error retrieving client data from AWS: {e}")
             return {"error": f"Error retrieving client data from AWS: {str(e)}"}
     else:
         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
         if not os.path.exists(client_data_file_path):
             return {"error": f"No client data found for client ID: {client_id}"}
- 
         try:
             with open(client_data_file_path, 'r') as f:
                 client_data = json.load(f)
         except Exception as e:
             logging.error(f"Error loading local client data: {e}")
             return {"error": f"Failed to load client data: {str(e)}"}
- 
+    
     if not client_data:
         return {"error": "Client data could not be retrieved."}
- 
+    
     # 🔹 **Step 1: Tax on Income**
     income_sources = client_data.get("incomeFields", [])
     for income in income_sources:
         source = income.get("sourceIncome", "Other")
-        income_amount = float(income.get("amountIncome", 0) or 0)  # Ensure numeric conversion
-        tax_rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))  # Use fallback rate
- 
-        income_tax = income_amount * tax_rate
+        income_amount = float(income.get("amountIncome", 0) or 0)
+        # Use fallback tax rate if needed; DEFAULT_TAX_RATES must be defined elsewhere.
+        rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))
+        income_tax = round(income_amount * rate, 2)
         tax_details[f"Income Tax - {source}"] = income_tax
         total_taxes += income_tax
- 
+    
     # 🔹 **Step 2: Tax on Assets**
+    asset_value_keys = [
+        "current529Plan", "currentAcc", "currentAnnuities", "currentBusiness",
+        "currentCashAcc", "currentEstate", "currentHome", "currentIRA",
+        "currentKb", "currentOtherLib", "currentIRAs"
+    ]
+    
     assets = client_data.get("assetsLiabilities", {})
-    for asset in assets.values():  # Use `.values()` to avoid key errors
-        asset_value = float(asset.get("currentLibKb", 0) or 0)
+    for asset in assets.values():
         asset_name = asset.get("assetsName", "Other Assets")
- 
-        if "Home" in asset_name or "Real Estate" in asset_name:
-            tax_rate = TAX_RATES.get("Real Estate", 0.2)  # Default rate fallback
-        elif "Business" in asset_name:
-            tax_rate = TAX_RATES.get("Business", 0.25)
+        current_value = 0.0
+        # Check each possible key; use the first one that gives a valid float.
+        for key in asset_value_keys:
+            if key in asset and asset[key] not in [None, ""]:
+                try:
+                    current_value = float(asset[key])
+                    break
+                except Exception:
+                    current_value = 0.0
+        # Determine tax rate based on asset type (case-insensitive)
+        asset_name_lower = asset_name.lower()
+        if "home" in asset_name_lower or "real estate" in asset_name_lower:
+            rate = TAX_RATES.get("Real Estate", 0.2)
+        elif "business" in asset_name_lower:
+            rate = TAX_RATES.get("Business", 0.25)
         else:
-            tax_rate = TAX_RATES.get("Other Assets", 0.15)
- 
-        asset_tax = asset_value * tax_rate
+            rate = TAX_RATES.get("Other Assets", 0.15)
+    
+        asset_tax = round(current_value * rate, 2)
         tax_details[f"Asset Tax - {asset_name}"] = asset_tax
         total_taxes += asset_tax
- 
+    
     # 🔹 **Step 3: Tax on Liabilities**
     liabilities = client_data.get("myLiabilities", {})
-    for liability in liabilities.values():  # Use `.values()` to avoid key errors
-        interest_rate = float(liability.get("mortgageInterest", 0) or 0) / 100  # Convert % to decimal
-        loan_balance = float(liability.get("mortgageBalance", 0) or 0)
-        interest_tax = loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05)
- 
+    for liability in liabilities.values():
         liability_name = liability.get("liabilityName", "Loan Interest")
+        liability_name_lower = liability_name.lower()
+        # Determine which keys to use based on the liability type
+        if "mortgage" in liability_name_lower:
+            balance_key = "mortgageBalance"
+            interest_key = "mortgageInterest"
+        elif "credit card" in liability_name_lower:
+            balance_key = "creditCardBalance"
+            interest_key = "creditCardInterest"
+        else:
+            balance_key = "balance"
+            interest_key = "interest"
+    
+        try:
+            loan_balance = float(liability.get(balance_key, 0) or 0)
+        except Exception:
+            loan_balance = 0.0
+        try:
+            interest_rate = float(liability.get(interest_key, 0) or 0) / 100
+        except Exception:
+            interest_rate = 0.0
+        liab_rate = TAX_RATES.get("Liabilities", 0.05)
+        interest_tax = round(loan_balance * interest_rate * liab_rate, 2)
+    
         tax_details[f"Loan Interest Tax - {liability_name}"] = interest_tax
         total_taxes += interest_tax
- 
+        
     return {"total_taxes": round(total_taxes, 2), "tax_breakdown": tax_details}
+
+
+# def calculate_taxes(user_responses, client_id,TAX_RATES):
+#     """
+#     Calculate total taxes based on user's chatbot responses and financial data.
+   
+#     :param user_responses: Dictionary of user-provided responses from chatbot
+#     :param client_id: Client's unique identifier
+#     :return: Dictionary with total tax amount and detailed breakdown
+#     """
+#     total_taxes = 0
+#     tax_details = {}
+ 
+#     # 🔹 Load client financial data (from AWS or local based on USE_AWS)
+#     client_data = None  # Initialize to avoid reference errors
+ 
+#     if USE_AWS:
+#         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except Exception as e:
+#             logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#             return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#     else:
+#         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#         if not os.path.exists(client_data_file_path):
+#             return {"error": f"No client data found for client ID: {client_id}"}
+ 
+#         try:
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#         except Exception as e:
+#             logging.error(f"Error loading local client data: {e}")
+#             return {"error": f"Failed to load client data: {str(e)}"}
+ 
+#     if not client_data:
+#         return {"error": "Client data could not be retrieved."}
+ 
+#     # 🔹 **Step 1: Tax on Income**
+#     income_sources = client_data.get("incomeFields", [])
+#     for income in income_sources:
+#         source = income.get("sourceIncome", "Other")
+#         income_amount = float(income.get("amountIncome", 0) or 0)  # Ensure numeric conversion
+#         tax_rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))  # Use fallback rate
+ 
+#         income_tax = income_amount * tax_rate
+#         tax_details[f"Income Tax - {source}"] = income_tax
+#         total_taxes += income_tax
+ 
+#     # 🔹 **Step 2: Tax on Assets**
+#     assets = client_data.get("assetsLiabilities", {})
+#     for asset in assets.values():  # Use `.values()` to avoid key errors
+#         asset_value = float(asset.get("currentLibKb", 0) or 0)
+#         asset_name = asset.get("assetsName", "Other Assets")
+ 
+#         if "Home" in asset_name or "Real Estate" in asset_name:
+#             tax_rate = TAX_RATES.get("Real Estate", 0.2)  # Default rate fallback
+#         elif "Business" in asset_name:
+#             tax_rate = TAX_RATES.get("Business", 0.25)
+#         else:
+#             tax_rate = TAX_RATES.get("Other Assets", 0.15)
+ 
+#         # asset_tax = asset_value * tax_rate
+#         asset_tax = round(asset_value * tax_rate, 2) # round up to 2 decimal places
+#         tax_details[f"Asset Tax - {asset_name}"] = asset_tax
+#         total_taxes += asset_tax
+ 
+#     # 🔹 **Step 3: Tax on Liabilities**
+#     liabilities = client_data.get("myLiabilities", {})
+#     for liability in liabilities.values():  # Use `.values()` to avoid key errors
+#         interest_rate = float(liability.get("mortgageInterest", 0) or 0) / 100  # Convert % to decimal
+#         loan_balance = float(liability.get("mortgageBalance", 0) or 0)
+#         # interest_tax = loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05)
+#         interest_tax = round(loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05), 2) # round up to 2 decimal places
+ 
+#         liability_name = liability.get("liabilityName", "Loan Interest")
+#         tax_details[f"Loan Interest Tax - {liability_name}"] = interest_tax
+#         total_taxes += interest_tax
+ 
+#     return {"total_taxes": round(total_taxes, 2), "tax_breakdown": tax_details}
 
 
 # from groq import Groq  # For fast inference
@@ -16914,6 +17364,8 @@ def get_chat_history():
 #######################################################################################################
 
 # Calendar API :
+# Include tasks , Birthdays, Wedding Annieversary and Work Annieversary,child's birthdays and graduation's birthdays
+
 # from phi.tools.calcom import CalCom 
 
 # calcom_agent = Agent(
