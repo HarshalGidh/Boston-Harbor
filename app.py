@@ -7667,7 +7667,7 @@ def order_placed():
             if total_units_bought == 0 or sell_units > available_units:
                 return jsonify({"message": f"Invalid sell order for {sell_symbol}. Insufficient units."}), 400
             
-            # Update investment entry for sell: add transaction amount to asset_funds.
+            # Update investment entry for sell: add transaction amount to available_asset_funds.
             found_entry = False
             # For REITs/mutual funds, we do not segregate by market if not applicable.
             for entry in client_investment_entries:
@@ -7675,14 +7675,16 @@ def order_placed():
                     entry.get("selectedFund", "").strip().lower() == market):
                     try:
                         print("selectedAsset :",assetClass," and selectedFund :",market)
-                        current_asset_funds = float(entry.get("asset_funds", 0))
-                        if current_asset_funds:
-                            current_asset_funds = float(entry.get("investmentAmount", 0)) # incase asset_funds is not available 
-                            print("Considering asset funds same as investment amount",current_asset_funds)
+                        current_asset_funds = float(entry.get("available_asset_funds", 0))
+                        if current_asset_funds == 0:
+                            current_asset_funds = float(entry.get("asset_funds", 0)) # incase available_asset_funds is not available 
+                            if current_asset_funds == 0:
+                                current_asset_funds = float(entry.get("investmentAmount", 0)) # incase available_asset_funds is not available 
+                                print("Considering asset funds same as investment amount",current_asset_funds)
                         print("current_asset_funds : ",current_asset_funds)
                     except (ValueError, TypeError):
                         current_asset_funds = 0.0
-                    entry["asset_funds"] = current_asset_funds + transactionAmount
+                    entry["available_asset_funds"] = current_asset_funds + transactionAmount
                     found_entry = True
                     break
             if not found_entry:
@@ -7719,7 +7721,7 @@ def order_placed():
             if transactionAmount > available_funds:
                 return jsonify({"message": f"Insufficient funds. Available funds: {available_funds}."}), 400
             
-            # Update investment entry for buy: subtract transaction amount from asset_funds.
+            # Update investment entry for buy: subtract transaction amount from available_asset_funds.
             found_entry = False
             for entry in client_investment_entries:
                 # For mutual funds or reits, we ignore market segregation if not provided
@@ -7733,7 +7735,7 @@ def order_placed():
                         current_asset_funds = 0.0
                     if transactionAmount > current_asset_funds:
                         return jsonify({"message": f"Insufficient asset funds. Current asset funds: {current_asset_funds}."}), 400
-                    entry["asset_funds"] = current_asset_funds - transactionAmount
+                    entry["available_asset_funds"] = current_asset_funds - transactionAmount
                     found_entry = True
                     break
             if not found_entry:
@@ -7830,7 +7832,7 @@ def order_placed():
 #         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
 #         assetClass = order_data.get("assetClass","").lower()
 #         market = order_data.get("market","").lower() # order_data.get("selectedFund","").lower()
-#         asset_funds = order_data.get("asset_funds","").lower() # to get allocated asset funds
+#         available_asset_funds = order_data.get("available_asset_funds","").lower() # to get allocated asset funds
 #         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
 #         realized_gains_losses = request.json.get("realized_gains_losses", 0)
         
@@ -7956,16 +7958,16 @@ def order_placed():
 #                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
 #                     # Get current allocated funds; default to 0 if not present.
 #                     try:
-#                         asset_funds = float(entry.get("asset_funds", 0))
-#                         asset_funds = asset_funds + transactionAmount
+#                         available_asset_funds = float(entry.get("available_asset_funds", 0))
+#                         available_asset_funds = available_asset_funds + transactionAmount
 #                         print(f"Updated asset funds: {available_funds}")
                         
 #                     except ValueError:
-#                         asset_funds = asset_funds + transactionAmount
+#                         available_asset_funds = available_asset_funds + transactionAmount
 #                         print(f"Updated asset funds: {available_funds}")
                         
 #                     # Update the entry with the new asset funds 
-#                     entry["asset_funds"] = asset_funds      
+#                     entry["available_asset_funds"] = available_asset_funds      
 #                     found_entry = True
 #                     break
             
@@ -8018,20 +8020,20 @@ def order_placed():
 #                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
 #                     # Get current allocated funds; default to 0 if not present.
 #                     try:
-#                         asset_funds = float(entry.get("asset_funds", 0))
-#                         asset_funds = asset_funds - transactionAmount
+#                         available_asset_funds = float(entry.get("available_asset_funds", 0))
+#                         available_asset_funds = available_asset_funds - transactionAmount
 #                         print(f"Updated asset funds: {available_funds}")
                         
 #                     except ValueError:
-#                         asset_funds = asset_funds - transactionAmount
+#                         available_asset_funds = available_asset_funds - transactionAmount
 #                         print(f"Updated asset funds: {available_funds}")
                     
-#                     # Check if transaction amount > asset_funds :
-#                     if transactionAmount > asset_funds:
-#                         return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","asset_funds":asset_funds}), 400
+#                     # Check if transaction amount > available_asset_funds :
+#                     if transactionAmount > available_asset_funds:
+#                         return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","available_asset_funds":available_asset_funds}), 400
                         
 #                     # Update the entry with the new asset funds 
-#                     entry["asset_funds"] = asset_funds   
+#                     entry["available_asset_funds"] = available_asset_funds   
 #                     found_entry = True
 #                     break
             
@@ -8039,9 +8041,9 @@ def order_placed():
 #             if not found_entry:
 #                 return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
             
-#             # # Check if transaction amount > asset_funds :
-#             # if transactionAmount > asset_funds:
-#             #     return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","asset_funds":asset_funds}), 400
+#             # # Check if transaction amount > available_asset_funds :
+#             # if transactionAmount > available_asset_funds:
+#             #     return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","available_asset_funds":available_asset_funds}), 400
             
 #             # Update available funds
 #             available_funds = available_funds - transactionAmount
