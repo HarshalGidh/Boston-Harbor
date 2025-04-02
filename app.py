@@ -6330,7 +6330,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     cols = row.find_all("td")
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
-                    if not preference or preference == "stocks":
+                    if not preference or preference == "stock":
                         assets.append({
                             "name": name,
                             "symbol": symbol,
@@ -6342,6 +6342,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                             "symbol": symbol,
                             "type": "ETF"
                         })
+                print("Returning S&P500 Stocks")
                 return assets
             else:
                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
@@ -6353,9 +6354,6 @@ def fetch_all_assets_by_preference(market_name, preference=None):
     except Exception as e:
         print(f"Error fetching assets for {market_name}: {e}")
         return []
-
-
-
 
 
 @app.route('/api/market-assets', methods=['POST'])
@@ -7579,8 +7577,10 @@ def order_placed():
         ownership = order_data.get("ownership", "").strip().lower()  # e.g., "reit/fund" for REITs
         try:
             available_funds = float(request.json.get("available_funds", funds))
+            print("current availablefunds: ", available_funds)
         except (ValueError, TypeError):
             available_funds = 0.0
+            print("current availablefunds: ", available_funds)
         try:
             realized_gains_losses = float(request.json.get("realized_gains_losses", 0))
         except (ValueError, TypeError):
@@ -7666,6 +7666,27 @@ def order_placed():
 
             if total_units_bought == 0 or sell_units > available_units:
                 return jsonify({"message": f"Invalid sell order for {sell_symbol}. Insufficient units."}), 400
+            
+            # Update investment entry for sell: add transaction amount to asset_funds.
+            found_entry = False
+            # For REITs/mutual funds, we do not segregate by market if not applicable.
+            for entry in client_investment_entries:
+                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
+                    entry.get("selectedFund", "").strip().lower() == market):
+                    try:
+                        print("selectedAsset :",assetClass," and selectedFund :",market)
+                        current_asset_funds = float(entry.get("asset_funds", 0))
+                        if current_asset_funds:
+                            current_asset_funds = float(entry.get("investmentAmount", 0)) # incase asset_funds is not available 
+                            print("Considering asset funds same as investment amount",current_asset_funds)
+                        print("current_asset_funds : ",current_asset_funds)
+                    except (ValueError, TypeError):
+                        current_asset_funds = 0.0
+                    entry["asset_funds"] = current_asset_funds + transactionAmount
+                    found_entry = True
+                    break
+            if not found_entry:
+                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
 
             # Update available funds for sell (add transaction amount)
             available_funds += transactionAmount
@@ -7688,34 +7709,16 @@ def order_placed():
                 profit = allocation_units * (sell_price - cost_basis)
                 fifo_profit += profit
                 units_to_sell -= allocation_units
+            print("fifo_profit", fifo_profit)
             print(f"Realized profit/loss for sell: {fifo_profit}")
             realized_gains_losses += fifo_profit
             print(f"Updated realized gains/losses: {realized_gains_losses}")
-
-            # Update investment entry for sell: add transaction amount to asset_funds.
-            found_entry = False
-            # For REITs/mutual funds, we do not segregate by market if not applicable.
-            for entry in client_investment_entries:
-                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
-                    entry.get("selectedFund", "").strip().lower() == market):
-                    try:
-                        current_asset_funds = float(entry.get("asset_funds", 0))
-                    except (ValueError, TypeError):
-                        current_asset_funds = 0.0
-                    entry["asset_funds"] = current_asset_funds + transactionAmount
-                    found_entry = True
-                    break
-            if not found_entry:
-                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
 
         else:  # Buy order
             print("Processing buy order")
             if transactionAmount > available_funds:
                 return jsonify({"message": f"Insufficient funds. Available funds: {available_funds}."}), 400
-            # Update available funds for buy (deduct transaction amount)
-            available_funds -= transactionAmount
-            print(f"New available funds after buy: {available_funds}")
-
+            
             # Update investment entry for buy: subtract transaction amount from asset_funds.
             found_entry = False
             for entry in client_investment_entries:
@@ -7723,7 +7726,9 @@ def order_placed():
                 if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
                     entry.get("selectedFund", "").strip().lower() == market):
                     try:
-                        current_asset_funds = float(entry.get("asset_funds", 0))
+                        print("selectedAsset :",assetClass," and selectedFund :",market)
+                        current_asset_funds = float(entry.get("investmentAmount", 0))
+                        print("current_asset_funds : ",current_asset_funds)
                     except (ValueError, TypeError):
                         current_asset_funds = 0.0
                     if transactionAmount > current_asset_funds:
@@ -7733,6 +7738,11 @@ def order_placed():
                     break
             if not found_entry:
                 return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
+            
+            # Update available funds for buy (deduct transaction amount)
+            available_funds -= transactionAmount
+            print(f"New available funds after buy: {available_funds}")
+
 
         # Standardize order fields for saving
         formatted_order = {
