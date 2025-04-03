@@ -17363,6 +17363,10 @@ events_folder = os.getenv("events_folder")
 events_file = "events.json"
 reminders_folder = os.getenv("reminders_folder")
 reminders_file = "reminders.json"
+notes_folder = os.getenv("notes_folder")
+
+# For notes, we'll store locally.
+notes_file = "notes.json"
 
 # For parsing ISO8601 date strings
 from dateutil import parser as date_parser
@@ -17370,156 +17374,6 @@ from dateutil import parser as date_parser
 # For scheduling reminders
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone
-
-# Send reminders via email :
-def send_reminder_email(to_email, event):
-    """
-    Sends an email reminder for the event.
-    """
-    try:
-        # Validate email format
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
-            logging.error(f"Invalid email address: {to_email}")
-            return False
-
-        subject = "Event Reminder – Upcoming Event Notification"
-        message = (
-            f"Dear User,\n\n"
-            f"This is a reminder that your event '{event['title']}' is scheduled to start at {event['start_time']} in 15 minutes.\n\n"
-            "Please make the necessary preparations.\n\n"
-            "Thank you,\n"
-            "Your Support Team"
-        )
-        # Create a multipart message
-        msg = MIMEMultipart()
-        msg['From'] = support_email
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(message, 'plain'))
-
-        context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(support_email, support_password)
-            server.sendmail(support_email, to_email, msg.as_string())
-        logging.info(f"Reminder email sent successfully to {to_email}")
-        return True
-    except Exception as e:
-        logging.error(f"Error sending reminder email: {e}")
-        return False
-
-def check_reminders():
-    """
-    Checks for events starting in 15 minutes and sends reminder emails.
-    """
-    try:
-        events = load_events()
-        now = now = datetime.now(timezone.utc)  # timezone-aware current time 
-        updated = False
-
-        for event in events:
-            # Skip if reminder already sent.
-            if event.get("reminder_sent"):
-                continue
-
-            try:
-                event_start = date_parser.parse(event["start_time"])
-            except Exception as e:
-                logging.error(f"Error parsing start_time for event {event.get('id')}: {e}")
-                continue
-
-            reminder_time = event_start - timedelta(minutes=15)
-            # Check if current time is within a window (e.g., the minute the reminder should be sent).
-            if reminder_time <= now < event_start:
-                if send_reminder_email(event["user_email"], event):
-                    event["reminder_sent"] = True
-                    updated = True
-
-        if updated:
-            save_events(events)
-    except Exception as e:
-        logging.error(f"Error in check_reminders: {e}")
-        
-def load_reminders():
-    if USE_AWS:
-        try:
-            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reminders_file)
-            data = response['Body'].read().decode('utf-8')
-            return json.loads(data)
-        except Exception as e:
-            logging.error(f"Error loading reminders from AWS: {e}")
-            return []
-    else:
-        if os.path.exists(reminders_file):
-            with open(reminders_file, "r") as f:
-                return json.load(f)
-        return []
-
-def save_reminders(reminders):
-    data = json.dumps(reminders, indent=4)
-    if USE_AWS:
-        try:
-            s3.put_object(Bucket=S3_BUCKET_NAME, Key=reminders_file, Body=data, ContentType='application/json')
-        except Exception as e:
-            logging.error(f"Error saving reminders to AWS: {e}")
-    else:
-        with open(reminders_file, "w") as f:
-            f.write(data)
-
-# Set Reminder API – authenticated users can set a reminder with event title, details, and reminder time.
-@app.route('/api/reminder', methods=['POST'])
-@jwt_required()
-def set_reminder():
-    try:
-        user_email = get_jwt_identity()
-        data = request.get_json()
-        title = data.get("title")
-        details = data.get("details", "")
-        reminder_time = data.get("reminder_time")  # Expecting ISO8601 string
-
-        if not title or not reminder_time:
-            return jsonify({"error": "Missing required reminder details"}), 400
-
-        reminders = load_reminders()
-        new_id = len(reminders) + 1
-        reminder_entry = {
-            "id": new_id,
-            "user_email": user_email,
-            "title": title,
-            "details": details,
-            "reminder_time": reminder_time,
-            "notified": False  # Flag to track if reminder email has been sent
-        }
-        reminders.append(reminder_entry)
-        save_reminders(reminders)
-        return jsonify({"message": "Reminder set successfully", "reminder": reminder_entry}), 200
-    except Exception as e:
-        logging.error(f"Error setting reminder: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-# (Optional) Get Reminders – for authenticated users; non-admin users see only their reminders.
-@app.route('/api/reminders', methods=['GET'])
-@jwt_required()
-def get_reminders():
-    try:
-        user_email = get_jwt_identity()
-        claims = get_jwt() or {}
-        user_role = claims.get("role", "user")
-        reminders = load_reminders()
-        if user_role not in ["admin", "super_admin"]:
-            reminders = [r for r in reminders if r.get("user_email") == user_email]
-        return jsonify({"reminders": reminders}), 200
-    except Exception as e:
-        logging.error(f"Error fetching reminders: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-
-# Start the background scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_reminders, trigger="interval", minutes=1)
-scheduler.start()
 
 from botocore.exceptions import ClientError
 
@@ -17555,7 +17409,491 @@ def save_events(events):
         with open(events_file, "w") as f:
             f.write(data)
 
+# check reminders :
+def load_reminders():
+    if USE_AWS:
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reminders_file)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading reminders from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(reminders_file):
+            with open(reminders_file, "r") as f:
+                return json.load(f)
+        return []
+
+def save_reminders(reminders):
+    data = json.dumps(reminders, indent=4)
+    if USE_AWS:
+        try:
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=reminders_file, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving reminders to AWS: {e}")
+    else:
+        with open(reminders_file, "w") as f:
+            f.write(data)
+
+
+# notes :
+def load_notes():
+    if USE_AWS:
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=notes_file)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading notes from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(notes_file):
+            with open(notes_file, "r") as f:
+                return json.load(f)
+    return []
+
+def save_notes(notes):
+    data = json.dumps(notes, indent=4)
+    if USE_AWS:
+        try:
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=notes_file, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving notes to AWS: {e}")
+    else:
+        with open(notes_file, "w") as f:
+            f.write(data)
+            
+################################################################################################
+# Reminder Functions
+
+# Send reminders via email :
+def send_reminder_email(to_email, event):
+    """
+    Sends an email reminder for the event.
+    """
+    try:
+        # Validate email format
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+            logging.error(f"Invalid email address: {to_email}")
+            return False
+
+        subject = "Event Reminder – Upcoming Event Notification"
+        message = (
+            f"Dear User,\n\n"
+            f"This is a reminder that your event '{event['title']}' is scheduled to start at {event['start_time']} in 15 minutes.\n\n"
+            "Please make the necessary preparations.\n\n"
+            "Thank you,\n"
+            "Your Support Team"
+        )
+        # Create a multipart message
+        msg = MIMEMultipart()
+        msg['From'] = support_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(support_email, support_password)
+            server.sendmail(support_email, to_email, msg.as_string())
+            
+        print(f"Reminder email sent successfully to {to_email}")
+        logging.info(f"Reminder email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending reminder email: {e}")
+        return False
+
+def check_reminders():
+    """
+    Checks for events starting in 15 minutes and sends reminder emails and desktop notifications.
+    """
+    try:
+        events = load_events()
+        now = datetime.now(timezone.utc)  # timezone-aware current time in UTC
+        # now_utc = datetime.now(timezone.utc)
+        # now_local = now_utc.astimezone()  # This converts to your system's local timezone
+
+        updated = False
+        print("Checking events starting in 15 minutes")
+        print("Current time (UTC):", now)
+        for event in events:
+            # Skip if reminder already sent.
+            if event.get("reminder_sent"):
+                continue
+
+            try:
+                event_start = date_parser.parse(event["start_time"])
+                # If event_start is naive, assume it's in UTC and make it aware
+                if event_start.tzinfo is None:
+                    event_start = event_start.replace(tzinfo=timezone.utc)
+                print("Event Start time:", event_start)
+            except Exception as e:
+                logging.error(f"Error parsing start_time for event {event.get('id')}: {e}")
+                continue
+
+            # Calculate the reminder time (15 minutes before event start)
+            reminder_time = event_start - timedelta(minutes=15)
+            print("Calculated reminder time:", reminder_time)
+
+            # Use a tolerant condition: if now is later than reminder_time and before event_start, send reminders.
+            # if now_local >= reminder_time and now_local < event_start:
+            if now >= reminder_time and now < event_start: 
+                print("Condition met: now is within the reminder window.")
+                email_sent = send_reminder_email(event["user_email"], event)
+                notif_sent = send_reminder_notification(event)
+                if email_sent and notif_sent:
+                    event["reminder_sent"] = True
+                    updated = True
+            else:
+                print("Condition not met for event", event.get("id"),
+                      f"(now: {now}, reminder_time: {reminder_time}, event_start: {event_start})")
+                      
+                    #   f"(now: {now_local}, reminder_time: {reminder_time}, event_start: {event_start})")
+
+        if updated:
+            save_events(events)
+    except Exception as e:
+        logging.error(f"Error in check_reminders: {e}")
+
+def cleanup_completed_events():
+    """
+    Removes events that have already completed (i.e. events whose end_time is before the current time).
+    """
+    try:
+        events = load_events()
+        now = datetime.now(timezone.utc)
+        remaining_events = []
+        print("Cleaning up completed events...")
+        print("Current time (UTC):", now)
+        for event in events:
+            try:
+                event_end = date_parser.parse(event["end_time"])
+                # If event_end is naive, assume it's in UTC
+                if event_end.tzinfo is None:
+                    event_end = event_end.replace(tzinfo=timezone.utc)
+                print(f"Event {event.get('id')} end time:", event_end)
+            except Exception as e:
+                logging.error(f"Error parsing end_time for event {event.get('id')}: {e}")
+                # If we cannot parse, keep the event so we don't accidentally remove it.
+                remaining_events.append(event)
+                continue
+
+            # Keep events that haven't ended yet
+            if event_end > now:
+                remaining_events.append(event)
+            else:
+                print(f"Removing completed event {event.get('id')} (ended at {event_end})")
+                logging.info(f"Removing completed event {event.get('id')} with end_time {event['end_time']}")
+
+        # Only save if there was a change
+        if len(remaining_events) != len(events):
+            save_events(remaining_events)
+    except Exception as e:
+        logging.error(f"Error in cleanup_completed_events: {e}")
+
+
+import threading, time
+from plyer import notification
+
+def send_reminder_notification(event):
+    """
+    Sends a desktop notification for the event using Plyer.
+    """
+    try:
+        icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+        notification.notify(
+            title="Event Reminder",
+            message=f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
+            app_icon=icon_path,
+            timeout=30
+        )
+        logging.info(f"Desktop notification sent for event '{event['title']}'")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending desktop notification: {e}")
+        return False
+
+# def send_startup_notification():
+#     icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+#     notification.notify(
+#         title="Server is running",
+#         message="Server is up and running on port 5000",
+#         app_icon=icon_path,
+#         timeout=10
+#     )
+
+def delayed_notification(event):
+    time.sleep(5)  # Delay to ensure the server is up
+    send_reminder_notification(event)
+    # send_startup_notification()
+
+# Start the background scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_reminders, trigger="interval", minutes=1)
+scheduler.add_job(func=cleanup_completed_events, trigger="interval", minutes=5)
+scheduler.start()
+# threading.Thread(target=delayed_notification, daemon=True).start()
+
+
+# icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+# icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\calendar_alert_notification_date_appointment_icon_153130.ico"
+
+# ----------------Reminders Endpoints---------------- 
+
+@app.route('/api/reminder/<int:reminder_id>', methods=['GET'])
+@jwt_required()
+def get_specific_reminder(reminder_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        reminders = load_reminders()
+        reminder = next((r for r in reminders if r["id"] == reminder_id), None)
+        if not reminder:
+            return jsonify({"error": "Reminder not found"}), 404
+        if user_role not in ["admin", "super_admin"] and reminder.get("user_email") != user_email:
+            return jsonify({"error": "Unauthorized to view this reminder"}), 403
+        return jsonify({"reminder": reminder}), 200
+    except Exception as e:
+        logging.error(f"Error fetching reminder: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# Set Reminder API – authenticated users can set a reminder with event title, details, and reminder time.
+@app.route('/api/reminder', methods=['POST'])
+@jwt_required()
+def set_reminder():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        title = data.get("title")
+        details = data.get("details", "")
+        reminder_time = data.get("reminder_time")  # Expecting ISO8601 string
+
+        if not title or not reminder_time:
+            return jsonify({"error": "Missing required reminder details"}), 400
+
+        reminders = load_reminders()
+        new_id = len(reminders) + 1
+        reminder_entry = {
+            "id": new_id,
+            "user_email": user_email,
+            "title": title,
+            "details": details,
+            "reminder_time": reminder_time,
+            "notified": False  # Flag to track if reminder email has been sent
+        }
+        reminders.append(reminder_entry)
+        save_reminders(reminders)
+        return jsonify({"message": "Reminder set successfully", "reminder": reminder_entry}), 200
+    except Exception as e:
+        logging.error(f"Error setting reminder: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get Reminders – for authenticated users; non-admin users see only their reminders.
+@app.route('/api/reminders', methods=['GET'])
+@jwt_required()
+def get_reminders():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        reminders = load_reminders()
+        if user_role not in ["admin", "super_admin"]:
+            reminders = [r for r in reminders if r.get("user_email") == user_email]
+        return jsonify({"reminders": reminders}), 200
+    except Exception as e:
+        logging.error(f"Error fetching reminders: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+#################################################################################################################
+
+# Notes Endpoints :
+
+# Add a new note
+@app.route('/api/note', methods=['POST'])
+@jwt_required()
+def add_note():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        title = data.get("title")
+        content = data.get("content")
+        if not title or not content:
+            return jsonify({"error": "Missing required note details"}), 400
+        notes = load_notes()
+        new_id = len(notes) + 1
+        note_entry = {
+            "id": new_id,
+            "user_email": user_email,
+            "title": title,
+            "content": content,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        notes.append(note_entry)
+        save_notes(notes)
+        return jsonify({"message": "Note added successfully", "note": note_entry}), 200
+    except Exception as e:
+        logging.error(f"Error adding note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Update an existing note
+@app.route('/api/note/<int:note_id>', methods=['PUT'])
+@jwt_required()
+def update_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        # Only allow the note's owner (or admin) to update
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to update this note"}), 403
+        note.update({
+            "title": data.get("title", note["title"]),
+            "content": data.get("content", note["content"]),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        save_notes(notes)
+        return jsonify({"message": "Note updated successfully", "note": note}), 200
+    except Exception as e:
+        logging.error(f"Error updating note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Delete a note
+@app.route('/api/note/<int:note_id>', methods=['DELETE'])
+@jwt_required()
+def delete_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to delete this note"}), 403
+        notes = [n for n in notes if n["id"] != note_id]
+        save_notes(notes)
+        return jsonify({"message": "Note deleted successfully"}), 200
+    except Exception as e:
+        logging.error(f"Error deleting note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get all notes (regular users only get their own notes; admins get all)
+@app.route('/api/notes', methods=['GET'])
+@jwt_required()
+def get_notes():
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if user_role not in ["admin", "super_admin"]:
+            notes = [n for n in notes if n.get("user_email") == user_email]
+        return jsonify({"notes": notes}), 200
+    except Exception as e:
+        logging.error(f"Error fetching notes: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get a specific note by note_id
+@app.route('/api/note/<int:note_id>', methods=['GET'])
+@jwt_required()
+def get_specific_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to view this note"}), 403
+        return jsonify({"note": note}), 200
+    except Exception as e:
+        logging.error(f"Error fetching note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+####################################################################################################################
+
 # ---------------- Event Endpoints ----------------
+
+# Get All Participants :
+
+# ------------------ Participants API ------------------
+
+@app.route('/api/participants', methods=['GET'])
+@jwt_required()
+def get_participants():
+    try:
+        # Get user details; assuming get_user_details() returns (email, role, organization)
+        email, role, organization = get_user_details()
+        all_clients = []
+
+        if USE_AWS:
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_data = file_response['Body'].read().decode('utf-8')
+                        data_json = json.loads(file_data)
+                        # Default flag if not present
+                        if 'isNewClient' not in data_json:
+                            data_json['isNewClient'] = True
+
+                        if role == "super_admin":
+                            all_clients.append(data_json)
+                        elif role == "admin" and data_json.get('organization') == organization:
+                            all_clients.append(data_json)
+                        elif role == "user" and data_json.get('submittedBy') == email:
+                            all_clients.append(data_json)
+                    except Exception as e:
+                        logging.error(f"Error reading file {obj['Key']}: {e}")
+                        continue
+        else:
+            for filename in os.listdir(CLIENT_DATA_DIR):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                    with open(file_path, 'r') as f:
+                        client_data = json.load(f)
+                        if role == "super_admin":
+                            all_clients.append(client_data)
+                        elif role == "admin" and client_data.get('organization') == organization:
+                            all_clients.append(client_data)
+                        elif role == "user" and client_data.get('submittedBy') == email:
+                            all_clients.append(client_data)
+
+        if not all_clients:
+            return jsonify({'message': 'No client data found for this user.'}), 404
+
+        # Transform the data to return only clientName and uniqueId.
+        participants = []
+        for client in all_clients:
+            participant = {
+                "clientName": client.get("clientName", "Unknown"),
+                "uniqueId": client.get("uniqueId", "Unknown")
+            }
+            participants.append(participant)
+        return jsonify({"participants": participants}), 200
+
+    except Exception as e:
+        logging.error(f"Error occurred while retrieving participants: {e}")
+        return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
+
 
 # Add Event – only authenticated users can add an event.
 @app.route('/api/event', methods=['POST'])
@@ -17629,7 +17967,7 @@ def update_event(event_id):
         logging.error(f"Error updating event: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-# Delete Event – only the event creator (or admin/super_admin) can delete an event.
+# DELETE Event – Allow normal users to delete their own events; admins/super_admins can delete any event.
 @app.route('/api/event/<int:event_id>', methods=['DELETE'])
 @jwt_required()
 def delete_event(event_id):
@@ -17642,6 +17980,7 @@ def delete_event(event_id):
         if not event:
             return jsonify({"error": "Event not found"}), 404
 
+        # Allow deletion if the event belongs to the user or if the user is an admin.
         if event.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
             return jsonify({"error": "Unauthorized to delete this event"}), 403
 
@@ -17651,6 +17990,29 @@ def delete_event(event_id):
     except Exception as e:
         logging.error(f"Error deleting event: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# GET Specific Event – Normal users can view only their events; admins/super_admins can view any event.
+@app.route('/api/event/<int:event_id>', methods=['GET'])
+@jwt_required()
+def get_specific_event(event_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        events = load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+
+        # If the user is not an admin, they can view only their own events.
+        if user_role not in ["admin", "super_admin"] and event.get("user_email") != user_email:
+            return jsonify({"error": "Unauthorized to view this event"}), 403
+
+        return jsonify({"event": event}), 200
+    except Exception as e:
+        logging.error(f"Error fetching event: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 
 # Get Events – for regular users, return only their events; for admin/super_admin, return all events.
 @app.route('/api/events', methods=['GET'])
@@ -17669,7 +18031,7 @@ def get_events():
         logging.error(f"Error fetching events: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-
+####################################################################################################################
 
 # # --- Schedule Meeting/Call Endpoint ---
 # @app.route('/api/schedule-meeting', methods=['POST'])
@@ -17844,8 +18206,42 @@ if __name__ == "__main__":
     # Get the port dynamically from the environment variable, default to 5000
     port = int(os.getenv("PORT", 5000))
     print(f"Port : {port}")
-    
     serve(app, host="0.0.0.0", port=5000) # Working Code 
+    
+    # notification.notify(
+    #     title="Server is running",
+    #     message="Server is up and running on port " + str(port),
+    #     app_icon=None,
+    #     timeout=10,
+    #     on_click= None,
+    #     on_close=None,
+    #     callback=None,
+    #     default_icon=None,
+    #     replaces_notification=None,
+    #     ticker=None,
+    #     duration=None,
+    #     silent=False,
+    #     close_on_click=True,
+    #     actions=None,
+    #     resizable=False,
+    #     callback_data=None,
+        
+    #     # timeout = 10,
+    #     timeout_seconds=10,
+    #     category=None,
+    #     urgency=None,
+    #     hint=None,
+    #     expire_after=None,
+    #     group=None,
+    #     progress=None,
+    #     hints=None,
+    #     replaces_id=None,
+    #     conflict_id=None,
+    #     notification_id=None,
+    #     with_screen=False,
+    #     priority=0,
+    # )
+    
 
 
 
