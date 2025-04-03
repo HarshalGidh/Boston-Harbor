@@ -51,3 +51,5 @@ mistune
 pytz
 calcom
 requests_cache
+apscheduler python-dateutil
+plyer
