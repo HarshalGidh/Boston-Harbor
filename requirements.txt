@@ -53,3 +53,4 @@ calcom
 requests_cache
 apscheduler python-dateutil
 plyer
+pandas-ta

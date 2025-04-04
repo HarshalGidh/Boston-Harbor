@@ -18189,6 +18189,109 @@ def get_events():
 
 # Notes from last meetings :
 
+###############################################################################################################################
+# ###Home Page :
+# #Market movers :
+
+import yfinance as yf
+import pandas_ta as ta
+import pandas as pd
+from datetime import datetime, timedelta
+
+def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
+    end_date = datetime.now()
+    if interval in ['1m', '5m']:
+        start_date = end_date - timedelta(days=7)
+    elif interval in ['15m', '60m']:
+        start_date = end_date - timedelta(days=60)
+    elif interval == '1d':
+        start_date = end_date - timedelta(days=365*5)
+    elif interval == '1wk':
+        start_date = end_date - timedelta(weeks=365*5)
+    elif interval == '1mo':
+        start_date = end_date - timedelta(days=365*5)
+
+    # Force auto_adjust=False to get original column names.
+    data = yf.download(ticker, start=start_date, end=end_date, interval=interval, auto_adjust=False)
+    
+    # Flatten MultiIndex columns if present
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+    
+    # For debugging, print out the column names
+    print("Downloaded data columns:", data.columns)
+    
+    # Calculate EMA and RSI using the 'Close' column.
+    data['EMA'] = ta.ema(data['Close'], length=ema_period)
+    data['RSI'] = ta.rsi(data['Close'], length=rsi_period)
+
+    candlestick_data = [
+        {
+            'time': int(row.Index.timestamp()),
+            'open': row.Open,
+            'high': row.High,
+            'low': row.Low,
+            'close': row.Close
+        }
+        for row in data.itertuples()
+    ]
+
+    ema_data = [
+        {
+            'time': int(row.Index.timestamp()),
+            'value': row.EMA
+        }
+        for row in data.itertuples() if not pd.isna(row.EMA)
+    ]
+
+    rsi_data = [
+        {
+            'time': int(row.Index.timestamp()),
+            'value': row.RSI if not pd.isna(row.RSI) else 0
+        }
+        for row in data.itertuples()
+    ]
+    # print("Candlestick Data for", ticker, "is:", candlestick_data)
+    # print("EMA Data for", ticker, "is:", ema_data)
+    # print("RSI Data for", ticker, "is:", rsi_data)
+    
+    return candlestick_data, ema_data, rsi_data
+
+@app.route('/api/market-movers',methods=['POST'])
+def get_chart_data():
+    try:
+        ticker = request.json.get('ticker','^IXIC') # By default show NASDAQ Data
+        interval = request.json.get('interval','1d') # Default interval is 1 day
+        # Check if the provided interval is valid
+        if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
+            return jsonify({"error": "Invalid interval"}), 400
+        
+        ema_period = int(request.json.get('ema_period',None))
+        # Check if the provided ema_period is valid:
+        if not ema_period:
+            ema_period = 1 # Default 1d ema period
+            
+        # Check if the provided rsi_period is valid :    
+        rsi_period = int(request.json.get('rsi_period',None))
+        if not rsi_period:
+            rsi_period = 1 # Default 1d rsi period
+            
+        ema_period = max(1, min(ema_period, 50))  # Limit EMA period to 50
+        rsi_period = max(1, min(rsi_period, 50))  # Limit RSI period to 50
+        # Fetch Candlestick Data for the Given Ticker,Interval and RSI Period and EMA Period
+        candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+        print("Fetched Data Succesfully")
+        return jsonify({'message':"Fetched Data Succesfully",
+                        'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data}),200
+    except Exception as e:
+        logging.error(f"Error fetching market movers data: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# @app.route('/api/data/<ticker>/<interval>/<int:ema_period>/<int:rsi_period>')
+# def get_data(ticker, interval, ema_period, rsi_period):
+#     candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+#     return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})
 
 
 #################################################################################################################################
