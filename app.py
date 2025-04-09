@@ -18187,51 +18187,13 @@ def save_notes(notes):
 # Reminder Functions
 
 # Send reminders via email :
-# previous :
-# def send_reminder_email(to_email, event):
-#     """
-#     Sends an email reminder for the event.
-#     """
-#     try:
-#         # Validate email format
-#         if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
-#             logging.error(f"Invalid email address: {to_email}")
-#             return False
-
-#         subject = "Event Reminder – Upcoming Event Notification"
-#         message = (
-#             f"Dear User,\n\n"
-#             f"This is a reminder that your event '{event['title']}' is scheduled to start at {event['start_time']} in 15 minutes.\n\n"
-#             "Please make the necessary preparations.\n\n"
-#             "Thank you,\n"
-#             "Your Support Team"
-#         )
-#         # Create a multipart message
-#         msg = MIMEMultipart()
-#         msg['From'] = support_email
-#         msg['To'] = to_email
-#         msg['Subject'] = subject
-#         msg.attach(MIMEText(message, 'plain'))
-
-#         context = ssl.create_default_context()
-#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-#             server.ehlo()
-#             server.starttls(context=context)
-#             server.ehlo()
-#             server.login(support_email, support_password)
-#             server.sendmail(support_email, to_email, msg.as_string())
-            
-        # print(f"Reminder email sent successfully to {to_email}")
-        # logging.info(f"Reminder email sent successfully to {to_email}")
-        # return True
-#     except Exception as e:
-#         logging.error(f"Error sending reminder email: {e}")
-#         return False
-
 # Updated :
+from dateutil import parser as date_parser
+from datetime import timezone
+
 def send_reminder_email(to_email, event):
     """
-    Sends an email reminder for the event with a human-readable start time.
+    Sends an email reminder for the event with a human-readable localized start time.
     If a meeting link is provided, it is included in the email.
     """
     try:
@@ -18240,25 +18202,35 @@ def send_reminder_email(to_email, event):
             logging.error(f"Invalid email address: {to_email}")
             return False
 
-        # Parse the event start time and format it nicely.
+        # Parse the event start time (assumed to be in ISO8601) and ensure it's timezone-aware (default UTC).
         event_start = date_parser.parse(event['start_time'])
-        # Ensure time is timezone-aware; assume UTC if not provided.
         if event_start.tzinfo is None:
             event_start = event_start.replace(tzinfo=timezone.utc)
-        formatted_date = event_start.strftime("%B %d, %Y")
-        formatted_time = event_start.strftime("%I:%M %p %Z")
 
-        # Construct the message body
+        # Determine the user's (or event's) desired time zone.
+        # The event is expected to include a key "timezone" with a valid pytz time zone string.
+        user_timezone_str = event.get("timezone", "US/Pacific")
+        try:
+            user_tz = pytz.timezone(user_timezone_str)
+        except Exception as e:
+            logging.error(f"Error determining timezone from '{user_timezone_str}', defaulting to US/Pacific: {e}")
+            user_tz = pytz.timezone("US/Pacific")
+
+        # Convert the event start time into the user's local time zone.
+        event_local = event_start.astimezone(user_tz)
+        formatted_date_local = event_local.strftime("%B %d, %Y")
+        formatted_time_local = event_local.strftime("%I:%M %p %Z")
+
+        # Construct the message body using the localized date/time.
         message_body = (
             f"Dear User,\n\n"
-            f"This is a reminder that your event '{event['title']}' is scheduled on {formatted_date} "
-            f"at {formatted_time} and is going to start in 15 minutes.\n"
+            f"This is a reminder that your event '{event['title']}' is scheduled on {formatted_date_local} "
+            f"at {formatted_time_local} and is going to start in 15 minutes.\n"
         )
-        # Include meeting link if provided and not empty
+        # Include the meeting link if provided
         meeting_link = event.get("meeting_link", "").strip()
         if meeting_link:
             message_body += f"\nJoin the meeting using this link: {meeting_link}\n"
-
         message_body += (
             "\nPlease make the necessary preparations.\n\n"
             "Thank you,\n"
@@ -18267,7 +18239,7 @@ def send_reminder_email(to_email, event):
 
         subject = "Event Reminder – Upcoming Event Notification"
         
-        # Create a multipart email message
+        # Create the email message
         msg = MIMEMultipart()
         msg['From'] = support_email
         msg['To'] = to_email
@@ -18287,6 +18259,66 @@ def send_reminder_email(to_email, event):
     except Exception as e:
         logging.error(f"Error sending reminder email: {e}")
         return False
+
+# previous :
+# def send_reminder_email(to_email, event):
+#     """
+#     Sends an email reminder for the event with a human-readable start time.
+#     If a meeting link is provided, it is included in the email.
+#     """
+#     try:
+#         # Validate email format
+#         if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+#             logging.error(f"Invalid email address: {to_email}")
+#             return False
+
+#         # Parse the event start time and format it nicely.
+#         event_start = date_parser.parse(event['start_time'])
+#         # Ensure time is timezone-aware; assume UTC if not provided.
+#         if event_start.tzinfo is None:
+#             event_start = event_start.replace(tzinfo=timezone.utc)
+#         formatted_date = event_start.strftime("%B %d, %Y")
+#         formatted_time = event_start.strftime("%I:%M %p %Z")
+
+#         # Construct the message body
+#         message_body = (
+#             f"Dear User,\n\n"
+#             f"This is a reminder that your event '{event['title']}' is scheduled on {formatted_date} "
+#             f"at {formatted_time} and is going to start in 15 minutes.\n"
+#         )
+#         # Include meeting link if provided and not empty
+#         meeting_link = event.get("meeting_link", "").strip()
+#         if meeting_link:
+#             message_body += f"\nJoin the meeting using this link: {meeting_link}\n"
+
+#         message_body += (
+#             "\nPlease make the necessary preparations.\n\n"
+#             "Thank you,\n"
+#             "Your Support Team"
+#         )
+
+#         subject = "Event Reminder – Upcoming Event Notification"
+        
+#         # Create a multipart email message
+#         msg = MIMEMultipart()
+#         msg['From'] = support_email
+#         msg['To'] = to_email
+#         msg['Subject'] = subject
+#         msg.attach(MIMEText(message_body, 'plain'))
+
+#         context = ssl.create_default_context()
+#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+#             server.ehlo()
+#             server.starttls(context=context)
+#             server.ehlo()
+#             server.login(support_email, support_password)
+#             server.sendmail(support_email, to_email, msg.as_string())
+
+#         logging.info(f"Reminder email sent successfully to {to_email}")
+#         return True
+#     except Exception as e:
+#         logging.error(f"Error sending reminder email: {e}")
+#         return False
 
 def check_reminders():
     """
@@ -18387,32 +18419,82 @@ from win10toast_click import ToastNotifier
 import logging
 logging.getLogger("win10toast_click").setLevel(logging.ERROR)
 
-# allows redirection link :
+# updated :
+
 def send_reminder_notification(event):
+    """
+    Sends a desktop notification for the event using win10toast-click.
+    The notification uses a long duration and always passes a callback that returns 0.
+    If a meeting link is provided, clicking the notification opens the link.
+    """
     try:
+        # Set your icon path
         icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
         meeting_link = event.get("meeting_link", "").strip()
 
-        # Define a callback that returns 0 after opening the link.
-        def callback_on_click():
+        # Define a callback that opens the meeting link (if available) and returns 0.
+        def open_link_callback():
             if meeting_link:
                 webbrowser.open(meeting_link)
-            return 0  # Return an integer as required by WPARAM
+            return 0  # Required integer return
+
+        # If no meeting link is provided, use a dummy callback that does nothing but returns 0.
+        def dummy_callback():
+            return 0
+
+        # Always assign a callback function, avoiding None.
+        callback = open_link_callback if meeting_link else dummy_callback
 
         toaster = ToastNotifier()
+
+        # Set a long duration (e.g., 3600 seconds). Note that Windows may auto-dismiss toasts,
+        # unless your application is registered as a persistent app.
         toaster.show_toast(
-            "Event Reminder",  # Title with custom name
+            "Wealth Manager – Event Reminder",  # Custom title
             f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
             icon_path=icon_path,
-            duration=30,
+            # duration=3600,  # Attempt to keep the toast visible for 1 hour
+            duration=None,
             threaded=True,
-            callback_on_click=callback_on_click if meeting_link else None
+            callback_on_click=callback
         )
         logging.info(f"Desktop notification sent for event '{event['title']}'")
         return True
     except Exception as e:
         logging.error(f"Error sending desktop notification: {e}")
         return False
+
+
+# previous :
+# allows redirection link :
+# def send_reminder_notification(event):
+#     try:
+#         icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+#         # icon_path = r"icon\alarm_alert_bell.ico"
+#         meeting_link = event.get("meeting_link", "").strip()
+
+#         # Define a callback that returns 0 after opening the link.
+#         def callback_on_click():
+#             if meeting_link:
+#                 webbrowser.open(meeting_link)
+#             return 0  # Return an integer as required by WPARAM
+
+#         toaster = ToastNotifier()
+#         toaster.show_toast(
+#             "Event Reminder",  # Title with custom name
+#             f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
+#             icon_path=icon_path,
+#             # duration=60,
+#             duration=None,
+#             threaded=True,
+#             callback_on_click=callback_on_click if meeting_link else None,
+        
+#         )
+#         logging.info(f"Desktop notification sent for event '{event['title']}'")
+#         return True
+#     except Exception as e:
+#         logging.error(f"Error sending desktop notification: {e}")
+#         return False
 
 
 
@@ -18720,7 +18802,7 @@ def add_event():
     try:
         user_email = get_jwt_identity()
         data = request.get_json()
-        event_type = data.get("type")  # 'task' or 'meeting'
+        event_type = data.get("type")  # 'task' or 'meeting' # action
         title = data.get("title")
         start_time = data.get("start_time")
         end_time = data.get("end_time")
@@ -18848,6 +18930,314 @@ def get_events():
     except Exception as e:
         logging.error(f"Error fetching events: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    
+#########################################################################################################################
+
+# Birthday api :
+
+@app.route('/api/client_birthdays', methods=['GET'])
+@jwt_required()
+def get_client_birthdays():
+    try:
+        # Extract user details; get_user_details() should return (email, role, organization)
+        email, role, organization = get_user_details()
+        clients_birthdays = []
+
+        if USE_AWS:
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        client_json = json.loads(file_response['Body'].read().decode('utf-8'))
+                        
+                        # Access control based on user role
+                        if role == "super_admin":
+                            pass
+                        elif role == "admin" and client_json.get("organization") != organization:
+                            continue
+                        elif role == "user" and client_json.get("submittedBy") != email:
+                            continue
+                        
+                        # Get client details
+                        client_detail = client_json.get("clientDetail", {})
+                        client_name = client_detail.get("clientName")
+                        client_dob = client_detail.get("clientDob")
+                        client_email = client_detail.get("clientEmail")
+                        client_contact = client_detail.get("clientContact")
+                        
+                        if not client_dob:
+                            continue
+                        
+                        # Parse the birth date (assuming YYYY-MM-DD) and compute age
+                        dob_date = datetime.strptime(client_dob, "%Y-%m-%d")
+                        today = datetime.today()
+                        age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+                        
+                        clients_birthdays.append({
+                            "clientName": client_name,
+                            "birthDate": client_dob,
+                            "age": age,
+                            "clientEmail": client_email,
+                            "clientContact": client_contact
+                        })
+                    except Exception as e:
+                        logging.error(f"Error reading client data from {obj.get('Key')}: {e}")
+                        continue
+        else:
+            # For local storage, loop through client JSON files in CLIENT_DATA_DIR.
+            for filename in os.listdir(CLIENT_DATA_DIR):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                    try:
+                        with open(file_path, "r") as f:
+                            client_json = json.load(f)
+                        if role == "super_admin":
+                            pass
+                        elif role == "admin" and client_json.get("organization") != organization:
+                            continue
+                        elif role == "user" and client_json.get("submittedBy") != email:
+                            continue
+                        
+                        client_detail = client_json.get("clientDetail", {})
+                        client_name = client_detail.get("clientName")
+                        client_dob = client_detail.get("clientDob")
+                        client_email = client_detail.get("clientEmail")
+                        client_contact = client_detail.get("clientContact")
+                        
+                        if not client_dob:
+                            continue
+                        
+                        dob_date = datetime.strptime(client_dob, "%Y-%m-%d")
+                        today = datetime.today()
+                        age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+                        
+                        clients_birthdays.append({
+                            "clientName": client_name,
+                            "birthDate": client_dob,
+                            "age": age,
+                            "clientEmail": client_email,
+                            "clientContact": client_contact
+                        })
+                    except Exception as e:
+                        logging.error(f"Error processing file {filename}: {e}")
+                        continue
+                    
+        print("All Client Birthdays :\n",clients_birthdays)
+        
+        if not clients_birthdays:
+            return jsonify({"message": "No client birthday data found."}), 404
+
+        return jsonify({
+            "message": "Client birthday data retrieved successfully.",
+            "data": clients_birthdays
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error occurred while retrieving client birthday data: {e}")
+        return jsonify({"message": f"Error occurred while retrieving client birthday data: {e}"}), 500
+
+
+# US Holdidays :
+import holidays
+
+@app.route('/api/us-holidays', methods=['GET'])
+def get_us_holidays():
+    try:
+        # Get the current year
+        current_year = datetime.now().year
+
+        # Create a US holidays object for the current year.
+        us_holidays = holidays.US(years=[current_year])
+
+        # Convert the holidays to a list of dictionaries with holiday name and date.
+        holidays_list = [
+            {"name": name, "date": date.strftime("%Y-%m-%d")}
+            for date, name in us_holidays.items()
+        ]
+
+        # Optionally, sort the holidays by date.
+        holidays_list.sort(key=lambda x: x["date"])
+        print("US Holidays :",holidays_list)
+
+        return jsonify({"year": current_year, "holidays": holidays_list}), 200
+    except Exception as e:
+        logging.error(f"Error fetching US holidays: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+###################################################################################################################
+
+# JSON file used to store to-do list items
+
+todos_folder = os.getenv("todos_folder")
+TODO_FILE = "todos_list.json"
+
+# Helper functions to load and save to-do list data
+def load_todos():
+    if os.path.exists(TODO_FILE):
+        with open(TODO_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_todos(todos):
+    with open(TODO_FILE, "w") as f:
+        json.dump(todos, f, indent=4)
+
+
+# ------------------------------ To-Do List Endpoints ------------------------------
+
+# POST /api/todo – Create a new to-do item; requires authentication.
+@app.route('/api/todo', methods=['POST'])
+@jwt_required()
+def add_todo():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        
+        # Required fields: action, client_name, date (in YYYY-MM-DD format)
+        if not data.get("action") or not data.get("client_name") or not data.get("date"):
+            return jsonify({"error": "Missing required fields: action, client_name, and date are required."}), 400
+
+        # Load current to-do items and generate new id.
+        todos = load_todos()
+        new_id = len(todos) + 1
+
+        # Build the new to-do entry. Fields like event title, last_action_date, etc., are optional.
+        todo_entry = {
+            "id": new_id,
+            "user_email": user_email,  # associate to-do with the creator
+            "action": data["action"],  # e.g., "Call" or "Email"
+            "client_name": data["client_name"],
+            "date": data["date"],  # Event date (expected in 'YYYY-MM-DD' format)
+            "title": data.get("title"),
+            "last_action_date": data.get("last_action_date"),  # also include type of action if available
+            "last_action_type": data.get("last_action_type"),
+            "aum_usd_mm": data.get("aum_usd_mm"),
+            "key_talking_points": data.get("key_talking_points"),
+            "investor_personality": data.get("investor_personality"),
+            "portfolio_summary": data.get("portfolio_summary"),
+            "last_call_summary": data.get("last_call_summary"),
+            "completed": data.get("completed", False)
+        }
+
+        todos.append(todo_entry)
+        save_todos(todos)
+        return jsonify({"message": "To-Do item added successfully", "todo": todo_entry}), 201
+    except Exception as e:
+        logging.error(f"Error adding to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# PUT /api/todo/<int:todo_id> – Update an existing to-do item.
+@app.route('/api/todo/<int:todo_id>', methods=['PUT'])
+@jwt_required()
+def update_todo(todo_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        
+        todos = load_todos()
+        # Find the to-do item by id.
+        todo = next((t for t in todos if t["id"] == todo_id), None)
+        if not todo:
+            return jsonify({"error": "To-Do item not found"}), 404
+
+        # Only allow update if the to-do item belongs to the current user or if they are an admin.
+        if todo.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to update this to-do"}), 403
+
+        data = request.get_json()
+        # Update the fields if provided in data.
+        todo["action"] = data.get("action", todo["action"])
+        todo["client_name"] = data.get("client_name", todo["client_name"])
+        if data.get("date"):
+            todo["date"] = data["date"]
+        todo["title"] = data.get("title", todo.get("title"))
+        if data.get("last_action_date"):
+            todo["last_action_date"] = data["last_action_date"]
+        todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type"))
+        todo["aum_usd_mm"] = data.get("aum_usd_mm", todo.get("aum_usd_mm"))
+        todo["key_talking_points"] = data.get("key_talking_points", todo.get("key_talking_points"))
+        todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality"))
+        todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary"))
+        todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary"))
+        todo["completed"] = data.get("completed", todo.get("completed"))
+
+        save_todos(todos)
+        return jsonify({"message": "To-Do item updated successfully", "todo": todo}), 200
+    except Exception as e:
+        logging.error(f"Error updating to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# DELETE /api/todo/<int:todo_id> – Delete a to-do item.
+@app.route('/api/todo/<int:todo_id>', methods=['DELETE'])
+@jwt_required()
+def delete_todo(todo_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        todo = next((t for t in todos if t["id"] == todo_id), None)
+        if not todo:
+            return jsonify({"error": "To-Do item not found"}), 404
+
+        # Allow deletion if the to-do belongs to the user or if they are admin/super_admin.
+        if todo.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to delete this to-do"}), 403
+
+        todos = [t for t in todos if t["id"] != todo_id]
+        save_todos(todos)
+        return jsonify({"message": "To-Do item deleted successfully"}), 200
+    except Exception as e:
+        logging.error(f"Error deleting to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# GET Specific To-Do – Normal users can view only their to-dos; admins/super_admins can view any.
+@app.route('/api/todo/<int:todo_id>', methods=['GET'])
+@jwt_required()
+def get_todo(todo_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        todo = next((t for t in todos if t["id"] == todo_id), None)
+        if not todo:
+            return jsonify({"error": "To-Do item not found"}), 404
+
+        # If user is not admin, allow only his own items
+        if user_role not in ["admin", "super_admin"] and todo.get("user_email") != user_email:
+            return jsonify({"error": "Unauthorized to view this to-do"}), 403
+
+        return jsonify({"todo": todo}), 200
+    except Exception as e:
+        logging.error(f"Error fetching to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
+@app.route('/api/todos', methods=['GET'])
+@jwt_required()
+def get_todos():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        if user_role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
+        return jsonify({"todos": todos}), 200
+    except Exception as e:
+        logging.error(f"Error fetching to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
 
 ####################################################################################################################
 

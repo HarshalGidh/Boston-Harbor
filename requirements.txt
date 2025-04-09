@@ -55,3 +55,4 @@ apscheduler python-dateutil
 plyer
 pandas-ta
 win10toast_click
+holidays

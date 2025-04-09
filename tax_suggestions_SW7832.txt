@@ -1,105 +1,62 @@
-<p>Here's a structured tax-saving strategy based on the provided financial data.  Note that this is for informational purposes only and does not constitute financial or tax advice.  Consult with a qualified professional for personalized guidance.</p>
-<p><strong>1. Investment Strategies for Tax Efficiency</strong></p>
-<p>The provided data lacks crucial information regarding existing tax-advantaged accounts (401(k), IRA, Roth IRA, etc.).  A comprehensive tax-saving strategy requires knowing the balances and contribution limits utilized in these accounts.  This information is essential to maximize contributions and minimize taxable income.</p>
+<p>Based on the provided financial data, a comprehensive tax-saving strategy for Samuel Will, considering his status as a Non-Resident Alien married filing jointly with two dependents residing in Hilo, Hawaii, cannot be fully constructed.  The information provided is incomplete, particularly regarding annual income and details about his business and real estate holdings which are crucial for accurate tax calculation.  However, a partial strategy can be outlined based on the available data.  A complete analysis requires additional financial information.</p>
+<p><strong>1. Investment Strategies for Tax Efficiency:</strong></p>
+<p>The current portfolio shows a mix of asset classes.  To optimize tax efficiency, the following strategies should be considered, pending a review of Samuel's annual income and tax bracket:</p>
+<ul>
+<li>
+<p><strong>Tax-Advantaged Accounts:</strong>  Explore the contribution limits and tax benefits of available retirement plans (401(k), traditional and Roth IRAs).  Contributions to these accounts reduce taxable income.  The choice between traditional and Roth depends on Samuel's expected tax bracket in retirement.</p>
+</li>
+<li>
+<p><strong>Tax-Efficient Investing:</strong> Consider adjusting the portfolio allocation based on the tax implications of different asset classes.  For example, the tax rates on capital gains vary by asset. Minimizing short-term capital gains is preferred. Holding assets longer can often result in lower capital gains tax rates.</p>
+</li>
+</ul>
 <table>
 <thead>
 <tr>
-<th>Account Type</th>
+<th>Asset Class</th>
+<th>Tax Implications</th>
 <th>Strategy</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>401(k) / IRA</td>
-<td>Maximize contributions to reduce taxable income. Consider Roth options for tax-free growth.</td>
+<td>Equities</td>
+<td>Capital gains taxes apply on profits.</td>
+<td>Consider tax-loss harvesting (see section 4).</td>
 </tr>
-<tr>
-<td>Taxable Accounts</td>
-<td>Use tax-loss harvesting (detailed below) to offset gains.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>2. Deductions, Exemptions, and Credits</strong></p>
-<p>Determining applicable deductions and credits requires detailed information about the client's income, expenses, and other relevant circumstances, which is not fully provided.  However, some potential deductions and credits are listed below:</p>
-<ul>
-<li>
-<p><strong>Federal Deductions:</strong></p>
-<ul>
-<li><strong>Standard Deduction or Itemized Deductions:</strong>  The client will either take the standard deduction or itemize based on whichever results in a lower taxable income.  Itemized deductions may include charitable contributions, mortgage interest (if applicable), and state and local taxes (SALT), but further details are needed to assess this.</li>
-<li><strong>Other potential deductions:</strong>  Health savings account (HSA) contributions, self-employment tax deductions (if applicable), and others may apply, requiring more detailed information.</li>
-</ul>
-</li>
-<li>
-<p><strong>Texas Deductions:</strong>  Texas has a more limited number of itemized deductions compared to the federal level. Further information is needed to determine eligibility.</p>
-</li>
-<li>
-<p><strong>Credits:</strong>  Many credits may be applicable depending on the client's circumstances (e.g., child tax credit, earned income tax credit), requiring further information.</p>
-</li>
-</ul>
-<p><strong>3. State-Specific Tax Optimizations (Texas)</strong></p>
-<p>The client resides in Hawaii, not Texas.  Therefore, Texas-specific tax optimizations are not applicable.  However, Hawaii state tax laws should be considered. This requires further information regarding specific Hawaii tax laws.</p>
-<p><strong>4. Tax-Loss Harvesting Opportunities</strong></p>
-<p>Tax-loss harvesting involves selling assets that have lost value to offset capital gains.  Analyzing the provided portfolio:</p>
-<table>
-<thead>
-<tr>
-<th>Asset Class</th>
-<th>Asset Name</th>
-<th>Gain/Loss Percentage</th>
-<th>Time Held</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td>Bonds</td>
-<td>Treasury Yield 30 Years</td>
-<td>-1.24%</td>
-<td>04/01/2025</td>
-<td>If loss is realized, consider tax loss harvesting.</td>
+<td>Interest income is taxable.</td>
+<td>Consider municipal bonds for tax-exempt income (if eligible).</td>
 </tr>
 <tr>
 <td>Real Estate</td>
-<td>FIRST CAPITAL REAL ESTATE IN</td>
-<td>98.25%</td>
-<td>04/01/2025</td>
-<td>Tax implications of gains need further analysis.</td>
-</tr>
-<tr>
-<td>Equities</td>
-<td>ADVISORSHARES DORSEY WRIGHT ADR ETF</td>
-<td>100.28%</td>
-<td>04/01/2025</td>
-<td>Tax implications of gains need further analysis.</td>
-</tr>
-<tr>
-<td>Equities</td>
-<td>A. O. Smith</td>
-<td>0.79%</td>
-<td>04/02/2025</td>
-<td>Small gain; tax implications depend on overall portfolio gains/losses.</td>
-</tr>
-<tr>
-<td>Equities</td>
-<td>American Airlines Group Inc</td>
-<td>102.82%</td>
-<td>04/02/2025</td>
-<td>Tax implications of gains need further analysis.</td>
-</tr>
-<tr>
-<td>Equities</td>
-<td>ATA Creativity Global</td>
-<td>99.11%</td>
-<td>04/02/2025</td>
-<td>Tax implications of gains need further analysis.</td>
+<td>Capital gains and depreciation deductions apply.</td>
+<td>Consult a tax professional for optimal strategies.</td>
 </tr>
 <tr>
 <td>Commodities</td>
-<td>Gold</td>
-<td>2.24%</td>
-<td>03/27/2025</td>
-<td>Tax implications of gains need further analysis.</td>
+<td>Capital gains taxes apply on profits.</td>
+<td>Consider long-term holding for lower tax rates.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Disclaimer:</strong>  This analysis is based on limited data.  A comprehensive tax plan requires detailed financial information and professional tax advice.</p>
+<p><strong>2. Deductions, Exemptions, and Credits:</strong></p>
+<ul>
+<li>
+<p><strong>Federal Deductions:</strong> Without knowing Samuel's annual income, specific deduction amounts cannot be determined.  However, deductions like the standard deduction or itemized deductions (if applicable), and those for dependents will reduce taxable income.</p>
+</li>
+<li>
+<p><strong>Federal Credits:</strong> Several federal credits may be available based on income and family circumstances. A complete analysis is required to establish eligibility.</p>
+</li>
+<li>
+<p><strong>Texas Deductions:</strong>  Texas has a simpler tax system than the Federal one; most federal deductions are not applicable to Texas tax returns. Property taxes and certain charitable contributions might be deductible on the Texas state return depending on the amount and the filing status.</p>
+</li>
+<li>
+<p><strong>Credits (Federal and Texas):</strong>  The information provided doesn't contain sufficient information to determine eligibility for relevant federal or Texas tax credits (e.g., child tax credit, earned income tax credit).</p>
+</li>
+</ul>
+<p><strong>3. State-Specific Tax Optimizations (Texas):</strong></p>
+<p>Since Samuel resides in Hawaii, not Texas, Texas-specific tax optimizations are not relevant. Hawaii's tax laws should be considered instead.  Hawaii's tax system should be reviewed to identify deductions, credits and other tax savings strategies specific to the state.</p>
+<p><strong>4. Tax-Loss Harvesting Opportunities:</strong></p>
+<p>The provided portfolio shows some investments with losses (Gold and Bonds).  Tax-loss harvesting involves selling losing assets to offset capital gains.  This strategy can reduce the overall tax liability.  However, the "wash-sale rule" needs to be considered to avoid penalties.  Consult a tax advisor for strategic tax-loss harvesting within the confines of the applicable regulations.</p>
+<p><strong>Disclaimer:</strong> This analysis is based on limited information.  It is crucial to consult with a qualified tax professional for personalized advice tailored to Samuel Will's specific financial situation, income, and tax residency status.  This response provides a general overview and should not be considered complete or exhaustive tax advice.</p>
