@@ -18805,12 +18805,12 @@ def add_event():
     try:
         user_email = get_jwt_identity()
         data = request.get_json()
-        event_type = data.get("type")  # 'task' or 'meeting' # action
+        event_type = data.get("action")  # 'task' or 'meeting' # action
         title = data.get("title")
         start_time = data.get("start_time")
         end_time = data.get("end_time")
         participants = data.get("participants", [])
-        notes = data.get("notes", "")
+        notes = data.get("key_points", "")
         meeting_link = data.get("meeting_link", "")
 
         if not title or not start_time or not end_time:
