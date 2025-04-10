@@ -18810,7 +18810,7 @@ def add_event():
         start_time = data.get("start_time")
         end_time = data.get("end_time")
         participants = data.get("participants", [])
-        notes = data.get("key_points", "")
+        key_points = data.get("key_points", "")
         meeting_link = data.get("meeting_link", "")
 
         if not title or not start_time or not end_time:
@@ -18826,7 +18826,7 @@ def add_event():
             "start_time": start_time,
             "end_time": end_time,
             "participants": participants if event_type == "meeting" else None,
-            "notes": notes if event_type == "meeting" else None,
+            "key_points": key_points if event_type == "meeting" else None,
             "meeting_link": meeting_link if event_type == "meeting" else None,
             "reminder_sent": False  # Flag to prevent duplicate reminders
         }
@@ -18863,7 +18863,7 @@ def update_event(event_id):
             "start_time": data.get("start_time", event["start_time"]),
             "end_time": data.get("end_time", event["end_time"]),
             "participants": data.get("participants", event.get("participants")),
-            "notes": data.get("notes", event.get("notes")),
+            "key_points": data.get("key_points", event.get("notes")),
             "meeting_link": data.get("meeting_link", event.get("meeting_link")),
             # Reset reminder flag if event time changes
             "reminder_sent": False
@@ -19149,7 +19149,7 @@ def save_todo_item_from_event(event):
             "title": title,
             "last_action_date": event.get("last_action_date", "N/A"),
             "aum": event.get("available_funds", "N/A"),
-            "key_points": event.get("key_points", "N/A"),
+            "key_points": event.get("key_points") or event.get("notes","N/A") , # previous version we were using notes
             "investor_personality": investor_personality,
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
