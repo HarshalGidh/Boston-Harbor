@@ -19149,7 +19149,7 @@ def save_todo_item_from_event(event):
             "title": title,
             "last_action_date": event.get("last_action_date", "N/A"),
             "aum": event.get("available_funds", "N/A"),
-            "key_talking_points": event.get("notes", "N/A"),
+            "key_points": event.get("notes", "N/A"),
             "investor_personality": investor_personality,
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
@@ -19190,7 +19190,7 @@ def add_todo():
             "last_action_date": data.get("last_action_date"),  # also include type of action if available
             "last_action_type": data.get("last_action_type"),
             "aum_usd_mm": data.get("aum_usd_mm"),
-            "key_talking_points": data.get("key_talking_points"),
+            "key_points": data.get("key_points"),
             "investor_personality": data.get("investor_personality"),
             "portfolio_summary": data.get("portfolio_summary"),
             "last_call_summary": data.get("last_call_summary"),
@@ -19227,19 +19227,20 @@ def update_todo(todo_id):
         data = request.get_json()
         # Update the fields if provided in data.
         todo["action"] = data.get("action", todo["action"])
-        todo["client_name"] = data.get("client_name", todo["client_name"])
         if data.get("date"):
             todo["date"] = data["date"]
         todo["title"] = data.get("title", todo.get("title"))
-        if data.get("last_action_date"):
-            todo["last_action_date"] = data["last_action_date"]
         todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type"))
         todo["aum_usd_mm"] = data.get("aum_usd_mm", todo.get("aum_usd_mm"))
-        todo["key_talking_points"] = data.get("key_talking_points", todo.get("key_talking_points"))
-        todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality"))
-        todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary"))
+        todo["key_points"] = data.get("key_points", todo.get("key_points"))
         todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary"))
         todo["completed"] = data.get("completed", todo.get("completed"))
+        
+        # todo["client_name"] = data.get("client_name", todo["client_name"])
+        # if data.get("last_action_date"):
+        #     todo["last_action_date"] = data["last_action_date"]
+        # todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality"))
+        # todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary"))
 
         save_todos(todos)
         return jsonify({"message": "To-Do item updated successfully", "todo": todo}), 200
@@ -19343,7 +19344,7 @@ def get_todo(todo_id):
 #                 last_action_date = "N/A"
 
 #             # aum_usd_mm = event.get("aum_usd_mm", "N/A")
-#             key_talking_points = event.get("notes", "N/A")
+#             key_points = event.get("notes", "N/A")
 #             last_action_type = event.get("last_action_type", "N/A")
 #             last_call_summary = event.get("last_call_summary", "N/A")
 
@@ -19354,7 +19355,7 @@ def get_todo(todo_id):
 #                 "title": title,
 #                 "last_action_date": last_action_date,
 #                 "aum": aum,
-#                 "key_talking_points": key_talking_points,
+#                 "key_points": key_points,
 #                 "investor_personality": investor_personality,
 #                 "last_action_type": last_action_type,
 #                 "last_call_summary": last_call_summary
