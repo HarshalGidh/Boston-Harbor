@@ -19124,7 +19124,7 @@ def save_todo_item_from_event(event):
         todos = load_todos()
 
         # Extract info
-        action = event.get("type", "N/A")
+        action = event.get("action", "N/A")
         title = event.get("title", "N/A")
         participants = event.get("participants", [])
         start_time = event.get("start_time", "N/A")
@@ -19149,7 +19149,7 @@ def save_todo_item_from_event(event):
             "title": title,
             "last_action_date": event.get("last_action_date", "N/A"),
             "aum": event.get("available_funds", "N/A"),
-            "key_points": event.get("notes", "N/A"),
+            "key_points": event.get("key_points", "N/A"),
             "investor_personality": investor_personality,
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
