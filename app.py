@@ -18783,9 +18783,10 @@ def get_participants():
         # Transform the data to return only clientName and uniqueId.
         participants = []
         for client in all_clients:
+            # client_details = client.get('clientDetail')
             participant = {
-                "clientName": client.get("clientName", "Unknown"),
-                "uniqueId": client.get("uniqueId", "Unknown"),
+                "clientName": client.get("clientDetail", {}).get("clientName"),
+                "uniqueId": client.get("uniqueId") or client.get("client_id","Unknown") ,
                 "investment_personality":client.get("investment_personality"),
                 "available_funds":client.get("available_funds",0)
             }
