@@ -18831,6 +18831,10 @@ def add_event():
         }
         events.append(event_entry)
         save_events(events)
+        
+        # save it in to do list as well :
+        save_todo_item_from_event(event_entry)
+        
         return jsonify({"message": "Event added successfully", "event": event_entry}), 200
     except Exception as e:
         logging.error(f"Error adding event: {e}")
@@ -19078,16 +19082,83 @@ todos_folder = os.getenv("todos_folder")
 TODO_FILE = "todos_list.json"
 
 # Helper functions to load and save to-do list data
+
 def load_todos():
-    if os.path.exists(TODO_FILE):
-        with open(TODO_FILE, "r") as f:
-            return json.load(f)
-    return []
+    if USE_AWS:
+        try:
+            todos_key = f"{todos_folder}/{TODO_FILE}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=todos_key)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                # Key doesn't exist, so return an empty list
+                return []
+            else:
+                logging.error(f"Error loading events from AWS: {e}")
+                return []
+    else:
+        if os.path.exists(TODO_FILE):
+            with open(TODO_FILE, "r") as f:
+                return json.load(f)
+        return []
 
-def save_todos(todos):
-    with open(TODO_FILE, "w") as f:
-        json.dump(todos, f, indent=4)
+# Save todos list:
+        
+def save_todos(notes):
+    data = json.dumps(notes, indent=4)
+    if USE_AWS:
+        try:
+            todos_key = f"{todos_folder}/{TODO_FILE}"
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=todos_key, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving to do list to AWS: {e}")
+    else:
+        with open(TODO_FILE, "w") as f:
+            f.write(data)
 
+
+def save_todo_item_from_event(event):
+    try:
+        todos = load_todos()
+
+        # Extract info
+        action = event.get("type", "N/A")
+        title = event.get("title", "N/A")
+        participants = event.get("participants", [])
+        start_time = event.get("start_time", "N/A")
+
+        try:
+            formatted_date = datetime.fromisoformat(start_time.replace("Z", "+00:00")).strftime("%B %d, %Y")
+        except Exception:
+            formatted_date = start_time
+
+        if participants and isinstance(participants, list):
+            participant = participants[0]
+            client_name = participant.get("clientName", "N/A")
+            investor_personality = participant.get("investment_personality", "N/A")
+        else:
+            client_name = "N/A"
+            investor_personality = "N/A"
+
+        new_todo = {
+            "action": action,
+            "clientName": client_name,
+            "date": formatted_date,
+            "title": title,
+            "last_action_date": event.get("last_action_date", "N/A"),
+            "aum": event.get("available_funds", "N/A"),
+            "key_talking_points": event.get("notes", "N/A"),
+            "investor_personality": investor_personality,
+            "last_action_type": event.get("last_action_type", "N/A"),
+            "last_call_summary": event.get("last_call_summary", "N/A")
+        }
+
+        todos.append(new_todo)
+        save_todos(todos)
+
+    except Exception as e:
+        logging.error(f"Error saving to-do item from event: {e}")
 
 # ------------------------------ To-Do List Endpoints ------------------------------
 
@@ -19225,90 +19296,92 @@ def get_todo(todo_id):
 
 
 # GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
-@app.route('/api/todo_list', methods=['GET'])
-@jwt_required()
-def get_todo_list():
-    try:
-        # (Optionally, get the user's email/role if you need to filter)
-        user_email = get_jwt_identity()
-        # To show only the user's events:
-        events = [event for event in load_events() if event.get("user_email") == user_email]
-        events = load_events()
-
-        todo_list = []
-        for event in events:
-            # Format the event start date (assumes ISO8601; adjust if needed)
-            try:
-                dt = datetime.fromisoformat(event["start_time"].replace("Z", "+00:00"))
-                formatted_date = dt.strftime("%B %d, %Y")
-            except Exception:
-                formatted_date = event.get("start_time", "N/A")
-
-            # Determine the action (from the event type)
-            action = event.get("type", "N/A")
-            # Retrieve client name and investor personality from the participants list if available.
-            if event.get("participants") and isinstance(event["participants"], list) and len(event["participants"]) > 0:
-                participant = event["participants"][0]
-                client_name = participant.get("clientName", "N/A")
-                investor_personality = participant.get("investment_personality", "N/A")
-                aum = event.get("available_funds", 0) # Assets Under Management(AUM) is current available funds
-                
-            else:
-                client_name = "N/A"
-                investor_personality = "N/A"
-
-            # Occasion – if provided in event; otherwise, set to "N/A"
-            title = event.get("title", "N/A")
-
-            # Last action date: if available, format it as well.
-            if event.get("last_action_date"):
-                try:
-                    dt_last = datetime.fromisoformat(event["last_action_date"].replace("Z", "+00:00"))
-                    last_action_date = dt_last.strftime("%B %d, %Y")
-                except Exception:
-                    last_action_date = event["last_action_date"]
-            else:
-                last_action_date = "N/A"
-
-            # aum_usd_mm = event.get("aum_usd_mm", "N/A")
-            key_talking_points = event.get("notes", "N/A")
-            last_action_type = event.get("last_action_type", "N/A")
-            last_call_summary = event.get("last_call_summary", "N/A")
-
-            todo_list.append({
-                "action": action,
-                "clientName": client_name,
-                "date": formatted_date,
-                "title": title,
-                "last_action_date": last_action_date,
-                "aum": aum,
-                "key_talking_points": key_talking_points,
-                "investor_personality": investor_personality,
-                "last_action_type": last_action_type,
-                "last_call_summary": last_call_summary
-            })
-
-        return jsonify({"todo_list": todo_list}), 200
-
-    except Exception as e:
-        logging.error(f"Error fetching to-do list: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-    
-    
-# @app.route('/api/todos', methods=['GET'])
+# @app.route('/api/todo_list', methods=['GET'])
 # @jwt_required()
-# def get_todos():
+# def get_todo_list():
 #     try:
+#         # (Optionally, get the user's email/role if you need to filter)
 #         user_email = get_jwt_identity()
-#         claims = get_jwt() or {}
-#         user_role = claims.get("role", "user")
-#         todos = load_todos()
-#         if user_role not in ["admin", "super_admin"]:
-#             todos = [t for t in todos if t.get("user_email") == user_email]
-#         return jsonify({"todos": todos}), 200
+#         # To show only the user's events:
+#         events = [event for event in load_events() if event.get("user_email") == user_email]
+#         events = load_events()
+
+#         todo_list = []
+#         for event in events:
+#             # Format the event start date (assumes ISO8601; adjust if needed)
+#             try:
+#                 dt = datetime.fromisoformat(event["start_time"].replace("Z", "+00:00"))
+#                 formatted_date = dt.strftime("%B %d, %Y")
+#             except Exception:
+#                 formatted_date = event.get("start_time", "N/A")
+
+#             # Determine the action (from the event type)
+#             action = event.get("type", "N/A")
+#             # Retrieve client name and investor personality from the participants list if available.
+#             if event.get("participants") and isinstance(event["participants"], list) and len(event["participants"]) > 0:
+#                 participant = event["participants"][0]
+#                 client_name = participant.get("clientName", "N/A")
+#                 investor_personality = participant.get("investment_personality", "N/A")
+#                 aum = event.get("available_funds", 0) # Assets Under Management(AUM) is current available funds
+                
+#             else:
+#                 client_name = "N/A"
+#                 investor_personality = "N/A"
+
+#             # Occasion – if provided in event; otherwise, set to "N/A"
+#             title = event.get("title", "N/A")
+
+#             # Last action date: if available, format it as well.
+#             if event.get("last_action_date"):
+#                 try:
+#                     dt_last = datetime.fromisoformat(event["last_action_date"].replace("Z", "+00:00"))
+#                     last_action_date = dt_last.strftime("%B %d, %Y")
+#                 except Exception:
+#                     last_action_date = event["last_action_date"]
+#             else:
+#                 last_action_date = "N/A"
+
+#             # aum_usd_mm = event.get("aum_usd_mm", "N/A")
+#             key_talking_points = event.get("notes", "N/A")
+#             last_action_type = event.get("last_action_type", "N/A")
+#             last_call_summary = event.get("last_call_summary", "N/A")
+
+#             todo_list.append({
+#                 "action": action,
+#                 "clientName": client_name,
+#                 "date": formatted_date,
+#                 "title": title,
+#                 "last_action_date": last_action_date,
+#                 "aum": aum,
+#                 "key_talking_points": key_talking_points,
+#                 "investor_personality": investor_personality,
+#                 "last_action_type": last_action_type,
+#                 "last_call_summary": last_call_summary
+#             })
+        
+#         save_todos(todo_list)
+
+#         return jsonify({"todo_list": todo_list}), 200
+
 #     except Exception as e:
-#         logging.error(f"Error fetching to-dos: {e}")
+#         logging.error(f"Error fetching to-do list: {e}")
 #         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    
+@app.route('/api/todos', methods=['GET'])
+@jwt_required()
+def get_todos():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        if user_role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
+        return jsonify({"todos": todos}), 200
+    except Exception as e:
+        logging.error(f"Error fetching to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 
