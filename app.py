@@ -19282,6 +19282,33 @@ COMPLETED_TODO_FILE = "completed_todos.json"
 
 # Helper functions to load and save to-do list data
 
+def load_all_clients():
+    clients = []
+    if USE_AWS:
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                try:
+                    file_key = obj['Key']
+                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                    client_json = json.loads(file_response['Body'].read().decode('utf-8'))
+                    clients.append(client_json)
+                except Exception as e:
+                    logging.error(f"Error reading file {obj.get('Key')}: {e}")
+                    continue
+    else:
+        for filename in os.listdir(CLIENT_DATA_DIR):
+            if filename.endswith(".json"):
+                file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                try:
+                    with open(file_path, "r") as f:
+                        client_json = json.load(f)
+                    clients.append(client_json)
+                except Exception as e:
+                    logging.error(f"Error processing file {filename}: {e}")
+                    continue
+    return clients
+
 def load_todos():
     if USE_AWS:
         try:
@@ -19322,11 +19349,12 @@ def save_todo_item_from_event(event):
         todos = load_todos()
 
         # Extract info
-        action = event.get("action", "N/A")
+        action = event.get("action") or event.get("type")
         occasion = event.get("title", "N/A")
         clientNames = event.get("participants", [])
         start_time = event.get("start_time", "N/A")
-
+        investment_personality = "N/A"
+        
         try:
             formatted_date = datetime.fromisoformat(start_time.replace("Z", "+00:00")).strftime("%B %d, %Y")
         except Exception:
@@ -19334,12 +19362,13 @@ def save_todo_item_from_event(event):
 
         if clientNames and isinstance(clientNames, list):
             participant = clientNames[0]
-            clientName = participant.get("clientName", "N/A")
-            uniqueId  = participant.get("uniqueId","N/A")
-            investor_personality = clientNames.get("investment_personality", "N/A")
+            clientName = participant.get("clientName") or participant['clientName']
+            uniqueId  = participant.get("uniqueId") or participant['uniqueId']
+            investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
+            aum = participant.get("available_funds", "N/A"),
         else:
             clientName = "N/A"
-            investor_personality = "N/A"
+            investment_personality = "N/A"
 
         new_todo = {
             "action": action,
@@ -19348,11 +19377,11 @@ def save_todo_item_from_event(event):
             "date": formatted_date,
             "occasion": occasion,
             "last_action_date": event.get("last_action_date", "N/A"),
-            "aum": event.get("available_funds", "N/A"),
+            "aum": aum,
             "key_points": event.get("key_points") or event.get("notes","N/A") , # previous version we were using notes
             "checked": False,
             # Optional or future use case :
-            "investor_personality": investor_personality,
+            "investment_personality": investment_personality,
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
         }
@@ -19425,7 +19454,7 @@ def create_todo():
             "last_action_date": data.get("last_action_date", "N/A"),
             "aum": data.get("aum", "N/A"),
             "key_talking_points": data.get("key_talking_points", "N/A"),
-            "investor_personality": data.get("investor_personality", "N/A"),
+            "investment_personality": data.get("investment_personality") or data.get("investor_personality","N/A"),
             "portfolio_summary": data.get("portfolio_summary", "N/A"),
             "last_action_type": data.get("last_action_type", "N/A"),
             "last_call_summary": data.get("last_call_summary", "N/A"),
@@ -19473,7 +19502,7 @@ def update_todo(todo_id):
         todo["last_action_date"] = data.get("last_action_date", todo.get("last_action_date", "N/A"))
         todo["aum"] = data.get("aum", todo.get("aum", "N/A"))
         todo["key_talking_points"] = data.get("key_talking_points", todo.get("key_talking_points", "N/A"))
-        todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality", "N/A"))
+        todo["investment_personality"] = data.get("investment_personality", todo.get("investment_personality", "N/A"))
         todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary", "N/A"))
         todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type", "N/A"))
         todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary", "N/A"))
@@ -19486,7 +19515,7 @@ def update_todo(todo_id):
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 # POST /api/todo/delete – Delete (archive) completed tasks.
-@app.route('/api/todo/delete', methods=['POST'])
+@app.route('/api/todo/completed', methods=['POST'])
 @jwt_required()
 def delete_todos():
     try:
@@ -19557,90 +19586,89 @@ def get_completed_todos():
 @jwt_required()
 def get_todos():
     try:
-        user_email = get_jwt_identity()
+        user_email, role, organization = get_user_details()
         claims = get_jwt() or {}
-        user_role = claims.get("role", "user")
         todos = load_todos()
-        if user_role not in ["admin", "super_admin"]:
+        # For non-admin users, filter todos by their email.
+        if role not in ["admin", "super_admin"]:
             todos = [t for t in todos if t.get("user_email") == user_email]
-        return jsonify({"todos": todos}), 200
+
+        # Now, auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+        clients = load_all_clients()
+        upcoming_birthday_todos = []
+        today = datetime.today().date()
+        for client in clients:
+            # Apply role-based filtering for client data if needed.
+            if role == "admin" and client.get("organization") != organization:
+                continue
+            if role == "user" and client.get("submittedBy") != user_email:
+                continue
+
+            client_detail = client.get("clientDetail", {})
+            client_name = client_detail.get("clientName")
+            client_dob = client_detail.get("clientDob")
+            if not client_dob:
+                continue
+            try:
+                dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+            except Exception as e:
+                logging.error(f"Error parsing DOB for {client_name}: {e}")
+                continue
+
+            # Compute next birthday:
+            birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+            if birthday_this_year < today:
+                next_birthday = datetime(today.year + 1, dob_date.month, dob_date.day).date()
+            else:
+                next_birthday = birthday_this_year
+            days_until = (next_birthday - today).days
+            if days_until <= 7:
+                # Build a birthday task
+                birthday_task = {
+                    "id": len(todos) + len(upcoming_birthday_todos) + 1,
+                    "user_email": user_email,
+                    "action": "Call",
+                    "clientName": client_name,
+                    "date": next_birthday.strftime("%B %d, %Y"),
+                    "occasion": "Birthday",
+                    "last_action_date": "N/A",
+                    "aum": client.get("available_funds", "N/A"),
+                    "key_talking_points": f"Wishing you a very happy birthday, {client_name}!",
+                    "investor_personality": client.get("investment_personality", "N/A"),
+                    "last_action_type": None,
+                    "last_call_summary": None,
+                    "auto_generated": True,
+                    "source": "birthday"  # to mark it comes from birthday auto-generation
+                }
+                upcoming_birthday_todos.append(birthday_task)
+
+        # Combine the stored todos with the auto-generated birthday tasks
+        combined_todos = todos + upcoming_birthday_todos
+        return jsonify({"todos": combined_todos}), 200
+
     except Exception as e:
         logging.error(f"Error fetching to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-    
-    
-# @app.route('/api/todo_list', methods=['GET'])
+
+
+
+
+# @app.route('/api/todos', methods=['GET'])
 # @jwt_required()
-# def get_todo_list():
+# def get_todos():
 #     try:
-#         # (Optionally, get the user's email/role if you need to filter)
 #         user_email = get_jwt_identity()
-#         # To show only the user's events:
-#         events = [event for event in load_events() if event.get("user_email") == user_email]
-#         events = load_events()
-
-#         todo_list = []
-#         for event in events:
-#             # Format the event start date (assumes ISO8601; adjust if needed)
-#             try:
-#                 dt = datetime.fromisoformat(event["start_time"].replace("Z", "+00:00"))
-#                 formatted_date = dt.strftime("%B %d, %Y")
-#             except Exception:
-#                 formatted_date = event.get("start_time", "N/A")
-
-#             # Determine the action (from the event type)
-#             action = event.get("type", "N/A")
-#             # Retrieve client name and investor personality from the participants list if available.
-#             if event.get("participants") and isinstance(event["participants"], list) and len(event["participants"]) > 0:
-#                 participant = event["participants"][0]
-#                 client_name = participant.get("clientName", "N/A")
-#                 investor_personality = participant.get("investment_personality", "N/A")
-#                 aum = event.get("available_funds", 0) # Assets Under Management(AUM) is current available funds
-                
-#             else:
-#                 client_name = "N/A"
-#                 investor_personality = "N/A"
-
-#             # Occasion – if provided in event; otherwise, set to "N/A"
-#             title = event.get("title", "N/A")
-
-#             # Last action date: if available, format it as well.
-#             if event.get("last_action_date"):
-#                 try:
-#                     dt_last = datetime.fromisoformat(event["last_action_date"].replace("Z", "+00:00"))
-#                     last_action_date = dt_last.strftime("%B %d, %Y")
-#                 except Exception:
-#                     last_action_date = event["last_action_date"]
-#             else:
-#                 last_action_date = "N/A"
-
-#             # aum = event.get("aum", "N/A")
-#             key_points = event.get("notes", "N/A")
-#             last_action_type = event.get("last_action_type", "N/A")
-#             last_call_summary = event.get("last_call_summary", "N/A")
-
-#             todo_list.append({
-#                 "action": action,
-#                 "clientName": client_name,
-#                 "date": formatted_date,
-#                 "title": title,
-#                 "last_action_date": last_action_date,
-#                 "aum": aum,
-#                 "key_points": key_points,
-#                 "investor_personality": investor_personality,
-#                 "last_action_type": last_action_type,
-#                 "last_call_summary": last_call_summary
-#             })
-        
-#         save_todos(todo_list)
-
-#         return jsonify({"todo_list": todo_list}), 200
-
+#         claims = get_jwt() or {}
+#         user_role = claims.get("role", "user")
+#         todos = load_todos()
+#         if user_role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+#         return jsonify({"todos": todos}), 200
 #     except Exception as e:
-#         logging.error(f"Error fetching to-do list: {e}")
+#         logging.error(f"Error fetching to-dos: {e}")
 #         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
     
-
+    
 
 
 
