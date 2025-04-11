@@ -19365,13 +19365,13 @@ def save_todo_item_from_event(event):
             clientName = participant.get("clientName") or participant['clientName']
             uniqueId  = participant.get("uniqueId") or participant['uniqueId']
             investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
-            aum = participant.get("investmentAmount", "N/A"),
+            aum = participant.get("available_funds")  
         else:
             clientName = "N/A"
             investment_personality = "N/A"
 
         new_todo = {
-            "todo_id":len(load_todos()) + 1,
+            "todo_ids":len(load_todos()) + 1,
             "action": action,
             "clientName": clientName,
             "uniqueId": uniqueId,
@@ -19445,7 +19445,7 @@ def create_todo():
             formatted_date = data["date"]
 
         new_todo = {
-            "id": len(load_todos()) + 1,
+            "todo_ids": len(load_todos()) + 1,
             "user_email": user_email,
             "action": data.get("action"),
             "clientName": data.get("clientName"),
@@ -19540,11 +19540,11 @@ def delete_todos():
             todos = []  # Remove all
         else:
             for tid in todo_ids:
-                task = next((t for t in todos if t["id"] == tid), None)
+                task = next((t for t in todos if t["todo_id"] == tid), None)
                 if task:
                     tasks_to_archive.append(task)
             # Remove tasks_to_archive from todos
-            todos = [t for t in todos if t["id"] not in [task["id"] for task in tasks_to_archive]]
+            todos = [t for t in todos if t["todo_id"] not in [task["todo_id"] for task in tasks_to_archive]]
 
         # Before archiving, update each task's fields.
         for task in tasks_to_archive:
@@ -19624,49 +19624,49 @@ def get_todos():
                 next_birthday = birthday_this_year
             days_until = (next_birthday - today).days
             if days_until <= 7:
+                
                 # Build a birthday task
                 birthday_task = {
-                    "id": len(todos) + len(upcoming_birthday_todos) + 1,
+                    "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
                     "user_email": user_email,
                     "action": "Call",
                     "clientName": client_name,
                     "date": next_birthday.strftime("%B %d, %Y"),
                     "occasion": "Birthday",
                     "last_action_date": "N/A",
-                    "aum": client.get("investmentAmount", "N/A"),
+                    "aum": client.get("investmentAmount", 0),
                     "key_points": f"Wishing you a very happy birthday, {client_name}!",
                     "investor_personality": client.get("investment_personality", "N/A"),
                     "last_action_type": None,
                     "last_call_summary": None,
                     "auto_generated": True,
+                    "checked": False,
                     "source": "birthday"  # to mark it comes from birthday auto-generation
                 }
                 upcoming_birthday_todos.append(birthday_task)
 
         combined_todos = todos + upcoming_birthday_todos
-        # # Sort wrt date
-        # try:
-        #     # Define a helper to safely parse the "date" field.
-        #     def parse_todo_date(todo):
-        #         date_field = todo.get("date")
-        #         if isinstance(date_field, str):
-        #             try:
-        #                 # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
-        #                 return datetime.strptime(date_field, "%B %d, %Y")
-        #             except Exception as e:
-        #                 logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
-        #                 return datetime(1970, 1, 1)  # Fallback date if parsing fails
-        #         # If the date isn't a string, return a very old date
-        #         return datetime(1970, 1, 1)
+        # Sort wrt date
+        try:
+            # Define a helper to safely parse the "date" field.
+            def parse_todo_date(todo):
+                date_field = todo.get("date")
+                if isinstance(date_field, str):
+                    try:
+                        # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
+                        return datetime.strptime(date_field, "%B %d, %Y")
+                    except Exception as e:
+                        logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
+                        return datetime(1970, 1, 1)  # Fallback date if parsing fails
+                # If the date isn't a string, return a very old date
+                return datetime(1970, 1, 1)
             
-        #     # Sort todos by their parsed date.
-        #     combined_todos.sort(key=parse_todo_date)
+            # Sort todos by their parsed date.
+            combined_todos.sort(key=parse_todo_date)
             
-        # except Exception as sort_err:
-        #     logging.error(f"Error sorting todos by date: {sort_err}")
+        except Exception as sort_err:
+            logging.error(f"Error sorting todos by date: {sort_err}")
         
-        # Sort todos wrt date :
-        combined_todos.sort(key=date)
         return jsonify({"todos": combined_todos}), 200
 
     except Exception as e:
