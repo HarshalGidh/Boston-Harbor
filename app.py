@@ -11830,47 +11830,110 @@ def asset_class_predictions():
                                     """
 
 
-        task_portfolio_variance = f"""
-                                    You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio. 
-                                    The portfolio details are as follows:
-                                    - **Portfolio Details:** {portfolio_data}
-                                    - **Daily Changes Data:** {raw_daily_changes_data}
-                                    - **Portfolio Size:** ${funds}
-                                    - **Asset Classes:** {asset_classes}
+        # task_portfolio_variance = f"""
+        #                             You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio. 
+        #                             The portfolio details are as follows:
+        #                             - **Portfolio Details:** {portfolio_data}
+        #                             - **Daily Changes Data:** {raw_daily_changes_data}
+        #                             - **Portfolio Size:** ${funds}
+        #                             - **Asset Classes:** {asset_classes}
 
-                                    ### Portfolio Assumptions:
-                                    - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
-                                    - Use the following provided examples to guide your calculations:
+        #                             ### Portfolio Assumptions:
+        #                             - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
+        #                             - Use the following provided examples to guide your calculations:
                                     
-                                    #### Example 1: Variance Calculation for a Single Stock
-                                    - **Profit:** $4000 with a probability of 0.3.
-                                    - **Loss:** -$1000 with a probability of 0.7.
-                                    - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
-                                    - **Variance (σ²):** Use the formula σ² = Σ[(x²) * f(x)] - μ².
-                                    - **Standard Deviation (σ):** Take the square root of the variance.
+        #                             #### Example 1: Variance Calculation for a Single Stock
+        #                             - **Profit:** $4000 with a probability of 0.3.
+        #                             - **Loss:** -$1000 with a probability of 0.7.
+        #                             - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
+        #                             - **Variance (σ²):** Use the formula σ² = Σ[(x²) * f(x)] - μ².
+        #                             - **Standard Deviation (σ):** Take the square root of the variance.
 
-                                    #### Example 2: Portfolio Variance
-                                    For a portfolio distributed across multiple assets:
-                                    1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
-                                    2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
-                                    - Expected Portfolio Return:
-                                        Boom = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
-                                        Bust = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
-                                    - Portfolio Variance:
-                                        Include the correlation between assets if applicable.
+        #                             #### Example 2: Portfolio Variance
+        #                             For a portfolio distributed across multiple assets:
+        #                             1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
+        #                             2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
+        #                             - Expected Portfolio Return:
+        #                                 Boom = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+        #                                 Bust = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+        #                             - Portfolio Variance:
+        #                                 Include the correlation between assets if applicable.
 
-                                    ### Deliverables:
-                                    1. Explain your step-by-step calculations for:
-                                    - **Expected Return** for each asset and the overall portfolio.
-                                    - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
+        #                             ### Deliverables:
+        #                             1. Explain your step-by-step calculations for:
+        #                             - **Expected Return** for each asset and the overall portfolio.
+        #                             - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
 
-                                    2. Present results in a clear, well-explained format, avoiding tables but providing structured paragraphs with values.
+        #                             2. Present results in a clear, well-explained format, avoiding tables but providing structured paragraphs with values.
 
-                                    3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
+        #                             3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
 
-                                    Ensure your calculations are correct, and the explanation is clear and easy to understand for both technical and non-technical audiences.
-                                    """
+        #                             Ensure your calculations are correct, and the explanation is clear and easy to understand for both technical and non-technical audiences.
+        #                             """
 
+        # Calculate the portfolio metrics by asset class.
+        portfolio_metrics = calculate_portfolio_metrics(portfolio_data)
+
+        # Convert metrics into a readable string section.
+        metrics_lines = []
+        for asset_class, metrics in portfolio_metrics.items():
+            line = (f"Asset Class: {asset_class}; Total Invested: ${metrics['total_invested']:.2f}; "
+                    f"Weighted Expected Return: {metrics['weighted_expected_return']*100:.2f}%; "
+                    f"Variance: {metrics['variance']:.6f}; Standard Deviation: {metrics['std_deviation']:.4f}")
+            metrics_lines.append(line)
+        
+        metrics_str = "\n".join(metrics_lines)
+        
+        
+        task_portfolio_variance = f"""
+                You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio.
+
+                Portfolio Details:
+                - **Portfolio Data:** {portfolio_data}
+                - **Daily Changes Data:** {raw_daily_changes_data}
+                - **Portfolio Size:** ${funds}
+                - **Asset Classes:** {asset_classes}
+                - ** Asset Class Metrics:** {metrics_str}
+
+                ### Portfolio Assumptions:
+                - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
+                - Use the following provided examples to guide your calculations:
+
+                #### Example 1: Variance Calculation for a Single Stock
+                - **Profit:** $4000 with a probability of 0.3.
+                - **Loss:** -$1000 with a probability of 0.7.
+                - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
+                - **Variance (σ²):** Use the formula σ² = Σ[(x²) * p(x)] - (E(X))².
+                - **Standard Deviation (σ):** Take the square root of the variance.
+
+                #### Example 2: Portfolio Variance
+                For a portfolio distributed across multiple assets:
+                1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
+                2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
+                - **Expected Portfolio Return:**
+                    - Boom = (0.5 × Return_A) + (0.25 × Return_B) + (0.25 × Return_C)
+                    - Bust = (0.5 × Return_A) + (0.25 × Return_B) + (0.25 × Return_C)
+                - **Portfolio Variance:**
+                    - Include correlations between assets if applicable.
+
+                ### Advanced Calculations:
+                For a more thorough analysis, calculate the overall portfolio variance using the formula:
+
+                σₚ² = Σ₍ᵢ₌₁₎ⁿ Σ₍ⱼ₌₁₎ⁿ (wᵢ × wⱼ × σᵢⱼ)
+
+                where:
+                - **wᵢ** are the asset weights (i.e., the proportion of the total portfolio invested in asset i).
+                - **σᵢⱼ** are the covariances between the returns of assets i and j.
+
+                ### Deliverables:
+                1. Explain your step-by-step calculations for:
+                - **Expected Return** for each asset and the overall portfolio.
+                - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
+                2. Present results in clear, structured paragraphs (avoid tables) with numerical values.
+                3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
+
+                Ensure your calculations are correct and that the explanation is easy to understand for both technical and non-technical audiences.
+                """
 
         # AI Model Integration
         # Table Response :
@@ -11892,7 +11955,13 @@ def asset_class_predictions():
         simulated_response = markdown_to_text(response.text)
         
         # Process the response from LLM
-        html_suggestions = markdown.markdown(simulated_response,extensions=["extra"])
+        # html_suggestions = markdown.markdown(simulated_response,extensions=["extra"])
+        # (Optional) Further post-process the plain text to remove any unwanted artifacts:
+        improved_response = simulated_response.replace("**", "").strip()
+
+        # Convert the processed markdown text to HTML.
+        # Here we use extra extensions (like fenced_code and toc) to improve formatting.
+        html_suggestions = markdown.markdown(improved_response, extensions=["extra", "fenced_code", "toc"])
         # response_text = markdown.markdown(response_text, extensions=["extra"]) 
         
         # print(f"html_suggestions:\n\n{html_suggestions}")
@@ -11914,6 +11983,53 @@ def asset_class_predictions():
         print(f"Error in asset_class_predictions: {e}")
         return jsonify({"message": f"Error predicting asset class returns: {e}"}), 500
     
+
+def calculate_portfolio_metrics(portfolio_data):
+    # Group the data by asset class.
+    data_by_class = {}
+    for asset in portfolio_data:
+        asset_class = asset.get("assetClass", "Other")
+        amount_invested = float(asset.get("Amount_Invested", 0))
+        exp_return = float(asset.get("expected_return", 0))
+        # For this example, we assume historical_returns is a list of numbers.
+        historical_returns = asset.get("historical_returns", [])
+        if asset_class not in data_by_class:
+            data_by_class[asset_class] = {
+                "amount_invested": 0,
+                "weighted_expected_return": 0,
+                "all_returns": []
+            }
+        data_by_class[asset_class]["amount_invested"] += amount_invested
+        data_by_class[asset_class]["weighted_expected_return"] += amount_invested * exp_return
+        data_by_class[asset_class]["all_returns"].extend(historical_returns)
+    
+    # Calculate overall metrics per asset class.
+    metrics = {}
+    for asset_class, values in data_by_class.items():
+        total_invested = values["amount_invested"]
+        # Weighted expected return across all assets within this class.
+        if total_invested > 0:
+            weighted_exp_return = values["weighted_expected_return"] / total_invested
+        else:
+            weighted_exp_return = 0
+
+        # Using the list of returns, we can compute variance and standard deviation.
+        # Here, we assume historical_returns are provided; otherwise, you must derive returns from price data.
+        returns_array = np.array(values["all_returns"])
+        variance = np.var(returns_array) if returns_array.size > 0 else 0
+        std_deviation = np.sqrt(variance) if variance > 0 else 0
+
+        metrics[asset_class] = {
+            "total_invested": total_invested,
+            "weighted_expected_return": weighted_exp_return,
+            "variance": variance,
+            "std_deviation": std_deviation
+        }
+
+    # Optionally, you can also calculate an overall covariance matrix among asset classes if you have time series
+    # data for each class. This example only calculates metrics per group.
+    return metrics
+
 
 def extract_table_data_from_text(text):
     """
@@ -19189,7 +19305,7 @@ def add_todo():
             "title": data.get("title"),
             "last_action_date": data.get("last_action_date"),  # also include type of action if available
             "last_action_type": data.get("last_action_type"),
-            "aum_usd_mm": data.get("aum_usd_mm"),
+            "aum": data.get("aum"),
             "key_points": data.get("key_points"),
             "investor_personality": data.get("investor_personality"),
             "portfolio_summary": data.get("portfolio_summary"),
@@ -19231,7 +19347,7 @@ def update_todo(todo_id):
             todo["date"] = data["date"]
         todo["title"] = data.get("title", todo.get("title"))
         todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type"))
-        todo["aum_usd_mm"] = data.get("aum_usd_mm", todo.get("aum_usd_mm"))
+        todo["aum"] = data.get("aum", todo.get("aum"))
         todo["key_points"] = data.get("key_points", todo.get("key_points"))
         todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary"))
         todo["completed"] = data.get("completed", todo.get("completed"))
@@ -19343,7 +19459,7 @@ def get_todo(todo_id):
 #             else:
 #                 last_action_date = "N/A"
 
-#             # aum_usd_mm = event.get("aum_usd_mm", "N/A")
+#             # aum = event.get("aum", "N/A")
 #             key_points = event.get("notes", "N/A")
 #             last_action_type = event.get("last_action_type", "N/A")
 #             last_call_summary = event.get("last_call_summary", "N/A")
