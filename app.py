@@ -18862,6 +18862,7 @@ def get_participants():
         email, role, organization = get_user_details()
         all_clients = []
 
+        # Load client data from AWS or locally.
         if USE_AWS:
             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
             if 'Contents' in response:
@@ -18871,10 +18872,8 @@ def get_participants():
                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                         file_data = file_response['Body'].read().decode('utf-8')
                         data_json = json.loads(file_data)
-                        # Default flag if not present
                         if 'isNewClient' not in data_json:
                             data_json['isNewClient'] = True
-
                         if role == "super_admin":
                             all_clients.append(data_json)
                         elif role == "admin" and data_json.get('organization') == organization:
@@ -18900,22 +18899,99 @@ def get_participants():
         if not all_clients:
             return jsonify({'message': 'No client data found for this user.'}), 404
 
-        # Transform the data to return only clientName and uniqueId.
+        # Load the archived (completed) to-dos once
+        completed_todos = load_completed_todos()
+
+        # Build the list of participants
         participants = []
         for client in all_clients:
-            # client_details = client.get('clientDetail')
             participant = {
                 "clientName": client.get("clientDetail", {}).get("clientName"),
-                "uniqueId": client.get("uniqueId") or client.get("client_id","Unknown") ,
-                "investment_personality":client.get("investment_personality"),
-                "available_funds":client.get("available_funds",0)
+                "uniqueId": client.get("uniqueId") or client.get("client_id", "Unknown"),
+                "investment_personality": client.get("investment_personality"),
+                "available_funds": client.get("available_funds", 0)
             }
+            # Check if there's a completed to-do for this participant by matching uniqueId
+            related_tasks = [t for t in completed_todos if t.get("uniqueId") == participant["uniqueId"]]
+            if related_tasks:
+                most_recent_task = max(related_tasks, key=lambda t: parse_date(t.get("last_action_date", "1900-01-01")))
+                participant["last_action_type"] = most_recent_task.get("last_action_type", "N/A")
+                participant["last_call_summary"] = most_recent_task.get("last_call_summary", "N/A")
+            else:
+                participant["last_action_type"] = None
+                participant["last_call_summary"] = None
+
             participants.append(participant)
+
         return jsonify({"participants": participants}), 200
 
     except Exception as e:
         logging.error(f"Error occurred while retrieving participants: {e}")
         return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
+    
+
+# @app.route('/api/participants', methods=['GET'])
+# @jwt_required()
+# def get_participants():
+#     try:
+#         # Get user details; assuming get_user_details() returns (email, role, organization)
+#         email, role, organization = get_user_details()
+#         all_clients = []
+
+#         if USE_AWS:
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
+#                         # Default flag if not present
+#                         if 'isNewClient' not in data_json:
+#                             data_json['isNewClient'] = True
+
+#                         if role == "super_admin":
+#                             all_clients.append(data_json)
+#                         elif role == "admin" and data_json.get('organization') == organization:
+#                             all_clients.append(data_json)
+#                         elif role == "user" and data_json.get('submittedBy') == email:
+#                             all_clients.append(data_json)
+#                     except Exception as e:
+#                         logging.error(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#         else:
+#             for filename in os.listdir(CLIENT_DATA_DIR):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(CLIENT_DATA_DIR, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
+#                         if role == "super_admin":
+#                             all_clients.append(client_data)
+#                         elif role == "admin" and client_data.get('organization') == organization:
+#                             all_clients.append(client_data)
+#                         elif role == "user" and client_data.get('submittedBy') == email:
+#                             all_clients.append(client_data)
+
+#         if not all_clients:
+#             return jsonify({'message': 'No client data found for this user.'}), 404
+
+#         # Transform the data to return only clientName and uniqueId.
+#         participants = []
+#         for client in all_clients:
+#             # client_details = client.get('clientDetail')
+#             participant = {
+#                 "clientName": client.get("clientDetail", {}).get("clientName"),
+#                 "uniqueId": client.get("uniqueId") or client.get("client_id","Unknown") ,
+#                 "investment_personality":client.get("investment_personality"),
+#                 "available_funds":client.get("available_funds",0)
+#             }
+#             participants.append(participant)
+#         return jsonify({"participants": participants}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error occurred while retrieving participants: {e}")
+#         return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
 
 
 # Add Event – only authenticated users can add an event.
@@ -19201,6 +19277,8 @@ def get_us_holidays():
 
 todos_folder = os.getenv("todos_folder")
 TODO_FILE = "todos_list.json"
+completed_todos_folder = os.getenv("completed_todos_folder")
+COMPLETED_TODO_FILE = "completed_todos.json"
 
 # Helper functions to load and save to-do list data
 
@@ -19245,8 +19323,8 @@ def save_todo_item_from_event(event):
 
         # Extract info
         action = event.get("action", "N/A")
-        title = event.get("title", "N/A")
-        participants = event.get("participants", [])
+        occasion = event.get("title", "N/A")
+        clientNames = event.get("participants", [])
         start_time = event.get("start_time", "N/A")
 
         try:
@@ -19254,22 +19332,26 @@ def save_todo_item_from_event(event):
         except Exception:
             formatted_date = start_time
 
-        if participants and isinstance(participants, list):
-            participant = participants[0]
-            client_name = participant.get("clientName", "N/A")
-            investor_personality = participant.get("investment_personality", "N/A")
+        if clientNames and isinstance(clientNames, list):
+            participant = clientNames[0]
+            clientName = participant.get("clientName", "N/A")
+            uniqueId  = participant.get("uniqueId","N/A")
+            investor_personality = clientNames.get("investment_personality", "N/A")
         else:
-            client_name = "N/A"
+            clientName = "N/A"
             investor_personality = "N/A"
 
         new_todo = {
             "action": action,
-            "clientName": client_name,
+            "clientName": clientName,
+            "uniqueId": uniqueId,
             "date": formatted_date,
-            "title": title,
+            "occasion": occasion,
             "last_action_date": event.get("last_action_date", "N/A"),
             "aum": event.get("available_funds", "N/A"),
             "key_points": event.get("key_points") or event.get("notes","N/A") , # previous version we were using notes
+            "checked": False,
+            # Optional or future use case :
             "investor_personality": investor_personality,
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
@@ -19280,52 +19362,85 @@ def save_todo_item_from_event(event):
 
     except Exception as e:
         logging.error(f"Error saving to-do item from event: {e}")
+        
+def load_completed_todos():
+    if USE_AWS:
+        try:
+            completed_key = f"{completed_todos_folder}/{COMPLETED_TODO_FILE}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=completed_key)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading completed todos from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(COMPLETED_TODO_FILE):
+            with open(COMPLETED_TODO_FILE, "r") as f:
+                return json.load(f)
+        return []
+
+def save_completed_todos(completed_todos):
+    data = json.dumps(completed_todos, indent=4)
+    if USE_AWS:
+        try:
+            completed_key = f"{completed_todos_folder}/{COMPLETED_TODO_FILE}"
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=completed_key, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving completed todos to AWS: {e}")
+    else:
+        with open(COMPLETED_TODO_FILE, "w") as f:
+            f.write(data)
 
 # ------------------------------ To-Do List Endpoints ------------------------------
 
-# POST /api/todo – Create a new to-do item; requires authentication.
+# POST /api/todo – Create a new to-do item.
 @app.route('/api/todo', methods=['POST'])
 @jwt_required()
-def add_todo():
+def create_todo():
     try:
         user_email = get_jwt_identity()
         data = request.get_json()
         
-        # Required fields: action, client_name, date (in YYYY-MM-DD format)
-        if not data.get("action") or not data.get("client_name") or not data.get("date"):
-            return jsonify({"error": "Missing required fields: action, client_name, and date are required."}), 400
+        # Validate required fields
+        required_fields = ["action", "clientName", "date"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"'{field}' is required"}), 400
 
-        # Load current to-do items and generate new id.
-        todos = load_todos()
-        new_id = len(todos) + 1
+        try:
+            # Expecting date in ISO or YYYY-MM-DD format; store as string in desired format.
+            dt = datetime.fromisoformat(data["date"])
+            formatted_date = dt.strftime("%B %d, %Y")
+        except Exception:
+            formatted_date = data["date"]
 
-        # Build the new to-do entry. Fields like event title, last_action_date, etc., are optional.
-        todo_entry = {
-            "id": new_id,
-            "user_email": user_email,  # associate to-do with the creator
-            "action": data["action"],  # e.g., "Call" or "Email"
-            "client_name": data["client_name"],
-            "date": data["date"],  # Event date (expected in 'YYYY-MM-DD' format)
-            "title": data.get("title"),
-            "last_action_date": data.get("last_action_date"),  # also include type of action if available
-            "last_action_type": data.get("last_action_type"),
-            "aum": data.get("aum"),
-            "key_points": data.get("key_points"),
-            "investor_personality": data.get("investor_personality"),
-            "portfolio_summary": data.get("portfolio_summary"),
-            "last_call_summary": data.get("last_call_summary"),
-            "completed": data.get("completed", False)
+        new_todo = {
+            "id": len(load_todos()) + 1,
+            "user_email": user_email,
+            "action": data.get("action"),
+            "clientName": data.get("clientName"),
+            "uniqueId": data.get("uniqueId"),
+            "date": formatted_date,
+            "occasion": data.get("occasion", "N/A"),
+            "last_action_date": data.get("last_action_date", "N/A"),
+            "aum": data.get("aum", "N/A"),
+            "key_talking_points": data.get("key_talking_points", "N/A"),
+            "investor_personality": data.get("investor_personality", "N/A"),
+            "portfolio_summary": data.get("portfolio_summary", "N/A"),
+            "last_action_type": data.get("last_action_type", "N/A"),
+            "last_call_summary": data.get("last_call_summary", "N/A"),
+            "checked": False
         }
-
-        todos.append(todo_entry)
+        todos = load_todos()
+        todos.append(new_todo)
         save_todos(todos)
-        return jsonify({"message": "To-Do item added successfully", "todo": todo_entry}), 201
+        return jsonify({"message": "To-Do item created successfully", "todo": new_todo}), 201
     except Exception as e:
-        logging.error(f"Error adding to-do: {e}")
+        logging.error(f"Error creating to-do: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
-# PUT /api/todo/<int:todo_id> – Update an existing to-do item.
+# PUT /api/todo/<int:todo_id> – Update a to-do item.
 @app.route('/api/todo/<int:todo_id>', methods=['PUT'])
 @jwt_required()
 def update_todo(todo_id):
@@ -19333,91 +19448,127 @@ def update_todo(todo_id):
         user_email = get_jwt_identity()
         claims = get_jwt() or {}
         user_role = claims.get("role", "user")
-        
         todos = load_todos()
-        # Find the to-do item by id.
         todo = next((t for t in todos if t["id"] == todo_id), None)
         if not todo:
             return jsonify({"error": "To-Do item not found"}), 404
 
-        # Only allow update if the to-do item belongs to the current user or if they are an admin.
+        # Only allow update if it belongs to the user or if user is admin.
         if todo.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
             return jsonify({"error": "Unauthorized to update this to-do"}), 403
 
         data = request.get_json()
-        # Update the fields if provided in data.
+        # Update fields if provided
         todo["action"] = data.get("action", todo["action"])
-        if data.get("date"):
-            todo["date"] = data["date"]
-        todo["title"] = data.get("title", todo.get("title"))
-        todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type"))
-        todo["aum"] = data.get("aum", todo.get("aum"))
-        todo["key_points"] = data.get("key_points", todo.get("key_points"))
-        todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary"))
-        todo["completed"] = data.get("completed", todo.get("completed"))
+        todo["clientName"] = data.get("clientName", todo["clientName"])
+        todo["uniqueId"] = data.get("uniqueId",todo["uniqueId"])
         
-        # todo["client_name"] = data.get("client_name", todo["client_name"])
-        # if data.get("last_action_date"):
-        #     todo["last_action_date"] = data["last_action_date"]
-        # todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality"))
-        # todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary"))
-
+        if data.get("date"):
+            try:
+                dt = datetime.fromisoformat(data["date"])
+                todo["date"] = dt.strftime("%B %d, %Y")
+            except Exception:
+                todo["date"] = data["date"]
+        todo["occasion"] = data.get("occasion", todo.get("occasion", "N/A"))
+        todo["last_action_date"] = data.get("last_action_date", todo.get("last_action_date", "N/A"))
+        todo["aum"] = data.get("aum", todo.get("aum", "N/A"))
+        todo["key_talking_points"] = data.get("key_talking_points", todo.get("key_talking_points", "N/A"))
+        todo["investor_personality"] = data.get("investor_personality", todo.get("investor_personality", "N/A"))
+        todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary", "N/A"))
+        todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type", "N/A"))
+        todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary", "N/A"))
+        todo["checked"] = data.get("checked", todo.get("checked", False))
+        
         save_todos(todos)
         return jsonify({"message": "To-Do item updated successfully", "todo": todo}), 200
     except Exception as e:
         logging.error(f"Error updating to-do: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-
-# DELETE /api/todo/<int:todo_id> – Delete a to-do item.
-@app.route('/api/todo/<int:todo_id>', methods=['DELETE'])
+# POST /api/todo/delete – Delete (archive) completed tasks.
+@app.route('/api/todo/delete', methods=['POST'])
 @jwt_required()
-def delete_todo(todo_id):
+def delete_todos():
     try:
         user_email = get_jwt_identity()
         claims = get_jwt() or {}
         user_role = claims.get("role", "user")
+        data = request.get_json()
+        is_all = data.get("is_all", False)
+        todo_ids = data.get("todo_ids", [])  # list of IDs to delete if is_all is false
+
         todos = load_todos()
-        todo = next((t for t in todos if t["id"] == todo_id), None)
-        if not todo:
-            return jsonify({"error": "To-Do item not found"}), 404
+        completed = load_completed_todos()
 
-        # Allow deletion if the to-do belongs to the user or if they are admin/super_admin.
-        if todo.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
-            return jsonify({"error": "Unauthorized to delete this to-do"}), 403
+        # Filter todos based on user: non-admins can only delete their own tasks.
+        if user_role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
 
-        todos = [t for t in todos if t["id"] != todo_id]
+        tasks_to_archive = []
+        if is_all:
+            tasks_to_archive = todos.copy()
+            todos = []  # Remove all
+        else:
+            for tid in todo_ids:
+                task = next((t for t in todos if t["id"] == tid), None)
+                if task:
+                    tasks_to_archive.append(task)
+            # Remove tasks_to_archive from todos
+            todos = [t for t in todos if t["id"] not in [task["id"] for task in tasks_to_archive]]
+
+        # Before archiving, update each task's fields.
+        for task in tasks_to_archive:
+            # Mark as completed and update last_action_date as current date if not provided.
+            task["checked"] = True
+            if not task.get("last_action_date") or task["last_action_date"] == "N/A":
+                task["last_action_date"] = task.get("date", datetime.now().strftime("%B %d, %Y"))
+
+        # Save updated active todos and archive completed tasks.
         save_todos(todos)
-        return jsonify({"message": "To-Do item deleted successfully"}), 200
+        # Append to existing archived tasks.
+        completed.extend(tasks_to_archive)
+        save_completed_todos(completed)
+
+        return jsonify({"message": "Selected tasks archived successfully", "archived_tasks": tasks_to_archive}), 200
+
     except Exception as e:
-        logging.error(f"Error deleting to-do: {e}")
+        logging.error(f"Error archiving to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-
-# GET Specific To-Do – Normal users can view only their to-dos; admins/super_admins can view any.
-@app.route('/api/todo/<int:todo_id>', methods=['GET'])
+# GET /api/completed_todos – Retrieve archived (completed) to-dos.
+@app.route('/api/completed_todos', methods=['GET'])
 @jwt_required()
-def get_todo(todo_id):
+def get_completed_todos():
     try:
         user_email = get_jwt_identity()
         claims = get_jwt() or {}
         user_role = claims.get("role", "user")
-        todos = load_todos()
-        todo = next((t for t in todos if t["id"] == todo_id), None)
-        if not todo:
-            return jsonify({"error": "To-Do item not found"}), 404
-
-        # If user is not admin, allow only his own items
-        if user_role not in ["admin", "super_admin"] and todo.get("user_email") != user_email:
-            return jsonify({"error": "Unauthorized to view this to-do"}), 403
-
-        return jsonify({"todo": todo}), 200
+        completed = load_completed_todos()
+        if user_role not in ["admin", "super_admin"]:
+            completed = [t for t in completed if t.get("user_email") == user_email]
+        return jsonify({"completed_todos": completed}), 200
     except Exception as e:
-        logging.error(f"Error fetching to-do: {e}")
+        logging.error(f"Error fetching completed to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 # GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
+@app.route('/api/todos', methods=['GET'])
+@jwt_required()
+def get_todos():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        if user_role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
+        return jsonify({"todos": todos}), 200
+    except Exception as e:
+        logging.error(f"Error fetching to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    
 # @app.route('/api/todo_list', methods=['GET'])
 # @jwt_required()
 # def get_todo_list():
@@ -19489,21 +19640,7 @@ def get_todo(todo_id):
 #         logging.error(f"Error fetching to-do list: {e}")
 #         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
     
-    
-@app.route('/api/todos', methods=['GET'])
-@jwt_required()
-def get_todos():
-    try:
-        user_email = get_jwt_identity()
-        claims = get_jwt() or {}
-        user_role = claims.get("role", "user")
-        todos = load_todos()
-        if user_role not in ["admin", "super_admin"]:
-            todos = [t for t in todos if t.get("user_email") == user_email]
-        return jsonify({"todos": todos}), 200
-    except Exception as e:
-        logging.error(f"Error fetching to-dos: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 
 
 
