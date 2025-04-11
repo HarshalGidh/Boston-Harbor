@@ -662,6 +662,10 @@ def advisor_profile():
             filename = f"{email}_profile.jpeg"
             profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
 
+            if user_data["email"] == "wealth-mgmt-admin@mresult.net":
+                user_data["first_name"] = "Steve"
+                user_data["last_name"] =  "Morgan"
+            
             profile_data = {
                 "email": user_data["email"],
                 "first_name": user_data["first_name"],
