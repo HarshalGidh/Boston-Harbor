@@ -17,7 +17,7 @@ PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
 chat_history_folder = os.getenv("chat_history_folder")
 tax_assessment_folder = os.getenv('tax_assessment_folder')
 TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
-
+todos_folder = os.getenv('todos_folder')
 # Connecting to Amazon S3
 s3 = boto3.client(
     's3',
@@ -120,6 +120,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 
 # list all the files in the folder :
 # list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 
+# list_s3_keys(S3_BUCKET_NAME, todos_folder) 
 # list_s3_keys(S3_BUCKET_NAME, chat_history_folder) 
 
 # S3 bucket and file details
@@ -176,6 +177,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # FILE_KEY = "client_summary_folder/client-data/SW7446.json" ## deleted
 # FILE_KEY = "client_summary_folder/client-data/SW9113.json" ## deleted
 # FILE_KEY = "chat_history_folder//chats.json"
+# FILE_KEY = "todos_folder//todos_list.json"
 
 #Delete files using file keys : 
 # def delete_file_from_s3(bucket_name, file_key):
@@ -200,6 +202,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 
 # # #Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
+# list_s3_keys(S3_BUCKET_NAME, todos_folder) 
 # list_s3_keys(S3_BUCKET_NAME, chat_history_folder) 
 
 

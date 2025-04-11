@@ -18909,7 +18909,7 @@ def get_participants():
                 "clientName": client.get("clientDetail", {}).get("clientName"),
                 "uniqueId": client.get("uniqueId") or client.get("client_id", "Unknown"),
                 "investment_personality": client.get("investment_personality"),
-                "available_funds": client.get("available_funds", 0)
+                "investmentAmount": client.get("investmentAmount", 0)
             }
             # Check if there's a completed to-do for this participant by matching uniqueId
             related_tasks = [t for t in completed_todos if t.get("uniqueId") == participant["uniqueId"]]
@@ -19365,12 +19365,13 @@ def save_todo_item_from_event(event):
             clientName = participant.get("clientName") or participant['clientName']
             uniqueId  = participant.get("uniqueId") or participant['uniqueId']
             investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
-            aum = participant.get("available_funds", "N/A"),
+            aum = participant.get("investmentAmount", "N/A"),
         else:
             clientName = "N/A"
             investment_personality = "N/A"
 
         new_todo = {
+            "todo_id":len(load_todos()) + 1,
             "action": action,
             "clientName": clientName,
             "uniqueId": uniqueId,
@@ -19632,8 +19633,8 @@ def get_todos():
                     "date": next_birthday.strftime("%B %d, %Y"),
                     "occasion": "Birthday",
                     "last_action_date": "N/A",
-                    "aum": client.get("available_funds", "N/A"),
-                    "key_talking_points": f"Wishing you a very happy birthday, {client_name}!",
+                    "aum": client.get("investmentAmount", "N/A"),
+                    "key_points": f"Wishing you a very happy birthday, {client_name}!",
                     "investor_personality": client.get("investment_personality", "N/A"),
                     "last_action_type": None,
                     "last_call_summary": None,
@@ -19642,8 +19643,30 @@ def get_todos():
                 }
                 upcoming_birthday_todos.append(birthday_task)
 
-        # Combine the stored todos with the auto-generated birthday tasks
         combined_todos = todos + upcoming_birthday_todos
+        # Sort wrt date
+        try:
+            # Define a helper to safely parse the "date" field.
+            def parse_todo_date(todo):
+                date_field = todo.get("date")
+                if isinstance(date_field, str):
+                    try:
+                        # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
+                        return datetime.strptime(date_field, "%B %d, %Y")
+                    except Exception as e:
+                        logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
+                        return datetime(1970, 1, 1)  # Fallback date if parsing fails
+                # If the date isn't a string, return a very old date
+                return datetime(1970, 1, 1)
+            
+            # Sort todos by their parsed date.
+            combined_todos.sort(key=parse_todo_date)
+            
+        except Exception as sort_err:
+            logging.error(f"Error sorting todos by date: {sort_err}")
+        
+        # Sort todos wrt date :
+        combined_todos.sort(key=date)
         return jsonify({"todos": combined_todos}), 200
 
     except Exception as e:
