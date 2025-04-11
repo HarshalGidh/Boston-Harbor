@@ -19644,26 +19644,26 @@ def get_todos():
                 upcoming_birthday_todos.append(birthday_task)
 
         combined_todos = todos + upcoming_birthday_todos
-        # Sort wrt date
-        try:
-            # Define a helper to safely parse the "date" field.
-            def parse_todo_date(todo):
-                date_field = todo.get("date")
-                if isinstance(date_field, str):
-                    try:
-                        # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
-                        return datetime.strptime(date_field, "%B %d, %Y")
-                    except Exception as e:
-                        logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
-                        return datetime(1970, 1, 1)  # Fallback date if parsing fails
-                # If the date isn't a string, return a very old date
-                return datetime(1970, 1, 1)
+        # # Sort wrt date
+        # try:
+        #     # Define a helper to safely parse the "date" field.
+        #     def parse_todo_date(todo):
+        #         date_field = todo.get("date")
+        #         if isinstance(date_field, str):
+        #             try:
+        #                 # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
+        #                 return datetime.strptime(date_field, "%B %d, %Y")
+        #             except Exception as e:
+        #                 logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
+        #                 return datetime(1970, 1, 1)  # Fallback date if parsing fails
+        #         # If the date isn't a string, return a very old date
+        #         return datetime(1970, 1, 1)
             
-            # Sort todos by their parsed date.
-            combined_todos.sort(key=parse_todo_date)
+        #     # Sort todos by their parsed date.
+        #     combined_todos.sort(key=parse_todo_date)
             
-        except Exception as sort_err:
-            logging.error(f"Error sorting todos by date: {sort_err}")
+        # except Exception as sort_err:
+        #     logging.error(f"Error sorting todos by date: {sort_err}")
         
         # Sort todos wrt date :
         combined_todos.sort(key=date)
