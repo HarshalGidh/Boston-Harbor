@@ -1,49 +1,72 @@
-<p>Tax-Saving Strategy for Samuel Will</p>
-<p>This strategy considers the provided financial data and general tax principles.  Specific tax advice requires consultation with a qualified tax professional.  This plan assumes the client resides in Texas and is a Non-Resident Alien, which presents unique tax considerations.  Tax laws are subject to change.</p>
-<p><strong>1. Investment Strategies for Tax Efficiency:</strong></p>
+<h1>Tax-Saving Strategy for Samuel Will</h1>
+<p>This strategy outlines tax-efficient investment strategies, deductions, credits, and state-specific optimizations for Samuel Will, considering his provided financial data and assuming he is a resident of Texas.  Note that this is a general overview and professional tax advice should be sought for personalized guidance.</p>
+<h2>1. Investment Strategies for Tax Efficiency</h2>
 <table>
 <thead>
 <tr>
+<th>Account Type</th>
 <th>Strategy</th>
-<th>Description</th>
-<th>Applicability to Samuel Will</th>
+<th>Tax Advantages</th>
+<th>Considerations</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Tax-Advantaged Accounts</td>
-<td>Utilize 401(k), Traditional and Roth IRAs to maximize contributions and reduce taxable income.</td>
-<td>Evaluate maximum contribution limits for 401(k) and IRAs.  Consider Roth IRA contributions for tax-free growth.</td>
+<td>401(k)</td>
+<td>Contribute up to the maximum allowed.</td>
+<td>Contributions are tax-deductible, and earnings grow tax-deferred.</td>
+<td>Check employer matching contributions.</td>
+</tr>
+<tr>
+<td>Traditional IRA</td>
+<td>Contribute if eligible and below income limits.</td>
+<td>Contributions may be tax-deductible (depending on income), earnings grow tax-deferred.</td>
+<td>Consider Traditional IRA vs. Roth IRA based on income and future tax brackets.</td>
+</tr>
+<tr>
+<td>Roth IRA</td>
+<td>Contribute if eligible and below income limits.</td>
+<td>Earnings are tax-free in retirement.</td>
+<td>Higher contribution limits may be suitable in later years.</td>
 </tr>
 <tr>
 <td>Tax-Loss Harvesting</td>
-<td>Sell losing investments to offset capital gains.</td>
-<td>Analyze the portfolio for opportunities to offset gains (see Section 4).</td>
+<td>Sell losing assets to offset capital gains.</td>
+<td>Reduces taxable income by deducting losses.</td>
+<td>Consider wash-sale rules to avoid penalties.</td>
 </tr>
 <tr>
-<td>Asset Location</td>
-<td>Place tax-inefficient assets (e.g., high-dividend stocks) in tax-advantaged accounts, and tax-efficient assets (e.g., municipal bonds) in taxable accounts.</td>
-<td>Requires detailed analysis of the portfolio's tax efficiency.</td>
-</tr>
-<tr>
-<td>Diversification</td>
-<td>Maintain a diversified portfolio to minimize risk and potentially manage tax implications.</td>
-<td>Already implemented to a certain extent based on the portfolio data.</td>
+<td>Municipal Bonds</td>
+<td>Invest in Texas municipal bonds.</td>
+<td>Interest income is often exempt from federal and state taxes.</td>
+<td>Yields might be lower than taxable bonds.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>2. Deductions, Exemptions, and Credits:</strong></p>
+<h2>2. Deductions, Exemptions, and Credits</h2>
+<p><strong>Federal Deductions:</strong></p>
 <ul>
-<li><strong>Federal Deductions:</strong>  As a Non-Resident Alien, deductions may be limited compared to resident taxpayers. Consult the IRS Publication 519 for details on allowable deductions.  Itemized deductions should be evaluated to determine if they exceed the standard deduction.</li>
-<li><strong>Texas Deductions:</strong>  Texas generally follows a simpler tax system with fewer deductions than the federal government.  Consult the Texas Comptroller of Public Accounts website for current information on deductions for Non-Resident Aliens.</li>
-<li><strong>Federal Credits:</strong>  Explore the possibility of claiming any applicable federal tax credits.  Depending on family circumstances, the child tax credit may be partially applicable.  Consult the IRS website for details on available credits for Non-Resident Aliens.</li>
-<li><strong>Texas Credits:</strong>  Texas has a limited number of tax credits.  Research for any relevant credits for Non-Resident Aliens.</li>
+<li><strong>Itemized Deductions:</strong>  Samuel should itemize if the total exceeds the standard deduction.  Potentially deductible items include home mortgage interest (if applicable), state and local taxes (SALT deduction limited to $10,000), charitable contributions, and investment interest expense.</li>
+<li><strong>Standard Deduction:</strong>  The standard deduction amount depends on filing status (married filing jointly).</li>
 </ul>
-<p><strong>3. State-Specific Tax Optimizations (Texas):</strong></p>
+<p><strong>Texas Deductions:</strong></p>
 <ul>
-<li><strong>Texas Franchise Tax:</strong>  If Samuel Will operates a business in Texas, the franchise tax needs to be factored in.  The tax is based on revenue and margin.</li>
-<li><strong>Property Taxes:</strong>  Review property tax implications for any real estate holdings in Texas.</li>
+<li><strong>Homestead Exemption:</strong>  A significant reduction in property taxes on a primary residence.</li>
 </ul>
-<p><strong>4. Tax-Loss Harvesting Opportunities:</strong></p>
-<p>The provided portfolio shows several assets with capital gains.  However,  "A. O. Smith" (AOS) shows a loss.  A detailed analysis of the purchase dates and cost basis of all assets is necessary to determine the specific tax loss harvesting opportunities.  If applicable, selling AOS and reinvesting into a similar asset can generate a tax loss to offset capital gains.</p>
-<p><strong>Disclaimer:</strong>  This is a general tax-saving strategy and should not be considered personalized tax advice.  It's imperative to consult a qualified tax professional specializing in Non-Resident Alien taxation and Texas state taxes for tailored recommendations based on Samuel Will's complete financial picture and current tax laws.</p>
+<p><strong>Federal Credits:</strong></p>
+<ul>
+<li><strong>Retirement Savings Contributions Credit (Saver's Credit):</strong>  A credit for taxpayers with modest incomes contributing to retirement accounts.</li>
+</ul>
+<p><strong>Texas Credits:</strong></p>
+<ul>
+<li>Research Texas tax credits applicable to his specific circumstances (e.g., certain tax credits for charitable contributions, energy-efficient home improvements).</li>
+</ul>
+<h2>3. State-Specific Tax Optimizations (Texas)</h2>
+<ul>
+<li><strong>Texas Franchise Tax:</strong>  The franchise tax applies to businesses in Texas.  Strategies to minimize this tax should be explored if Samuel's business is incorporated.</li>
+<li><strong>Property Taxes:</strong>  The homestead exemption is crucial for lowering property taxes.  Exploring other property tax relief programs is also advisable.</li>
+<li><strong>Sales Tax:</strong>  There is no state income tax in Texas, but sales tax applies to various purchases. Strategize to minimize sales tax where applicable.</li>
+</ul>
+<h2>4. Tax-Loss Harvesting Opportunities</h2>
+<p>The provided portfolio shows both gains and losses. Tax-loss harvesting should be implemented to offset capital gains, thus reducing tax liability. The strategy should consider the wash-sale rule, which prevents deducting losses if similar securities are purchased within a 30-day period before or after the sale. A financial advisor can help to make the best choices.</p>
+<p><strong>Disclaimer:</strong> This tax-saving strategy is for informational purposes only and does not constitute professional financial or tax advice.  Consult with a qualified tax advisor for personalized guidance.  Tax laws are subject to change.</p>
