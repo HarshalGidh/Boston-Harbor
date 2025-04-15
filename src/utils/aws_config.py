@@ -200,7 +200,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 #     except Exception as e:
 #         print(f"Error deleting file: {e}")
 
-# # #Call the function
+# # # #Call the function
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 # list_s3_keys(S3_BUCKET_NAME, todos_folder) 
 # list_s3_keys(S3_BUCKET_NAME, chat_history_folder) 

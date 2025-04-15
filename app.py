@@ -18928,70 +18928,6 @@ def get_participants():
     except Exception as e:
         logging.error(f"Error occurred while retrieving participants: {e}")
         return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
-    
-
-# @app.route('/api/participants', methods=['GET'])
-# @jwt_required()
-# def get_participants():
-#     try:
-#         # Get user details; assuming get_user_details() returns (email, role, organization)
-#         email, role, organization = get_user_details()
-#         all_clients = []
-
-#         if USE_AWS:
-#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-#             if 'Contents' in response:
-#                 for obj in response['Contents']:
-#                     try:
-#                         file_key = obj['Key']
-#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                         file_data = file_response['Body'].read().decode('utf-8')
-#                         data_json = json.loads(file_data)
-#                         # Default flag if not present
-#                         if 'isNewClient' not in data_json:
-#                             data_json['isNewClient'] = True
-
-#                         if role == "super_admin":
-#                             all_clients.append(data_json)
-#                         elif role == "admin" and data_json.get('organization') == organization:
-#                             all_clients.append(data_json)
-#                         elif role == "user" and data_json.get('submittedBy') == email:
-#                             all_clients.append(data_json)
-#                     except Exception as e:
-#                         logging.error(f"Error reading file {obj['Key']}: {e}")
-#                         continue
-#         else:
-#             for filename in os.listdir(CLIENT_DATA_DIR):
-#                 if filename.endswith(".json"):
-#                     file_path = os.path.join(CLIENT_DATA_DIR, filename)
-#                     with open(file_path, 'r') as f:
-#                         client_data = json.load(f)
-#                         if role == "super_admin":
-#                             all_clients.append(client_data)
-#                         elif role == "admin" and client_data.get('organization') == organization:
-#                             all_clients.append(client_data)
-#                         elif role == "user" and client_data.get('submittedBy') == email:
-#                             all_clients.append(client_data)
-
-#         if not all_clients:
-#             return jsonify({'message': 'No client data found for this user.'}), 404
-
-#         # Transform the data to return only clientName and uniqueId.
-#         participants = []
-#         for client in all_clients:
-#             # client_details = client.get('clientDetail')
-#             participant = {
-#                 "clientName": client.get("clientDetail", {}).get("clientName"),
-#                 "uniqueId": client.get("uniqueId") or client.get("client_id","Unknown") ,
-#                 "investment_personality":client.get("investment_personality"),
-#                 "available_funds":client.get("available_funds",0)
-#             }
-#             participants.append(participant)
-#         return jsonify({"participants": participants}), 200
-
-#     except Exception as e:
-#         logging.error(f"Error occurred while retrieving participants: {e}")
-#         return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
 
 
 # Add Event – only authenticated users can add an event.
@@ -19014,6 +18950,17 @@ def add_event():
 
         events = load_events()
         new_id = len(events) + 1
+        
+        # Extract first participant info
+        clientName = None
+        if participants and isinstance(participants, list):
+            client_name = participants[0].get('clientName')
+
+        # Get last interaction if client exists
+        last_date, last_action_type = get_last_interaction(clientName) if clientName else ("N/A", "N/A")
+        print("last_date :",last_date)
+        print("last_action_type :",last_action_type)
+        
         event_entry = {
             "id": new_id,
             "user_email": user_email,  # associate event with the creator
@@ -19024,7 +18971,9 @@ def add_event():
             "participants": participants if event_type == "meeting" else None,
             "key_points": key_points if event_type == "meeting" else None,
             "meeting_link": meeting_link if event_type == "meeting" else None,
-            "reminder_sent": False  # Flag to prevent duplicate reminders
+            "reminder_sent": False  ,# Flag to prevent duplicate reminders
+            "last_action_date": last_date,
+            "last_action_type": last_action_type
         }
         events.append(event_entry)
         save_events(events)
@@ -19365,11 +19314,20 @@ def save_todo_item_from_event(event):
             clientName = participant.get("clientName") or participant['clientName']
             uniqueId  = participant.get("uniqueId") or participant['uniqueId']
             investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
-            aum = participant.get("investmentAmount") or participant.get("available_funds") 
+            aum = participant.get("investmentAmount") #or participant.get("available_funds") 
+            print(aum)
+            if not aum :
+                print("Taking Failsafe AUM ")
+                aum = participant.get("available_funds")  # failsafe
+                
         else:
             clientName = "N/A"
             investment_personality = "N/A"
 
+        # Add the last action date and last action type (last action summary later ) :
+        
+        last_action_date, last_action_type = get_last_interaction(clientName) #, user_email)
+        
         new_todo = {
             "todo_id":len(load_todos()) + 1,
             "action": action,
@@ -19377,13 +19335,13 @@ def save_todo_item_from_event(event):
             "uniqueId": uniqueId,
             "date": formatted_date,
             "occasion": occasion,
-            "last_action_date": event.get("last_action_date", "N/A"),
+            "last_action_date": last_action_date,
             "aum": aum,
             "key_points": event.get("key_points") or event.get("notes","N/A") , # previous version we were using notes
             "checked": False,
             # Optional or future use case :
             "investment_personality": investment_personality,
-            "last_action_type": event.get("last_action_type", "N/A"),
+            "last_action_type": last_action_type,
             "last_call_summary": event.get("last_call_summary", "N/A")
         }
         print("New Todo tasks : ",new_todo)
@@ -19445,7 +19403,7 @@ def create_todo():
             formatted_date = data["date"]
 
         new_todo = {
-            "todo_ids": len(load_todos()) + 1,
+            "todo_id": len(load_todos()) + 1,
             "user_email": user_email,
             "action": data.get("action"),
             "clientName": data.get("clientName"),
@@ -19606,14 +19564,14 @@ def get_todos():
                 continue
 
             client_detail = client.get("clientDetail", {})
-            client_name = client_detail.get("clientName")
+            clientName = client_detail.get("clientName")
             client_dob = client_detail.get("clientDob")
             if not client_dob:
                 continue
             try:
                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
             except Exception as e:
-                logging.error(f"Error parsing DOB for {client_name}: {e}")
+                logging.error(f"Error parsing DOB for {clientName}: {e}")
                 continue
 
             # Compute next birthday:
@@ -19625,22 +19583,26 @@ def get_todos():
             days_until = (next_birthday - today).days
             if days_until <= 7:
                 
+                last_action_date, last_action_type = get_last_interaction(clientName)
+                print("last_action_date",last_action_date,"last_action_type",last_action_type)
                 # Build a birthday task
                 birthday_task = {
                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
                     "user_email": user_email,
                     "action": "Call",
-                    "clientName": client_name,
+                    "clientName": clientName,
                     "date": next_birthday.strftime("%B %d, %Y"),
                     "occasion": "Birthday",
                     "last_action_date": "N/A",
                     "aum": client.get("investmentAmount", 0),
-                    "key_points": f"Wishing you a very happy birthday, {client_name}!",
+                    "key_points": f"Wishing you a very happy birthday, {clientName}!",
                     "investor_personality": client.get("investment_personality", "N/A"),
                     "last_action_type": None,
                     "last_call_summary": None,
                     "auto_generated": True,
                     "checked": False,
+                    "last_action_date":last_action_date,
+                    "last_action_type":last_action_type,
                     "source": "birthday"  # to mark it comes from birthday auto-generation
                 }
                 upcoming_birthday_todos.append(birthday_task)
@@ -19691,7 +19653,45 @@ def get_todos():
 #         logging.error(f"Error fetching to-dos: {e}")
 #         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
     
+####################################################################################################################
     
+# Completed tasks and last action date, last action type and last meeting summary :
+
+def get_last_interaction(client_name):
+    try:
+        all_todos = load_todos() + load_completed_todos()
+        client_tasks = [
+            t for t in all_todos
+            if t.get("clientName") == client_name and t.get("last_action_date") and t.get("last_action_date") != "N/A"
+        ]
+        if not client_tasks:
+            return "N/A", "N/A"
+
+        # Sort by date descending
+        client_tasks.sort(
+            key=lambda x: datetime.strptime(x.get("last_action_date"), "%B %d, %Y"),
+            reverse=True
+        )
+        latest_task = client_tasks[0]
+        return latest_task.get("last_action_date", "N/A"), latest_task.get("last_action_type", "N/A")
+    except Exception as e:
+        logging.warning(f"Error getting last interaction for {client_name}: {e}")
+        return "N/A", "N/A"
+
+
+# def get_last_interaction(clientName): #, user_email):
+#     history = load_completed_todos()  
+#     print("Completed Tasks :",history)
+#     relevant_history = [h for h in history if h["clientName"] == clientName ] #and h["user_email"] == user_email]
+    
+#     if not relevant_history:
+#         print("Relevant History :",relevant_history)
+#         return "N/A", "N/A"
+
+#     # Sort by date descending
+#     relevant_history.sort(key=lambda x: datetime.strptime(x["last_action_date"], "%B %d, %Y"), reverse=True)
+    
+#     return relevant_history[0]["last_action_date"], relevant_history[0]["action"]
 
 
 
