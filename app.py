@@ -19657,41 +19657,56 @@ def get_todos():
     
 # Completed tasks and last action date, last action type and last meeting summary :
 
-def get_last_interaction(client_name):
-    try:
-        all_todos = load_todos() + load_completed_todos()
-        client_tasks = [
-            t for t in all_todos
-            if t.get("clientName") == client_name and t.get("last_action_date") and t.get("last_action_date") != "N/A"
-        ]
-        if not client_tasks:
-            return "N/A", "N/A"
-
-        # Sort by date descending
-        client_tasks.sort(
-            key=lambda x: datetime.strptime(x.get("last_action_date"), "%B %d, %Y"),
-            reverse=True
-        )
-        latest_task = client_tasks[0]
-        return latest_task.get("last_action_date", "N/A"), latest_task.get("last_action_type", "N/A")
-    except Exception as e:
-        logging.warning(f"Error getting last interaction for {client_name}: {e}")
-        return "N/A", "N/A"
-
-
-# def get_last_interaction(clientName): #, user_email):
-#     history = load_completed_todos()  
-#     print("Completed Tasks :",history)
-#     relevant_history = [h for h in history if h["clientName"] == clientName ] #and h["user_email"] == user_email]
+def get_last_interaction(client_name: str):
+    """
+    Returns the most recent last_action_date and type for the given client_name.
+    """
+    client_name = client_name.strip().lower()  # Normalize
+    all_todos = load_todos() + load_completed_todos()
     
-#     if not relevant_history:
-#         print("Relevant History :",relevant_history)
+    interactions = [
+        todo for todo in all_todos
+        if todo.get("clientName", "").strip().lower() == client_name
+        and todo.get("checked") == True
+    ]
+
+    # Sort by last_action_date if present, fallback to "date"
+    def parse_date(todo):
+        date_str = todo.get("last_action_date") or todo.get("date")
+        try:
+            return datetime.strptime(date_str, "%B %d, %Y")
+        except:
+            return datetime.min
+
+    interactions.sort(key=parse_date, reverse=True)
+
+    if interactions:
+        latest = interactions[0]
+        return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
+    return "N/A", "N/A"
+
+
+# def get_last_interaction(client_name):
+#     try:
+#         all_todos = load_todos() + load_completed_todos()
+#         client_tasks = [
+#             t for t in all_todos
+#             if t.get("clientName") == client_name and t.get("last_action_date") and t.get("last_action_date") != "N/A"
+#         ]
+#         if not client_tasks:
+#             return "N/A", "N/A"
+
+#         # Sort by date descending
+#         client_tasks.sort(
+#             key=lambda x: datetime.strptime(x.get("last_action_date"), "%B %d, %Y"),
+#             reverse=True
+#         )
+#         latest_task = client_tasks[0]
+#         return latest_task.get("last_action_date", "N/A"), latest_task.get("last_action_type", "N/A")
+#     except Exception as e:
+#         logging.warning(f"Error getting last interaction for {client_name}: {e}")
 #         return "N/A", "N/A"
 
-#     # Sort by date descending
-#     relevant_history.sort(key=lambda x: datetime.strptime(x["last_action_date"], "%B %d, %Y"), reverse=True)
-    
-#     return relevant_history[0]["last_action_date"], relevant_history[0]["action"]
 
 
 
