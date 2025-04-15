@@ -19359,19 +19359,19 @@ def save_todo_item_from_event(event):
             formatted_date = datetime.fromisoformat(start_time.replace("Z", "+00:00")).strftime("%B %d, %Y")
         except Exception:
             formatted_date = start_time
-
+        
         if clientNames and isinstance(clientNames, list):
             participant = clientNames[0]
             clientName = participant.get("clientName") or participant['clientName']
             uniqueId  = participant.get("uniqueId") or participant['uniqueId']
             investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
-            aum = participant.get("available_funds")  
+            aum = participant.get("investmentAmount") or participant.get("available_funds") 
         else:
             clientName = "N/A"
             investment_personality = "N/A"
 
         new_todo = {
-            "todo_ids":len(load_todos()) + 1,
+            "todo_id":len(load_todos()) + 1,
             "action": action,
             "clientName": clientName,
             "uniqueId": uniqueId,
@@ -19386,7 +19386,7 @@ def save_todo_item_from_event(event):
             "last_action_type": event.get("last_action_type", "N/A"),
             "last_call_summary": event.get("last_call_summary", "N/A")
         }
-
+        print("New Todo tasks : ",new_todo)
         todos.append(new_todo)
         save_todos(todos)
 
