@@ -18907,6 +18907,8 @@ def get_participants():
         for client in all_clients:
             participant = {
                 "clientName": client.get("clientDetail", {}).get("clientName"),
+                "clientEmail": client.get("clientDetail", {}).get("clientEmail","N/A"),
+                "clientContact": client.get("clientDetail", {}).get("clientContact","N/A"),
                 "uniqueId": client.get("uniqueId") or client.get("client_id", "Unknown"),
                 "investment_personality": client.get("investment_personality"),
                 "investmentAmount": client.get("investmentAmount", 0)
@@ -18955,6 +18957,9 @@ def add_event():
         clientName = None
         if participants and isinstance(participants, list):
             client_name = participants[0].get('clientName')
+            clientEmail = participants[0].get('clientEmail')
+            clientContact = participants[0].get('clientContact')
+            uniqueId = participants[0].get('uniqueId')
 
         # Get last interaction if client exists
         last_date, last_action_type = get_last_interaction(clientName) if clientName else ("N/A", "N/A")
@@ -18963,6 +18968,9 @@ def add_event():
         
         event_entry = {
             "id": new_id,
+            "clientEmail": clientEmail, # client's email id
+            "clientContact": clientContact, # client's contact number details
+            "uniqueId": uniqueId , # uniqueId of the client
             "user_email": user_email,  # associate event with the creator
             "type": event_type,
             "title": title,
@@ -19312,7 +19320,9 @@ def save_todo_item_from_event(event):
         if clientNames and isinstance(clientNames, list):
             participant = clientNames[0]
             clientName = participant.get("clientName") or participant['clientName']
-            uniqueId  = participant.get("uniqueId") or participant['uniqueId']
+            clientEmail=  participant.get("clientEmail","N/A"), # client's email id
+            clientContact = participant.get("clientContact","N/A"), # client's contact number details 
+            uniqueId  = participant.get("uniqueId") or participant['uniqueId'] # uniqueId of the client
             investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
             aum = participant.get("investmentAmount") #or participant.get("available_funds") 
             print(aum)
@@ -19322,8 +19332,11 @@ def save_todo_item_from_event(event):
                 
         else:
             clientName = "N/A"
+            uniqueId = "N/A"
             investment_personality = "N/A"
-
+            clientEmail = "N/A"
+            clientContact = "N/A"
+            
         # Add the last action date and last action type (last action summary later ) :
         
         last_action_date, last_action_type = get_last_interaction(clientName) #, user_email)
@@ -19332,7 +19345,9 @@ def save_todo_item_from_event(event):
             "todo_id":len(load_todos()) + 1,
             "action": action,
             "clientName": clientName,
-            "uniqueId": uniqueId,
+            "uniqueId": uniqueId, # uniqueId of the client
+            "clientEmail": clientEmail, # client's email id
+            "clientContact": clientContact, # client's contact number details
             "date": formatted_date,
             "occasion": occasion,
             "last_action_date": last_action_date,
@@ -19474,6 +19489,7 @@ def update_todo(todo_id):
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 # POST /api/todo/delete – Delete (archive) completed tasks.
+
 @app.route('/api/todo/completed', methods=['POST'])
 @jwt_required()
 def delete_todos():
@@ -19508,8 +19524,10 @@ def delete_todos():
         for task in tasks_to_archive:
             # Mark as completed and update last_action_date as current date if not provided.
             task["checked"] = True
-            if not task.get("last_action_date") or task["last_action_date"] == "N/A":
-                task["last_action_date"] = task.get("date", datetime.now().strftime("%B %d, %Y"))
+            task["last_action_date"] = task.get("date") or datetime.now().strftime("%B %d, %Y")
+
+            # if not task.get("last_action_date") or task["last_action_date"] == "N/A":
+            #     task["last_action_date"] = task.get("date", datetime.now().strftime("%B %d, %Y"))
 
         # Save updated active todos and archive completed tasks.
         save_todos(todos)
@@ -19541,30 +19559,43 @@ def get_completed_todos():
 
 
 # GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
+
+# v-2 :
+
 @app.route('/api/todos', methods=['GET'])
 @jwt_required()
 def get_todos():
     try:
+        # Get current user's details.
         user_email, role, organization = get_user_details()
-        claims = get_jwt() or {}
-        todos = load_todos()
-        # For non-admin users, filter todos by their email.
+        todos = load_todos()  # load active todos
+
+        # Remove any todos that are marked as completed.
+        active_todos = [t for t in todos if not t.get("checked", False)]
+
+        # If some tasks were checked (i.e. removed), save the updated active todos.
+        if len(active_todos) < len(todos):
+            save_todos(active_todos)
+        todos = active_todos
+
+        # For non-admin users, show only todos matching their email.
         if role not in ["admin", "super_admin"]:
             todos = [t for t in todos if t.get("user_email") == user_email]
 
-        # Now, auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+        # Auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
         clients = load_all_clients()
         upcoming_birthday_todos = []
         today = datetime.today().date()
+
         for client in clients:
-            # Apply role-based filtering for client data if needed.
+            # Role-based filtering for client data.
             if role == "admin" and client.get("organization") != organization:
                 continue
             if role == "user" and client.get("submittedBy") != user_email:
                 continue
 
             client_detail = client.get("clientDetail", {})
-            clientName = client_detail.get("clientName")
+            clientName = client_detail.get("clientName", "N/A")
             client_dob = client_detail.get("clientDob")
             if not client_dob:
                 continue
@@ -19574,66 +19605,260 @@ def get_todos():
                 logging.error(f"Error parsing DOB for {clientName}: {e}")
                 continue
 
-            # Compute next birthday:
+            # Compute next birthday.
             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
-            if birthday_this_year < today:
-                next_birthday = datetime(today.year + 1, dob_date.month, dob_date.day).date()
-            else:
-                next_birthday = birthday_this_year
+            next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
             days_until = (next_birthday - today).days
+
             if days_until <= 7:
+                # Retrieve last interaction details for this client.
+                last_date, last_action_type = get_last_interaction(clientName)
+                # Get additional client contact info.
+                clientEmail = client_detail.get("clientEmail", "N/A")
+                clientContact = client_detail.get("clientContact", "N/A")
+                uniqueId = client.get("uniqueId", "N/A")
                 
-                last_action_date, last_action_type = get_last_interaction(clientName)
-                print("last_action_date",last_action_date,"last_action_type",last_action_type)
-                # Build a birthday task
                 birthday_task = {
                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
                     "user_email": user_email,
                     "action": "Call",
                     "clientName": clientName,
+                    "clientEmail": clientEmail,
+                    "clientContact": clientContact,
+                    "uniqueId": uniqueId,
                     "date": next_birthday.strftime("%B %d, %Y"),
                     "occasion": "Birthday",
-                    "last_action_date": "N/A",
+                    "last_action_date": last_date,  # from get_last_interaction
                     "aum": client.get("investmentAmount", 0),
                     "key_points": f"Wishing you a very happy birthday, {clientName}!",
                     "investor_personality": client.get("investment_personality", "N/A"),
-                    "last_action_type": None,
+                    "last_action_type": last_action_type,
                     "last_call_summary": None,
                     "auto_generated": True,
                     "checked": False,
-                    "last_action_date":last_action_date,
-                    "last_action_type":last_action_type,
-                    "source": "birthday"  # to mark it comes from birthday auto-generation
+                    "source": "birthday"
                 }
                 upcoming_birthday_todos.append(birthday_task)
 
+        # Combine stored todos with auto-generated birthday todos.
         combined_todos = todos + upcoming_birthday_todos
-        # Sort wrt date
-        try:
-            # Define a helper to safely parse the "date" field.
-            def parse_todo_date(todo):
-                date_field = todo.get("date")
-                if isinstance(date_field, str):
-                    try:
-                        # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
-                        return datetime.strptime(date_field, "%B %d, %Y")
-                    except Exception as e:
-                        logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
-                        return datetime(1970, 1, 1)  # Fallback date if parsing fails
-                # If the date isn't a string, return a very old date
+
+        # Define a helper to safely parse the "date" field.
+        def parse_todo_date(todo):
+            date_field = todo.get("date")
+            try:
+                return datetime.strptime(date_field, "%B %d, %Y")
+            except Exception as e:
+                logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
                 return datetime(1970, 1, 1)
-            
-            # Sort todos by their parsed date.
-            combined_todos.sort(key=parse_todo_date)
-            
-        except Exception as sort_err:
-            logging.error(f"Error sorting todos by date: {sort_err}")
-        
+
+        combined_todos.sort(key=parse_todo_date)
+
         return jsonify({"todos": combined_todos}), 200
 
     except Exception as e:
         logging.error(f"Error fetching to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+# v-1 : working properly
+
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         # Get the current user's details
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()
+
+#         # For non-admin users, filter todos by their user_email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Auto-generate and persist birthday tasks for clients with upcoming birthdays (next 7 days)
+#         clients = load_all_clients()
+#         today = datetime.today().date()
+#         updated = False  # flag to track if we added any new birthday todos
+
+#         for client in clients:
+#             # Role-based filtering for client data
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             next_birthday = birthday_this_year if birthday_this_year >= today \
+#                             else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             days_until = (next_birthday - today).days
+#             if days_until <= 7:
+#                 # Check if a birthday task for this client already exists (match by uniqueId, date, and source)
+#                 client_uniqueId = client.get("uniqueId", "N/A")
+#                 birthday_date_str = next_birthday.strftime("%B %d, %Y")
+#                 already_exists = any(
+#                     t.get("source") == "birthday" and 
+#                     t.get("uniqueId") == client_uniqueId and 
+#                     t.get("date") == birthday_date_str 
+#                     for t in todos
+#                 )
+#                 if not already_exists:
+#                     # Get the last interaction details (if any) for the client
+#                     last_date, last_action_type = get_last_interaction(clientName)
+                    
+#                     # Build the birthday task
+#                     birthday_task = {
+#                         "todo_id": len(todos) + 1,  # new id based on current todos length
+#                         "user_email": user_email,
+#                         "action": "Call",
+#                         "clientName": clientName,
+#                         "clientEmail": client_detail.get("clientEmail", "N/A"),
+#                         "clientContact": client_detail.get("clientContact", "N/A"),
+#                         "uniqueId": client_uniqueId,
+#                         "date": birthday_date_str,
+#                         "occasion": "Birthday",
+#                         "last_action_date": last_date,      # last interaction date from history
+#                         "aum": client.get("investmentAmount", 0),
+#                         "key_points": f"Wishing you a very happy birthday, {clientName}!",
+#                         "investor_personality": client.get("investment_personality", "N/A"),
+#                         "last_action_type": last_action_type,  # type from last interaction
+#                         "last_call_summary": None,
+#                         "auto_generated": True,
+#                         "checked": False,
+#                         "source": "birthday"  # marks it as auto-generated birthday task
+#                     }
+#                     todos.append(birthday_task)
+#                     updated = True
+
+#         # If we added any new birthday tasks, save the updated todos persistently.
+#         if updated:
+#             save_todos(todos)
+
+#         # Sort todos by the "date" field (assumes format like "April 08, 2025")
+#         def parse_todo_date(todo):
+#             date_field = todo.get("date")
+#             try:
+#                 return datetime.strptime(date_field, "%B %d, %Y")
+#             except Exception as e:
+#                 logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
+#                 return datetime(1970, 1, 1)  # Fallback date if parsing fails
+
+#         todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# working :
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         user_email, role, organization = get_user_details()
+#         claims = get_jwt() or {}
+#         todos = load_todos()
+#         # For non-admin users, filter todos by their email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Now, auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+#         clients = load_all_clients()
+#         upcoming_birthday_todos = []
+#         today = datetime.today().date()
+#         for client in clients:
+#             # Apply role-based filtering for client data if needed.
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday:
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             if birthday_this_year < today:
+#                 next_birthday = datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             else:
+#                 next_birthday = birthday_this_year
+#             days_until = (next_birthday - today).days
+#             if days_until <= 7:
+                
+#                 last_action_date, last_action_type = get_last_interaction(clientName)
+#                 print("last_action_date",last_action_date,"last_action_type",last_action_type)
+#                 # Build a birthday task
+#                 birthday_task = {
+#                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
+#                     "user_email": user_email,
+#                     "action": "Call",
+#                     "clientName": clientName,
+#                     "date": next_birthday.strftime("%B %d, %Y"),
+#                     "occasion": "Birthday",
+#                     "last_action_date": "N/A",
+#                     "aum": client.get("investmentAmount", 0),
+#                     "key_points": f"Wishing you a very happy birthday, {clientName}!",
+#                     "investor_personality": client.get("investment_personality", "N/A"),
+#                     "last_action_type": None,
+#                     "last_call_summary": None,
+#                     "auto_generated": True,
+#                     "checked": False,
+#                     "last_action_date":last_action_date,
+#                     "last_action_type":last_action_type,
+#                     "source": "birthday"  # to mark it comes from birthday auto-generation
+#                 }
+#                 upcoming_birthday_todos.append(birthday_task)
+
+#         combined_todos = todos + upcoming_birthday_todos
+#         # Sort wrt date
+#         try:
+#             # Define a helper to safely parse the "date" field.
+#             def parse_todo_date(todo):
+#                 date_field = todo.get("date")
+#                 if isinstance(date_field, str):
+#                     try:
+#                         # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
+#                         return datetime.strptime(date_field, "%B %d, %Y")
+#                     except Exception as e:
+#                         logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
+#                         return datetime(1970, 1, 1)  # Fallback date if parsing fails
+#                 # If the date isn't a string, return a very old date
+#                 return datetime(1970, 1, 1)
+            
+#             # Sort todos by their parsed date.
+#             combined_todos.sort(key=parse_todo_date)
+            
+#         except Exception as sort_err:
+#             logging.error(f"Error sorting todos by date: {sort_err}")
+        
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 

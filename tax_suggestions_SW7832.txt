@@ -1,72 +1,83 @@
 <h1>Tax-Saving Strategy for Samuel Will</h1>
-<p>This strategy outlines tax-efficient investment strategies, deductions, credits, and state-specific optimizations for Samuel Will, considering his provided financial data and assuming he is a resident of Texas.  Note that this is a general overview and professional tax advice should be sought for personalized guidance.</p>
+<p>This strategy outlines tax-efficient investment strategies, deductions, exemptions, credits, and state-specific optimizations for Samuel Will, a non-resident alien married filing jointly with two dependents, residing in Hilo, Hawaii.  The analysis is based on the provided financial data and assumes the current tax year.  <strong>Note:</strong>  This is a high-level overview.  A comprehensive tax plan requires consultation with a qualified tax professional.</p>
 <h2>1. Investment Strategies for Tax Efficiency</h2>
+<p>The following strategies leverage tax-advantaged accounts and tax-efficient investment approaches to minimize Samuel's tax liability:</p>
 <table>
 <thead>
 <tr>
-<th>Account Type</th>
 <th>Strategy</th>
-<th>Tax Advantages</th>
-<th>Considerations</th>
+<th>Description</th>
+<th>Actionable Steps</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>401(k)</td>
-<td>Contribute up to the maximum allowed.</td>
-<td>Contributions are tax-deductible, and earnings grow tax-deferred.</td>
-<td>Check employer matching contributions.</td>
+<td><strong>Tax-Advantaged Accounts</strong></td>
+<td>Maximize contributions to tax-advantaged retirement accounts (401(k), Traditional IRA, Roth IRA) to reduce taxable income.</td>
+<td>Determine maximum contribution limits for 401(k) and IRAs based on age and income, contribute up to these limits.  Consider Roth vs. Traditional IRA based on income and long-term goals.</td>
 </tr>
 <tr>
-<td>Traditional IRA</td>
-<td>Contribute if eligible and below income limits.</td>
-<td>Contributions may be tax-deductible (depending on income), earnings grow tax-deferred.</td>
-<td>Consider Traditional IRA vs. Roth IRA based on income and future tax brackets.</td>
+<td><strong>Tax-Efficient Investing</strong></td>
+<td>Favor investments with lower tax implications.</td>
+<td>Shift investments to dividend reinvestment plans (DRIPs) if appropriate to reduce short-term capital gains. Diversify assets appropriately.</td>
 </tr>
 <tr>
-<td>Roth IRA</td>
-<td>Contribute if eligible and below income limits.</td>
-<td>Earnings are tax-free in retirement.</td>
-<td>Higher contribution limits may be suitable in later years.</td>
-</tr>
-<tr>
-<td>Tax-Loss Harvesting</td>
-<td>Sell losing assets to offset capital gains.</td>
-<td>Reduces taxable income by deducting losses.</td>
-<td>Consider wash-sale rules to avoid penalties.</td>
-</tr>
-<tr>
-<td>Municipal Bonds</td>
-<td>Invest in Texas municipal bonds.</td>
-<td>Interest income is often exempt from federal and state taxes.</td>
-<td>Yields might be lower than taxable bonds.</td>
+<td><strong>Asset Location</strong></td>
+<td>Strategically place assets in taxable vs. tax-advantaged accounts.  Higher-growth assets may benefit from being in tax-advantaged accounts.</td>
+<td>Review existing asset allocations and rebalance to utilize tax-advantaged accounts for higher-growth assets.</td>
 </tr>
 </tbody>
 </table>
 <h2>2. Deductions, Exemptions, and Credits</h2>
-<p><strong>Federal Deductions:</strong></p>
+<p>The following deductions, exemptions, and credits may be available to Samuel, depending on his specific circumstances and further documentation.  Federal and state (Hawaii) tax laws will apply:</p>
+<p><strong>Federal Deductions (Examples):</strong></p>
 <ul>
-<li><strong>Itemized Deductions:</strong>  Samuel should itemize if the total exceeds the standard deduction.  Potentially deductible items include home mortgage interest (if applicable), state and local taxes (SALT deduction limited to $10,000), charitable contributions, and investment interest expense.</li>
-<li><strong>Standard Deduction:</strong>  The standard deduction amount depends on filing status (married filing jointly).</li>
+<li><strong>Itemized Deductions:</strong> If itemized deductions exceed the standard deduction, he may deduct expenses like mortgage interest (if applicable), state and local taxes (SALT subject to limitations), charitable contributions, medical expenses exceeding 7.5% of AGI, and other qualifying expenses.</li>
+<li><strong>Standard Deduction:</strong> Use the standard deduction if itemized deductions are lower.</li>
+<li><strong>IRA Deduction:</strong>  Depending on the type of IRA used and his income, he may be eligible for a deduction.</li>
 </ul>
-<p><strong>Texas Deductions:</strong></p>
+<p><strong>Hawaii State Deductions (Examples):</strong></p>
 <ul>
-<li><strong>Homestead Exemption:</strong>  A significant reduction in property taxes on a primary residence.</li>
+<li>Consult Hawaii state tax guidelines for applicable deductions; details depend on individual circumstances.</li>
 </ul>
-<p><strong>Federal Credits:</strong></p>
+<p><strong>Federal Credits (Examples):</strong></p>
 <ul>
-<li><strong>Retirement Savings Contributions Credit (Saver's Credit):</strong>  A credit for taxpayers with modest incomes contributing to retirement accounts.</li>
+<li><strong>Child Tax Credit:</strong>  Eligible for children under 17.</li>
+<li><strong>Child and Dependent Care Credit:</strong> For childcare expenses.</li>
+<li><strong>Other Credits:</strong> Explore other potential credits based on his specific situation (education credits, etc.).</li>
 </ul>
-<p><strong>Texas Credits:</strong></p>
+<p><strong>Hawaii State Credits (Examples):</strong></p>
 <ul>
-<li>Research Texas tax credits applicable to his specific circumstances (e.g., certain tax credits for charitable contributions, energy-efficient home improvements).</li>
+<li>Consult Hawaii state tax guidelines; details depend on his specific situation and may require further investigation.</li>
 </ul>
 <h2>3. State-Specific Tax Optimizations (Texas)</h2>
-<ul>
-<li><strong>Texas Franchise Tax:</strong>  The franchise tax applies to businesses in Texas.  Strategies to minimize this tax should be explored if Samuel's business is incorporated.</li>
-<li><strong>Property Taxes:</strong>  The homestead exemption is crucial for lowering property taxes.  Exploring other property tax relief programs is also advisable.</li>
-<li><strong>Sales Tax:</strong>  There is no state income tax in Texas, but sales tax applies to various purchases. Strategize to minimize sales tax where applicable.</li>
-</ul>
+<p>The provided information indicates Samuel resides in Hawaii, not Texas.  Therefore, Texas-specific tax optimizations are not applicable.  However, Hawaii state tax laws should be researched for relevant deductions and credits.</p>
 <h2>4. Tax-Loss Harvesting Opportunities</h2>
-<p>The provided portfolio shows both gains and losses. Tax-loss harvesting should be implemented to offset capital gains, thus reducing tax liability. The strategy should consider the wash-sale rule, which prevents deducting losses if similar securities are purchased within a 30-day period before or after the sale. A financial advisor can help to make the best choices.</p>
-<p><strong>Disclaimer:</strong> This tax-saving strategy is for informational purposes only and does not constitute professional financial or tax advice.  Consult with a qualified tax advisor for personalized guidance.  Tax laws are subject to change.</p>
+<p>Tax-loss harvesting involves selling losing investments to offset capital gains.  This strategy reduces Samuel's taxable capital gains:</p>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Investment Gain/Loss Percentage</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. O. Smith (AOS)</td>
+<td>-0.61%</td>
+<td>Consider tax-loss harvesting if this loss can offset gains in other assets.</td>
+</tr>
+<tr>
+<td><strong>Other Assets:</strong></td>
+<td>Evaluate other assets...</td>
+<td>Analyze the entire portfolio for other potential tax-loss harvesting opportunities.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Important Considerations:</strong></p>
+<ul>
+<li><strong>Wash Sale Rule:</strong>  Be mindful of the wash sale rule, which prevents claiming a loss if you repurchase the same asset within 30 days.</li>
+<li><strong>Investment Duration:</strong> The short-term versus long-term nature of investments will heavily influence tax treatment; long-term gains are usually taxed at a lower rate.</li>
+</ul>
+<p><strong>Disclaimer:</strong> This analysis provides a high-level overview and should not be considered professional tax advice.  Samuel should consult a qualified tax advisor to create a personalized tax plan and ensure compliance with all applicable tax laws.</p>
