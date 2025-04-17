@@ -19617,6 +19617,7 @@ def get_todos():
                 clientEmail = client_detail.get("clientEmail", "N/A")
                 clientContact = client_detail.get("clientContact", "N/A")
                 uniqueId = client.get("uniqueId", "N/A")
+                key_points = key_talking_points_using_genai(uniqueId,clientName,clientEmail,clientContact,last_date,last_action_type)
                 
                 birthday_task = {
                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
@@ -19630,7 +19631,7 @@ def get_todos():
                     "occasion": "Birthday",
                     "last_action_date": last_date,  # from get_last_interaction
                     "aum": client.get("investmentAmount", 0),
-                    "key_points": f"Wishing you a very happy birthday, {clientName}!",
+                    "key_points": key_points , #f"Wishing you a very happy birthday, {clientName}!",
                     "investor_personality": client.get("investment_personality", "N/A"),
                     "last_action_type": last_action_type,
                     "last_call_summary": None,
@@ -19660,6 +19661,89 @@ def get_todos():
         logging.error(f"Error fetching to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
+def key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_action_date):
+    today = datetime.today().date()
+    try:
+        client_data = load_client_data(uniqueId)
+        portfolio_data = load_portfolio_data(uniqueId)
+    except Exception as e:
+        logging.warning(f"Data load failed for {clientName}: {e}")
+        return f"Wishing you a very happy birthday, {clientName}!"
+
+    if not client_data:
+        logging.warning(f"No client data found for {uniqueId}")
+        return f"Wishing you a very happy birthday, {clientName}!"
+    
+    prompt = f"""
+        Today is {today.strftime('%B %d, %Y')}.
+        Client: {clientName}
+        Contact: {clientContact}
+        Email: {clientEmail}
+        Last action: {last_action_type or 'N/A'} on {last_action_date or 'N/A'}
+        Portfolio Data: {portfolio_data}
+
+        Based on the above details, please generate concise 1-line bullet point insights ONLY for the wealth manager to prepare for a birthday financial check-in call.
+        Try to show positive points
+
+        ❌ Do NOT include greetings or HTML.
+        ✅ Only output 1-liner financial talking points.
+        ✅ Keep each point relevant, crisp, and based on the data.
+        ✅ Examples:
+        - Portfolio value has appreciated by 23% since last call.
+        - Gold holdings are up 15% and may be ripe for rebalancing.
+        - Real estate investments have outperformed by 30% YTD.
+        - Client has not invested yet. Induction call to be scheduled.
+        - Equity portfolio is concentrated in AAPL and TSLA – review diversification.
+        """
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        if hasattr(response, "text") and response.text:
+            key_points = markdown.markdown(response.text, extensions=["extra"])
+        else:
+            raise Exception("Empty Gemini response")
+    except Exception as e:
+        logging.warning(f"AI generation failed for {clientName}: {e}")
+        key_points = f"Wishing you a very happy birthday, {clientName}!"
+
+    return key_points
+
+
+def load_client_data(client_id):
+    if USE_AWS:
+        key = f"{client_summary_folder}client-data/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+            return json.loads(response['Body'].read().decode('utf-8'))
+        except Exception as e:
+            logging.error(f"Client data not found in AWS: {e}")
+            return None
+    else:
+        path = os.path.join("client_data", "client_data", f"{client_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+        else:
+            logging.warning(f"Client file not found locally: {client_id}")
+            return None
+
+
+ # Load portfolio data :
+def load_portfolio_data(client_id):
+    if USE_AWS:
+        key = f"{portfolio_list_folder}/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+            return json.loads(response['Body'].read().decode('utf-8'))
+        except Exception:
+            return "No investments made"
+    else:
+        path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as file:
+                return json.load(file)
+        return "No investments made"
 
 
 # v-1 : working properly
@@ -19909,29 +19993,6 @@ def get_last_interaction(client_name: str):
         latest = interactions[0]
         return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
     return "N/A", "N/A"
-
-
-# def get_last_interaction(client_name):
-#     try:
-#         all_todos = load_todos() + load_completed_todos()
-#         client_tasks = [
-#             t for t in all_todos
-#             if t.get("clientName") == client_name and t.get("last_action_date") and t.get("last_action_date") != "N/A"
-#         ]
-#         if not client_tasks:
-#             return "N/A", "N/A"
-
-#         # Sort by date descending
-#         client_tasks.sort(
-#             key=lambda x: datetime.strptime(x.get("last_action_date"), "%B %d, %Y"),
-#             reverse=True
-#         )
-#         latest_task = client_tasks[0]
-#         return latest_task.get("last_action_date", "N/A"), latest_task.get("last_action_type", "N/A")
-#     except Exception as e:
-#         logging.warning(f"Error getting last interaction for {client_name}: {e}")
-#         return "N/A", "N/A"
-
 
 
 
