@@ -3227,6 +3227,7 @@ def submit_client_data():
         logging.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
+
 # Previous Complete Working Code :
 
 # @app.route('/api/save-progress', methods=['POST'])
@@ -3308,82 +3309,6 @@ def submit_client_data():
     
 
 
-# # ---------------- Submit Client Data Endpoint ----------------
-# @app.route('/api/submit-client-data', methods=['POST'])
-# @jwt_required()
-# def submit_client_data():
-#     """
-#     Finalizes and submits client data.
-#     Expects a JSON payload containing the complete client data.
-#     Uses role and organization to assign the proper organization field.
-#     Merges the incoming data with any existing data using deep_merge,
-#     ensuring that keys such as "data" are replaced rather than nested.
-#     """
-#     try:
-#         email, role, organization = get_user_details()
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
-
-#         client_details = data.get("clientDetail", {})
-#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
-#         client_org = data.get('organization', organization)
-        
-#         if not client_id:
-#             client_id = data.get('unique_id') or data.get('uniqueId')
-#             if not client_id:
-#                 return jsonify({"message": "Unique ID is required"}), 400
-
-#         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
-
-#         # Assign organization field based on role.
-#         if role == "super_admin":
-#             data['organization'] = client_org or "MResult"
-#         else:
-#             data['organization'] = organization
-        
-#         data['submittedBy'] = email
-#         data['is_submitted'] = True
-
-#         # Load existing data if present.
-#         if USE_AWS:
-#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
-
-#             # Merge using deep_merge so that the "data" key is replaced.
-#             merged_data = deep_merge(existing_data, data)
-#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
-#                           Body=json.dumps(merged_data, indent=4),
-#                           ContentType="application/json")
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 is_update = True
-#             else:
-#                 existing_data = {}
-#                 is_update = False
-
-#             merged_data = deep_merge(existing_data, data)
-#             with open(file_path, 'w') as f:
-#                 json.dump(merged_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-        
-#         return jsonify({'message': f'Client data successfully {action}.',
-#                         'client_id': client_id}), 200
-
-#     except Exception as e:
-#         logging.error(f"An error occurred: {e}")
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
 # Example endpoint to load progress (for testing)
 @app.route('/api/load-progress', methods=['GET'])
 def load_progress():
@@ -3408,157 +3333,60 @@ def load_progress():
         logging.error(f"Error loading progress: {e}")
         return jsonify({"message": f"Error loading progress: {str(e)}"}), 500
 
-# @app.route('/api/submit-client-data', methods=['POST'])
-# @jwt_required()
-# def submit_client_data():
-#     """
-#     Finalizes and submits client data.
-#     Expects a JSON payload containing the complete client data.
-#     Verifies that all mandatory clientDetail fields are present.
-#     Uses the same organization assignment logic as before.
-#     """
-#     try:
-#         email, role, organization = get_user_details()  
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
+##########################################
+# # Personal Details :
 
-#         # Mandatory fields for clientDetail
-#         client_details = data.get("clientDetail", {})
-#         # required_fields = [
-#         #     "clientName", "clientSsn","state", "city"
-#         # ]
-#         # missing_fields = [field for field in required_fields if not client_details.get(field)]
-#         # if missing_fields:
-#         #     logging.error(f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}")
-#         #     return jsonify({"message": f"Mandatory fields missing in clientDetail: {', '.join(missing_fields)}"}), 400
+# Save the personal details submitted by the user in one step.
+# Stores the JSON data as <client_id>_personal_data.json under the personal_data folder.
 
-#         client_id = request.json.get('unique_id') or request.json.get('uniqueId')
-#         client_org = request.json.get('organization',organization)  # Provided in payload for super_admin
-        
-#         if not client_id:
-#             return jsonify({"message": "Unique ID is required"}), 400
+@app.route('/api/save-personal-details', methods=['POST'])
+@jwt_required()
+def save_personal_details():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid or missing request payload"}), 400
 
-#         print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
+        # Extract client ID from common fields
+        client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
 
-#         # 🔹 Assign Organization Field (keep this logic as is)
-#         if role == "super_admin":
-#             data['organization'] = client_org or "MResult"
-#         else:
-#             data['organization'] = organization # Assign to the admin's organization
-            
-#         data['submittedBy'] = email
+        # Format file name and path
+        filename = f"{client_id}_personal_data.json"
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-#         # Load existing data if present and merge with final data
-#         if USE_AWS:
-#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
+        # Update timestamp fields
+        data["last_modified_date"] = current_time
+        data["uniqueId"] = client_id
 
-#             existing_data.update(data)
-#             s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
-#                           Body=json.dumps(existing_data, indent=4),
-#                           ContentType="application/json")
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 existing_data.update(data)
-#                 is_update = True
-#             else:
-#                 existing_data = data
-#                 is_update = False
+        if USE_AWS:
+            # Save to S3
+            file_key = f"{client_summary_folder}personal_data/{filename}"
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            # Save locally
+            folder_path = os.path.join("personal_data")
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
 
-#             with open(file_path, 'w') as f:
-#                 json.dump(existing_data, f, indent=4)
+            file_path = os.path.join(folder_path, filename)
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=4)
 
-#         action = "updated" if is_update else "created"
-#         return jsonify({'message': f'Client data successfully {action}.', 'client_id': client_id}), 200
+        return jsonify({"message": f"Personal details saved successfully for client ID: {client_id}"}), 200
 
-#     except Exception as e:
-#         logging.error(f"An error occurred: {e}")
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
+    except Exception as e:
+        logging.error(f"Error saving personal details: {e}")
+        return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
 
 ##########################################
-
-
-##########################################
-
-
-# previous working version :
-# @app.route('/api/submit-client-data', methods=['POST'])
-# @jwt_required()
-# def submit_client_data():
-#     try:
-#         email, role, organization = get_user_details()
-
-#         # Parse JSON Payload
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
-
-#         client_name = data.get('clientDetail', {}).get('clientName')
-#         unique_id = data.get('uniqueId')
-#         client_org = data.get('organization')
-
-#         if not client_name or not unique_id:
-#             return jsonify({'message': 'Client name and unique ID are required'}), 400
-
-#         print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
-
-#         # 🔹 Assign Organization Field
-#         if role == "super_admin":
-#             data['organization'] = client_org or "Unassigned"
-#         else:
-#             data['organization'] = organization  # Assign to the admin's organization
-
-#         data['submittedBy'] = email  # Track who submitted it
-
-#         # 🔹 Save Data to AWS S3 or Local Storage
-#         if USE_AWS:
-#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json" 
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
-
-#             existing_data.update(data)
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=s3_key,
-#                 Body=json.dumps(existing_data, indent=4),
-#                 ContentType="application/json"
-#             )
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"{unique_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 existing_data.update(data)
-#                 is_update = True
-#             else:
-#                 existing_data = data
-#                 is_update = False
-
-#             with open(file_path, 'w') as f:
-#                 json.dump(existing_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-#         return jsonify({'message': f'Client data successfully {action}.', 'uniqueId': unique_id}), 200
-
-#     except Exception as e:
-#         logging.error(f"An error occurred: {e}")
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
 # ✅ Get All Client Data Based on Role
@@ -3623,179 +3451,6 @@ def get_all_client_data():
         print(f"Error occurred while retrieving data: {e}")
         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
 
-
-
-# v-1 of compartmentalization:
-
-# @app.route('/api/submit-client-data', methods=['POST'])
-# @jwt_required()  # Requires the user to be logged in
-# def submit_client_data():
-#     try:
-#         # Get the logged-in user's email from the JWT token
-#         email = get_jwt_identity()
- 
-#         # Parse JSON payload
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
- 
-#         # Extract client details
-#         client_name = data.get('clientDetail', {}).get('clientName')
-#         unique_id = data.get('uniqueId')
- 
-#         if not client_name or not unique_id:
-#             return jsonify({'message': 'Client name and unique ID are required'}), 400
- 
-#         print(f"Processing data for client: {client_name}, ID: {unique_id}, submitted by {email}")
- 
-        # # Add the user's email to the data
-        # data['submittedBy'] = email
- 
-#         # Save to AWS or local storage as before
-#         if USE_AWS:
-#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except s3.exceptions.NoSuchKey:
-#                 existing_data = {}
-#                 is_update = False
- 
-#             if is_update:
-#                 existing_data.update(data)
-#                 data_to_save = existing_data
-#             else:
-#                 data_to_save = data
- 
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=s3_key,
-#                 Body=json.dumps(data_to_save),
-#                 ContentType="application/json"
-#             )
-#         else:
-#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 existing_data.update(data)
-#                 is_update = True
-#             else:
-#                 existing_data = data
-#                 is_update = False
- 
-#             with open(file_path, 'w') as f:
-#                 json.dump(existing_data, f, indent=4)
- 
-#         action = "updated" if is_update else "created"
-#         return jsonify({
-#             'message': f'Client data successfully {action}.',
-#             'uniqueId': unique_id
-#         }), 200
-#     except Exception as e:
-#         logging.error(f"An error occurred: {e}")
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
-# @app.route('/api/get-all-client-data', methods=['GET'])
-# @jwt_required()  # Requires the user to be logged in
-# def get_all_client_data():
-#     try:
-#         email = get_jwt_identity()  # Get the logged-in user's email
-#         all_data = []
- 
-#         if USE_AWS:
-#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-#             if 'Contents' in response:
-#                 for obj in response['Contents']:
-#                     try:
-#                         file_key = obj['Key']
-#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                         file_data = file_response['Body'].read().decode('utf-8')
-#                         data_json = json.loads(file_data)
- 
-#                         if data_json.get('submittedBy') == email:
-#                             all_data.append(data_json)
-#                     except Exception as e:
-#                         print(f"Error reading file {obj['Key']}: {e}")
-#                         continue
-#         else:
-#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-#                 if filename.endswith(".json"):
-#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-#                     with open(file_path, 'r') as f:
-#                         client_data = json.load(f)
-#                         if client_data.get('submittedBy') == email:
-#                             all_data.append(client_data)
- 
-#         if not all_data:
-#             return jsonify({'message': 'No client data found for this user.'}), 404
- 
-#         return jsonify({
-#             'message': 'Client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
-#     except Exception as e:
-#         print(f"Error occurred while retrieving data: {e}")
-#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-     
-###################################################################################################### 
-# new version :
-
-# @app.route('/api/get-all-client-data', methods=['GET'])
-# def get_all_client_data():
-#     try:
-#         all_data = []
- 
-#         if USE_AWS:
-#             # AWS Logic
-#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-#             if 'Contents' in response:
-#                 for obj in response['Contents']:
-#                     try:
-#                         file_key = obj['Key']
-#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                         file_data = file_response['Body'].read().decode('utf-8')
-#                         data_json = json.loads(file_data)
- 
-                        # # Do not overwrite isNewClient flag if updated elsewhere
-                        # if 'isNewClient' not in data_json:
-                        #     data_json['isNewClient'] = True  # Default to True if missing
-                       
-#                         all_data.append(data_json)
-#                     except Exception as e:
-#                         print(f"Error reading file {obj['Key']}: {e}")
-#                         continue
-#             else:
-#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
- 
-#         else:
-#             # Local Storage Logic
-#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-#                 if filename.endswith(".json"):
-#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-#                     with open(file_path, 'r') as f:
-#                         client_data = json.load(f)
- 
-#                         # Do not overwrite isNewClient flag if updated elsewhere
-#                         if 'isNewClient' not in client_data:
-#                             client_data['isNewClient'] = True  # Default to True if missing
-                       
-#                         all_data.append(client_data)
- 
-#             if not all_data:
-#                 return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-#         # Return combined data
-#         return jsonify({
-#             'message': 'All client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
- 
-#     except Exception as e:
-#         print(f"Error occurred while retrieving data: {e}")
-#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-  
 
 
 #################################################################################################################################
@@ -10151,6 +9806,108 @@ def actual_vs_predicted():
     except Exception as e:
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
+
+# new version : currently not wiorking
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
+# def actual_vs_predicted():
+#     try:
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get("client_name")
+#         funds = request.json.get("funds")
+#         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+#         current_date = datetime.now().strftime("%Y-%m-%d")
+
+#         current_quarter = get_current_quarter()
+#         quarter_start = get_current_quarter_dates()
+#         # quarter_start, quarter_end = get_current_quarter_dates()
+
+#         # File Paths
+#         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+#         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+#         portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
+#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+
+#         # Load Predictions
+#         predicted_line_chart_data = load_from_file(predicted_file_path)
+#         if not predicted_line_chart_data:
+#             predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#             save_to_file(predicted_file_path, predicted_line_chart_data)
+
+#         # Load Portfolio
+#         current_portfolio_data = load_from_file(portfolio_file)
+#         if not current_portfolio_data:
+#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load Daily Changes
+#         daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+#         raw_daily_changes_data = {}
+#         if os.path.exists(daily_changes_file):
+#             with open(daily_changes_file, 'r') as f:
+#                 raw_daily_changes_data = json.load(f)
+
+#         # Build asset-level actual return data
+#         portfolio_assets = current_portfolio_data.get("portfolio", [])
+#         today = datetime.today().strftime('%Y-%m-%d')
+#         date_label = datetime.today().strftime('%m/%d/%Y')
+
+#         total_change = 0
+#         for asset in portfolio_assets:
+#             ticker = asset.get("ticker")
+#             quantity = asset.get("quantity", 0)
+#             buy_price = float(asset.get("buy_price", 0))
+#             buy_date = asset.get("buy_date") or quarter_start
+
+#             if not ticker or not buy_price or not quantity:
+#                 continue
+
+#             data = yf.download(ticker, start=buy_date, end=today, interval='1d', auto_adjust=False)
+#             print(ticker," data :\n",data)
+#             if data.empty or 'Close' not in data.columns:
+#                 continue
+
+#             latest_close = data['Close'].iloc[-1]
+#             gain = (latest_close - buy_price) * quantity
+#             total_change += gain
+            
+#         print("Total Change Value : ",total_change)
+        
+#         # Save to daily changes file if new
+#         if date_label not in raw_daily_changes_data:
+#             raw_daily_changes_data[date_label + ', ' + current_date] = {
+#                 "portfolio_daily_change": round(total_change, 2)
+#             }
+#             with open(daily_changes_file, 'w') as f:
+#                 json.dump(raw_daily_changes_data, f, indent=4)
+
+#         # Filter current quarter data
+#         daily_changes_data = []
+#         for timestamp, details in raw_daily_changes_data.items():
+#             try:
+#                 date_str = timestamp.split(',')[0].strip()
+#                 date = datetime.strptime(date_str, "%m/%d/%Y").strftime("%Y-%m-%d")
+#                 if date >= quarter_start:
+#                     daily_changes_data.append({"date": date, "value": details.get("portfolio_daily_change", 0)})
+#             except Exception as e:
+#                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         unique_daily_changes = {entry["date"]: entry["value"] for entry in daily_changes_data}
+#         sorted_actual_dates = sorted(unique_daily_changes.keys())
+#         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+#         return jsonify({
+#             "client_id": client_id,
+#             "comparison_chart_data": {
+#                 "actual_dates": sorted_actual_dates,
+#                 "actual_values": actual_line_chart_data,
+#                 "predicted": predicted_line_chart_data,
+#             },
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error generating actual vs predicted comparison: {e}")
+#         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
 
 ############################################################################################
 
