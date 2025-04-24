@@ -3385,6 +3385,67 @@ def save_personal_details():
         logging.error(f"Error saving personal details: {e}")
         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
+# get personal details by id :
+
+@app.route('/api/get-personal-details', methods=['GET'])
+@jwt_required()
+def get_personal_details():
+    try:
+        client_id = request.args.get('client_id')
+
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+        email, role, organization = get_user_details()
+        print(f"User {email} with role {role} is requesting personal details for {client_id}")
+
+        if USE_AWS:
+            s3_key = f"{client_summary_folder}personal_details/{client_id}_personal_data.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                personal_data = json.loads(response['Body'].read().decode('utf-8'))
+
+                # Role-Based Access Control
+                if role == "super_admin":
+                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+                if role == "admin" and personal_data.get('organization') == organization:
+                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+                if role == "user" and personal_data.get('submittedBy') == email:
+                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+                return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+
+            except s3.exceptions.NoSuchKey:
+                return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+            except Exception as e:
+                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"personal_details/{client_id}.json")
+
+            if not os.path.exists(file_path):
+                return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+
+            with open(file_path, 'r') as f:
+                personal_data = json.load(f)
+
+            # Role-Based Access Control
+            if role == "super_admin":
+                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+            if role == "admin" and personal_data.get('organization') == organization:
+                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+            if role == "user" and personal_data.get('submittedBy') == email:
+                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+            return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+
+    except Exception as e:
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+
 
 ##########################################
 
