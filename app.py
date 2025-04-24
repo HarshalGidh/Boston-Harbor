@@ -3400,7 +3400,7 @@ def get_personal_details():
         print(f"User {email} with role {role} is requesting personal details for {client_id}")
 
         if USE_AWS:
-            s3_key = f"{client_summary_folder}personal_details/{client_id}_personal_data.json"
+            s3_key = f"{client_summary_folder}personal_data/{client_id}_personal_data.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
@@ -9973,6 +9973,7 @@ def actual_vs_predicted():
 ############################################################################################
 
 #####################################################################################################################
+from yfinance import Ticker
 
 def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
     try:
@@ -10009,6 +10010,9 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         FORECAST_DAYS = 92
         
         # Process each asset in the portfolio :
+        # Calculate actual portfolio return from market prices
+        total_initial_value = 0
+        total_current_value = 0
         
         for asset in portfolio_data:
             print(f"Processing asset: {asset['symbol']}")
@@ -10018,6 +10022,32 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 print(f"Skipping invalid ticker: {ticker}")
                 continue
 
+            quantity = asset.get("quantity", 0)
+            buy_price = asset.get("buy_price", 0)
+
+            if not ticker or ticker == "N/A" or quantity <= 0:
+                print(f"No valid Ticker :{ticker} or valid units :{quantity}")
+                continue
+
+            try:
+                # Fetch current market price
+                stock = Ticker(ticker)
+                current_price = stock.history(period="1d")["Close"].iloc[-1]
+
+                initial_value = buy_price * quantity
+                current_value = current_price * quantity
+
+                asset["actual_return_pct"] = round(((current_value - initial_value) / initial_value) * 100, 2)
+                asset["actual_return_value"] = round(current_value - initial_value, 2)
+
+                total_initial_value += initial_value
+                total_current_value += current_value
+
+            except Exception as e:
+                print(f"Failed to fetch current price for {ticker}: {e}")
+                asset["actual_return_pct"] = 0
+                asset["actual_return_value"] = 0
+                
             # Fetch historical returns
             historical_returns = fetch_historical_returns(ticker)
             if historical_returns.empty:
@@ -10057,7 +10087,18 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 asset["forecasted_returns"] = [0] * FORECAST_DAYS
                 asset["simulated_returns"] = [0] * FORECAST_DAYS
             
+        # Overall actual return of the portfolio
+        if total_initial_value > 0:
+            portfolio_actual_return_pct = round(((total_current_value - total_initial_value) / total_initial_value) * 100, 2)
+            portfolio_actual_return_value = round(total_current_value - total_initial_value, 2)
+        else:
+            portfolio_actual_return_pct = 0
+            portfolio_actual_return_value = 0
+
+        print(f"Actual Portfolio Return: {portfolio_actual_return_pct}% | Value: ${portfolio_actual_return_value}")
+        
         # Load client financial data
+        
         if USE_AWS:
             # client_summary_key = f"{client_summary_folder}{client_id}.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
@@ -10155,6 +10196,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             Daily Changes So far (Fluctuations): {raw_daily_changes_data}
             Portfolio Daily Dates : {sorted_actual_dates}
             Portfolio Daily Returns: {actual_line_chart_data}
+            Portfolio Actual Return: {portfolio_actual_return_pct}% (${portfolio_actual_return_value})
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
