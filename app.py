@@ -3398,11 +3398,12 @@ def get_personal_details():
 
         email, role, organization = get_user_details()
         print(f"User {email} with role {role} is requesting personal details for {client_id}")
-
+        filename = f"{client_id}_personal_data.json"
         if USE_AWS:
-            s3_key = f"{client_summary_folder}personal_data/{client_id}_personal_data.json"
+            file_key = f"{client_summary_folder}personal_data/{filename}"
+
             try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
 
                 # Role-Based Access Control
