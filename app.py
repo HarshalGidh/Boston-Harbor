@@ -3339,6 +3339,10 @@ def load_progress():
 # Save the personal details submitted by the user in one step.
 # Stores the JSON data as <client_id>_personal_data.json under the personal_data folder.
 
+# Constants (move these to config if preferred)
+PERSONAL_DATA_FOLDER = "personal_data"
+def get_personal_data_filename(client_id): return f"{client_id}_personal_data.json"
+
 @app.route('/api/save-personal-details', methods=['POST'])
 @jwt_required()
 def save_personal_details():
@@ -3347,22 +3351,19 @@ def save_personal_details():
         if not data:
             return jsonify({"message": "Invalid or missing request payload"}), 400
 
-        # Extract client ID from common fields
+        # Get client ID
         client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
 
-        # Format file name and path
-        filename = f"{client_id}_personal_data.json"
+        filename = get_personal_data_filename(client_id)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Update timestamp fields
         data["last_modified_date"] = current_time
         data["uniqueId"] = client_id
 
         if USE_AWS:
-            # Save to S3
-            file_key = f"{client_summary_folder}personal_data/{filename}"
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
                 Key=file_key,
@@ -3370,11 +3371,8 @@ def save_personal_details():
                 ContentType="application/json"
             )
         else:
-            # Save locally
-            folder_path = os.path.join("personal_data")
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-
+            folder_path = os.path.join(PERSONAL_DATA_FOLDER)
+            os.makedirs(folder_path, exist_ok=True)
             file_path = os.path.join(folder_path, filename)
             with open(file_path, 'w') as f:
                 json.dump(data, f, indent=4)
@@ -3385,38 +3383,25 @@ def save_personal_details():
         logging.error(f"Error saving personal details: {e}")
         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
-# get personal details by id :
 
 @app.route('/api/get-personal-details', methods=['GET'])
 @jwt_required()
 def get_personal_details():
     try:
         client_id = request.args.get('client_id')
-
         if not client_id:
             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
         email, role, organization = get_user_details()
         print(f"User {email} with role {role} is requesting personal details for {client_id}")
-        filename = f"{client_id}_personal_data.json"
-        if USE_AWS:
-            file_key = f"{client_summary_folder}personal_data/{filename}"
 
+        filename = get_personal_data_filename(client_id)
+
+        if USE_AWS:
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
-
-                # Role-Based Access Control
-                if role == "super_admin":
-                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
-
-                if role == "admin" and personal_data.get('organization') == organization:
-                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
-
-                if role == "user" and personal_data.get('submittedBy') == email:
-                    return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
-
-                return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
 
             except s3.exceptions.NoSuchKey:
                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
@@ -3424,31 +3409,30 @@ def get_personal_details():
                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
 
         else:
-            file_path = os.path.join(CLIENT_DATA_DIR, f"personal_details/{client_id}.json")
-
+            file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
             if not os.path.exists(file_path):
                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
 
             with open(file_path, 'r') as f:
                 personal_data = json.load(f)
 
-            # Role-Based Access Control
-            if role == "super_admin":
-                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+        # Role-Based Access Control
+        if role == "super_admin":
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+        if role == "admin" and personal_data.get('organization') == organization:
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+        if role == "user" and personal_data.get('submittedBy') == email:
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
 
-            if role == "admin" and personal_data.get('organization') == organization:
-                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
-
-            if role == "user" and personal_data.get('submittedBy') == email:
-                return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
-
-            return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+        return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
 
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
-##########################################
+
+
+################################################################################################
 
 
 # ✅ Get All Client Data Based on Role
