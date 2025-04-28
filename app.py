@@ -3344,73 +3344,65 @@ PERSONAL_DATA_FOLDER = os.getenv('PERSONAL_DATA_FOLDER','personal_data')  #"pers
 
 def get_personal_data_filename(client_id): return f"{client_id}_personal_data.json"
 
-# updated save personal details data api :
-@app.route('/api/save-personal-details', methods=['POST'])
-@jwt_required()
-def save_personal_details():
+# v-2 :
+def save_key_points_for_client(client_id, client_name, client_email, client_contact, last_action_date, last_action_type):
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"message": "Invalid or missing request payload"}), 400
+        key_points = key_talking_points_using_genai(client_id, client_name, client_email, client_contact, last_action_date, last_action_type)
+        key_points_data = {
+            "key_points": key_points,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
 
-        # Get client ID
-        client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
-        if not client_id:
-            return jsonify({"message": "Client ID is required"}), 400
-
-        filename = get_personal_data_filename(client_id)
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        data["last_modified_date"] = current_time
-        data["uniqueId"] = client_id
-
-        # Load existing data if present
         if USE_AWS:
-            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
-            try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                existing_data = json.loads(response['Body'].read().decode('utf-8'))
-                is_update = True
-            except Exception:
-                existing_data = {}
-                is_update = False
-        else:
-            folder_path = os.path.join(PERSONAL_DATA_FOLDER)
-            os.makedirs(folder_path, exist_ok=True)
-            file_path = os.path.join(folder_path, filename)
-
-            if os.path.exists(file_path):
-                with open(file_path, 'r') as f:
-                    existing_data = json.load(f)
-                is_update = True
-            else:
-                existing_data = {}
-                is_update = False
-
-        # Deep merge incoming data into existing data (replace keys properly)
-        merged_data = deep_merge(existing_data, data)
-
-        # Save merged data
-        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
-                Key=file_key,
-                Body=json.dumps(merged_data, indent=4),
+                Key=key_file,
+                Body=json.dumps(key_points_data, indent=4),
                 ContentType="application/json"
             )
         else:
-            with open(file_path, 'w') as f:
-                json.dump(merged_data, f, indent=4)
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            os.makedirs(folder_path, exist_ok=True)
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            with open(key_file, 'w') as f:
+                json.dump(key_points_data, f, indent=4)
 
-        action = "updated" if is_update else "created"
-        return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
-
+        logging.info(f"Key points saved successfully for client {client_id}")
     except Exception as e:
-        logging.error(f"Error saving personal details: {e}")
-        return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
+        logging.error(f"Error saving key points for {client_id}: {e}")
 
 
-# previous version created nested data objects :
+def save_key_points_for_client(client_id, client_name, client_email, client_contact, last_action_date, last_action_type):
+    try:
+        key_points = key_talking_points_using_genai(client_id, client_name, client_email, client_contact, last_action_date, last_action_type)
+        key_points_data = {
+            "key_points": key_points,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=key_file,
+                Body=json.dumps(key_points_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            os.makedirs(folder_path, exist_ok=True)
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            with open(key_file, 'w') as f:
+                json.dump(key_points_data, f, indent=4)
+
+        logging.info(f"Key points saved successfully for client {client_id}")
+    except Exception as e:
+        logging.error(f"Error saving key points for {client_id}: {e}")
+
+
+# v-1 :
+# updated save personal details data api :
 # @app.route('/api/save-personal-details', methods=['POST'])
 # @jwt_required()
 # def save_personal_details():
@@ -3430,26 +3422,51 @@ def save_personal_details():
 #         data["last_modified_date"] = current_time
 #         data["uniqueId"] = client_id
 
+#         # Load existing data if present
 #         if USE_AWS:
 #             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=file_key,
-#                 Body=json.dumps(data, indent=4),
-#                 ContentType="application/json"
-#             )
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
 #         else:
 #             folder_path = os.path.join(PERSONAL_DATA_FOLDER)
 #             os.makedirs(folder_path, exist_ok=True)
 #             file_path = os.path.join(folder_path, filename)
-#             with open(file_path, 'w') as f:
-#                 json.dump(data, f, indent=4)
 
-#         return jsonify({"message": f"Personal details saved successfully for client ID: {client_id}"}), 200
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#         # Deep merge incoming data into existing data (replace keys properly)
+#         merged_data = deep_merge(existing_data, data)
+
+#         # Save merged data
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(merged_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
 
 #     except Exception as e:
 #         logging.error(f"Error saving personal details: {e}")
 #         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
+
 
 
 # new personal details :
@@ -19593,35 +19610,70 @@ def get_completed_todos():
 
 # GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
 
-# v-2 :
+# v-3 :
+def create_task(user_email, clientName, clientEmail, clientContact, uniqueId, event_date, occasion, last_date, last_action_type, key_points, client):
+    return {
+        "todo_id": random.randint(10000, 99999),
+        "user_email": user_email,
+        "action": "Call",
+        "clientName": clientName,
+        "clientEmail": clientEmail,
+        "clientContact": clientContact,
+        "uniqueId": uniqueId,
+        "date": event_date.strftime("%B %d, %Y"),
+        "occasion": occasion,
+        "last_action_date": last_date,
+        "aum": client.get("investmentAmount", 0),
+        "key_points": key_points,
+        "investor_personality": client.get("investment_personality", "N/A"),
+        "last_action_type": last_action_type,
+        "last_call_summary": None,
+        "auto_generated": True,
+        "checked": False,
+        "source": "event"
+    }
+
+def load_key_points(client_id):
+    try:
+        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key_file)
+            key_points_data = json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            if not os.path.exists(key_file):
+                return None
+            with open(key_file, 'r') as f:
+                key_points_data = json.load(f)
+
+        return key_points_data.get("key_points")
+    except Exception as e:
+        logging.warning(f"Key points not found for {client_id}: {e}")
+        return None
+
+
 
 @app.route('/api/todos', methods=['GET'])
 @jwt_required()
 def get_todos():
     try:
-        # Get current user's details.
         user_email, role, organization = get_user_details()
-        todos = load_todos()  # load active todos
+        todos = load_todos()
 
-        # Remove any todos that are marked as completed.
         active_todos = [t for t in todos if not t.get("checked", False)]
-
-        # If some tasks were checked (i.e. removed), save the updated active todos.
         if len(active_todos) < len(todos):
             save_todos(active_todos)
         todos = active_todos
 
-        # For non-admin users, show only todos matching their email.
         if role not in ["admin", "super_admin"]:
             todos = [t for t in todos if t.get("user_email") == user_email]
 
-        # Auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
         clients = load_all_clients()
-        upcoming_birthday_todos = []
+        upcoming_events = []
         today = datetime.today().date()
 
         for client in clients:
-            # Role-based filtering for client data.
             if role == "admin" and client.get("organization") != organization:
                 continue
             if role == "user" and client.get("submittedBy") != user_email:
@@ -19630,54 +19682,101 @@ def get_todos():
             client_detail = client.get("clientDetail", {})
             clientName = client_detail.get("clientName", "N/A")
             client_dob = client_detail.get("clientDob")
-            if not client_dob:
-                continue
+            uniqueId = client.get("uniqueId", "N/A")
+            clientEmail = client_detail.get("clientEmail", "N/A")
+            clientContact = client_detail.get("clientContact", "N/A")
+
+            # Load personal data (anniversary/graduation)
+            personal_data = {}
             try:
-                dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+                filename = get_personal_data_filename(uniqueId)
+                if USE_AWS:
+                    file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                    personal_data = json.loads(response['Body'].read().decode('utf-8'))
+                else:
+                    file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+                    if os.path.exists(file_path):
+                        with open(file_path, 'r') as f:
+                            personal_data = json.load(f)
             except Exception as e:
-                logging.error(f"Error parsing DOB for {clientName}: {e}")
-                continue
+                logging.warning(f"No personal data found for {uniqueId}: {e}")
 
-            # Compute next birthday.
-            birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
-            next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
-            days_until = (next_birthday - today).days
+            last_date, last_action_type = get_last_interaction(clientName)
 
-            if days_until <= 7:
-                # Retrieve last interaction details for this client.
-                last_date, last_action_type = get_last_interaction(clientName)
-                # Get additional client contact info.
-                clientEmail = client_detail.get("clientEmail", "N/A")
-                clientContact = client_detail.get("clientContact", "N/A")
-                uniqueId = client.get("uniqueId", "N/A")
-                key_points = key_talking_points_using_genai(uniqueId,clientName,clientEmail,clientContact,last_date,last_action_type)
-                
-                birthday_task = {
-                    "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
-                    "user_email": user_email,
-                    "action": "Call",
-                    "clientName": clientName,
-                    "clientEmail": clientEmail,
-                    "clientContact": clientContact,
-                    "uniqueId": uniqueId,
-                    "date": next_birthday.strftime("%B %d, %Y"),
-                    "occasion": "Birthday",
-                    "last_action_date": last_date,  # from get_last_interaction
-                    "aum": client.get("investmentAmount", 0),
-                    "key_points": key_points , #f"Wishing you a very happy birthday, {clientName}!",
-                    "investor_personality": client.get("investment_personality", "N/A"),
-                    "last_action_type": last_action_type,
-                    "last_call_summary": None,
-                    "auto_generated": True,
-                    "checked": False,
-                    "source": "birthday"
-                }
-                upcoming_birthday_todos.append(birthday_task)
+            # --- Birthday Handling ---
+            if client_dob:
+                try:
+                    dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+                    birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+                    next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+                    days_until_birthday = (next_birthday - today).days
+                    if days_until_birthday <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        birthday_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, next_birthday, "Birthday", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(birthday_task)
+                except Exception as e:
+                    logging.error(f"Error parsing DOB for {clientName}: {e}")
 
-        # Combine stored todos with auto-generated birthday todos.
-        combined_todos = todos + upcoming_birthday_todos
+            # --- Anniversary Handling ---
+            anniversary_date = personal_data.get("anniversaryDate")
+            if anniversary_date:
+                try:
+                    anniv_date = datetime.strptime(anniversary_date, "%Y-%m-%d").date()
+                    anniversary_this_year = datetime(today.year, anniv_date.month, anniv_date.day).date()
+                    next_anniversary = anniversary_this_year if anniversary_this_year >= today else datetime(today.year + 1, anniv_date.month, anniv_date.day).date()
+                    days_until_anniversary = (next_anniversary - today).days
+                    if days_until_anniversary <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        anniversary_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, next_anniversary, "Wedding Anniversary", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(anniversary_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Anniversary for {clientName}: {e}")
 
-        # Define a helper to safely parse the "date" field.
+            # --- Graduation Client Handling ---
+            graduation_year = personal_data.get("graduation")
+            if graduation_year:
+                try:
+                    grad_year = int(graduation_year)
+                    graduation_date = datetime(grad_year, 6, 1).date()
+                    if graduation_date >= today and (graduation_date - today).days <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        grad_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, graduation_date, "Graduation-Client", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(grad_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Client Graduation for {clientName}: {e}")
+
+            # --- Graduation Child Handling ---
+            children = personal_data.get("children", [])
+            for child in children:
+                if not child.get("graduation"):
+                    continue
+                try:
+                    child_grad_year = int(child["graduation"])
+                    child_grad_date = datetime(child_grad_year, 6, 1).date()
+                    if child_grad_date >= today and (child_grad_date - today).days <= 7:
+                        child_gender = child.get("gender", "").lower()
+                        occasion = "Graduation-Son" if child_gender == "male" else "Graduation-Daughter" if child_gender == "female" else "Graduation-Child"
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        child_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, child_grad_date, occasion, last_date, last_action_type, key_points, client)
+                        upcoming_events.append(child_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Child Graduation for {clientName}: {e}")
+
+        combined_todos = todos + upcoming_events
+
         def parse_todo_date(todo):
             date_field = todo.get("date")
             try:
@@ -19693,6 +19792,337 @@ def get_todos():
     except Exception as e:
         logging.error(f"Error fetching to-dos: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+# v-2 : 
+# import time
+# import random
+
+# def safe_key_talking_points(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type, max_retries=3):
+#     retries = 0
+#     while retries < max_retries:
+#         try:
+#             return key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type)
+#         except Exception as e:
+#             error_message = str(e)
+#             if "429" in error_message:
+#                 wait_time = 2 ** retries + random.uniform(0, 1)
+#                 logging.warning(f"Rate limit hit. Retrying after {wait_time:.2f} seconds...")
+#                 time.sleep(wait_time)
+#                 retries += 1
+#             else:
+#                 logging.error(f"Unexpected error in AI generation: {e}")
+#                 return "No key points available"
+#     logging.error(f"Failed to generate key points for {clientName} after {max_retries} retries.")
+#     return "No key points available"
+
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()
+
+#         active_todos = [t for t in todos if not t.get("checked", False)]
+#         if len(active_todos) < len(todos):
+#             save_todos(active_todos)
+#         todos = active_todos
+
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         clients = load_all_clients()
+#         upcoming_events = []
+#         today = datetime.today().date()
+
+#         for index, client in enumerate(clients):
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             uniqueId = client.get("uniqueId", "N/A")
+#             clientEmail = client_detail.get("clientEmail", "N/A")
+#             clientContact = client_detail.get("clientContact", "N/A")
+
+#             # Load personal data
+#             personal_data = {}
+#             try:
+#                 filename = get_personal_data_filename(uniqueId)
+#                 if USE_AWS:
+#                     file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                     personal_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 else:
+#                     file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+#                     if os.path.exists(file_path):
+#                         with open(file_path, 'r') as f:
+#                             personal_data = json.load(f)
+#             except Exception as e:
+#                 logging.warning(f"No personal data found for {uniqueId}: {e}")
+
+#             # Last interaction
+#             last_date, last_action_type = get_last_interaction(clientName)
+
+#             # Safe LLM call
+#             key_points = safe_key_talking_points(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type)
+
+#             # Pause after every 5 clients to avoid rate limit
+#             if index % 5 == 0 and index != 0:
+#                 time.sleep(2)
+
+#             # Birthday
+#             if client_dob:
+#                 try:
+#                     dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#                     birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#                     next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#                     if (next_birthday - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": next_birthday.strftime("%B %d, %Y"),
+#                             "occasion": "Birthday",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "birthday"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing birthday for {clientName}: {e}")
+
+#             # Anniversary
+#             anniversary_date = personal_data.get("anniversaryDate")
+#             if anniversary_date:
+#                 try:
+#                     anniv_date = datetime.strptime(anniversary_date, "%Y-%m-%d").date()
+#                     next_anniversary = anniv_date.replace(year=today.year)
+#                     if next_anniversary < today:
+#                         next_anniversary = next_anniversary.replace(year=today.year + 1)
+#                     if (next_anniversary - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": next_anniversary.strftime("%B %d, %Y"),
+#                             "occasion": "Wedding Anniversary",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "anniversary"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing anniversary for {clientName}: {e}")
+
+#             # Client Graduation
+#             graduation_year = personal_data.get("graduation")
+#             if graduation_year:
+#                 try:
+#                     grad_year = int(graduation_year)
+#                     graduation_date = datetime(grad_year, 6, 1).date()
+#                     if graduation_date >= today and (graduation_date - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": graduation_date.strftime("%B %d, %Y"),
+#                             "occasion": "Graduation-Client",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "graduation"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing client graduation for {clientName}: {e}")
+
+#             # Children Graduation
+#             children = personal_data.get("children", [])
+#             for child in children:
+#                 if not child.get("graduation"):
+#                     continue
+#                 try:
+#                     child_grad_year = int(child["graduation"])
+#                     child_grad_date = datetime(child_grad_year, 6, 1).date()
+#                     if child_grad_date >= today and (child_grad_date - today).days <= 7:
+#                         gender = child.get("gender", "").lower()
+#                         if gender == "male":
+#                             occasion = "Graduation-Son"
+#                         elif gender == "female":
+#                             occasion = "Graduation-Daughter"
+#                         else:
+#                             occasion = "Graduation-Child"
+
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": child_grad_date.strftime("%B %d, %Y"),
+#                             "occasion": occasion,
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "graduation"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing child graduation for {clientName}: {e}")
+
+#         combined_todos = todos + upcoming_events
+
+#         def parse_todo_date(todo):
+#             try:
+#                 return datetime.strptime(todo.get("date"), "%B %d, %Y")
+#             except Exception:
+#                 return datetime(1970, 1, 1)
+
+#         combined_todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# v-1 :
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         # Get current user's details.
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()  # load active todos
+
+#         # Remove any todos that are marked as completed.
+#         active_todos = [t for t in todos if not t.get("checked", False)]
+
+#         # If some tasks were checked (i.e. removed), save the updated active todos.
+#         if len(active_todos) < len(todos):
+#             save_todos(active_todos)
+#         todos = active_todos
+
+#         # For non-admin users, show only todos matching their email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+#         clients = load_all_clients()
+#         upcoming_birthday_todos = []
+#         today = datetime.today().date()
+
+#         for client in clients:
+#             # Role-based filtering for client data.
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday.
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             days_until = (next_birthday - today).days
+
+#             if days_until <= 7:
+#                 # Retrieve last interaction details for this client.
+#                 last_date, last_action_type = get_last_interaction(clientName)
+#                 # Get additional client contact info.
+#                 clientEmail = client_detail.get("clientEmail", "N/A")
+#                 clientContact = client_detail.get("clientContact", "N/A")
+#                 uniqueId = client.get("uniqueId", "N/A")
+#                 key_points = key_talking_points_using_genai(uniqueId,clientName,clientEmail,clientContact,last_date,last_action_type)
+                
+#                 birthday_task = {
+#                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
+#                     "user_email": user_email,
+#                     "action": "Call",
+#                     "clientName": clientName,
+#                     "clientEmail": clientEmail,
+#                     "clientContact": clientContact,
+#                     "uniqueId": uniqueId,
+#                     "date": next_birthday.strftime("%B %d, %Y"),
+#                     "occasion": "Birthday",
+#                     "last_action_date": last_date,  # from get_last_interaction
+#                     "aum": client.get("investmentAmount", 0),
+#                     "key_points": key_points , #f"Wishing you a very happy birthday, {clientName}!",
+#                     "investor_personality": client.get("investment_personality", "N/A"),
+#                     "last_action_type": last_action_type,
+#                     "last_call_summary": None,
+#                     "auto_generated": True,
+#                     "checked": False,
+#                     "source": "birthday"
+#                 }
+#                 upcoming_birthday_todos.append(birthday_task)
+
+#         # Combine stored todos with auto-generated birthday todos.
+#         combined_todos = todos + upcoming_birthday_todos
+
+#         # Define a helper to safely parse the "date" field.
+#         def parse_todo_date(todo):
+#             date_field = todo.get("date")
+#             try:
+#                 return datetime.strptime(date_field, "%B %d, %Y")
+#             except Exception as e:
+#                 logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
+#                 return datetime(1970, 1, 1)
+
+#         combined_todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 def key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_action_date):
     today = datetime.today().date()
@@ -19719,7 +20149,7 @@ def key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientCont
         Try to show positive points
 
         ❌ Do NOT include greetings or HTML.
-        ✅ Only output 1-liner financial talking points.
+        ✅ Only output 1-liner financial talking points Consisting of only 10-12 words.
         ✅ Keep each point relevant, crisp, and based on the data.
         ✅ Examples:
         - Portfolio value has appreciated by 23% since last call.
@@ -19727,6 +20157,8 @@ def key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientCont
         - Real estate investments have outperformed by 30% YTD.
         - Client has not invested yet. Induction call to be scheduled.
         - Equity portfolio is concentrated in AAPL and TSLA – review diversification.
+        Create one key talking Point similar to one of the above examples and just describe one of the best key talking points not all.
+        Follow all the instructions properly.
         """
 
     try:
