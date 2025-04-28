@@ -3466,19 +3466,23 @@ def get_personal_details():
 
         filename = get_personal_data_filename(client_id)
 
+        personal_data = {}  # initialize empty
+        client_data = {}    # initialize empty
+
         if USE_AWS:
-            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            # Try to load personal_data
             try:
+                file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
             except s3.exceptions.NoSuchKey:
-                return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+                print(f"No personal details found for client_id: {client_id}, continuing without it.")
             except Exception as e:
-                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+                print(f"Error retrieving personal details: {e}")
 
-            # Now also load client form data (for additional details)
-            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            # Always try to load client-data
             try:
+                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
                 client_data = json.loads(response['Body'].read().decode('utf-8'))
             except Exception as e:
@@ -3486,14 +3490,15 @@ def get_personal_details():
                 return jsonify({'message': f"Error retrieving client data: {str(e)}"}), 500
 
         else:
+            # Try to load personal_data
             file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
-            if not os.path.exists(file_path):
-                return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    personal_data = json.load(f)
+            else:
+                print(f"No personal details found locally for client_id: {client_id}, continuing without it.")
 
-            with open(file_path, 'r') as f:
-                personal_data = json.load(f)
-
-            # Now also load client form data (for additional details)
+            # Always try to load client-data
             client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
             if not os.path.exists(client_data_file_path):
                 return jsonify({'message': f"No client data found for client ID: {client_id}"}), 404
@@ -3501,7 +3506,12 @@ def get_personal_details():
             with open(client_data_file_path, 'r') as f:
                 client_data = json.load(f)
 
-        # Extract additional fields from client form
+        # 🛠 FIX NESTING if exists
+        if "data" in personal_data and isinstance(personal_data["data"], dict):
+            inner_data = personal_data.pop("data")
+            personal_data.update(inner_data)
+
+        # 🛠 Merge additional fields from client form
         client_details = client_data.get("clientDetail", {})
         additional_info = {
             "clientName": client_details.get("clientName"),
@@ -3512,9 +3522,9 @@ def get_personal_details():
             "clientContact": client_details.get("clientContact"),
             "maritalStatus": client_details.get("maritalStatus")
         }
+        personal_data.update({k: v for k, v in additional_info.items() if v is not None})
 
-        # Merge additional fields into personal_data
-        personal_data.update(additional_info)
+        # ✅ Now, even if personal_data was empty, you will get the important info!
 
         # Role-Based Access Control
         if role == "super_admin":
@@ -3530,8 +3540,85 @@ def get_personal_details():
         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 
+# previous :
+# @app.route('/api/get-personal-details', methods=['GET'])
+# @jwt_required()
+# def get_personal_details():
+#     try:
+#         client_id = request.args.get('client_id')
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
+#         email, role, organization = get_user_details()
+#         print(f"User {email} with role {role} is requesting personal details for {client_id}")
 
+#         filename = get_personal_data_filename(client_id)
+
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+#             except Exception as e:
+#                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
+#             # Load client form data
+#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 logging.error(f"Error retrieving client data from AWS: {e}")
+#                 return jsonify({'message': f"Error retrieving client data: {str(e)}"}), 500
+
+#         else:
+#             file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+#             if not os.path.exists(file_path):
+#                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+
+#             with open(file_path, 'r') as f:
+#                 personal_data = json.load(f)
+
+#             client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if not os.path.exists(client_data_file_path):
+#                 return jsonify({'message': f"No client data found for client ID: {client_id}"}), 404
+
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+
+#         # 🛠 FIX NESTING if exists
+#         if "data" in personal_data and isinstance(personal_data["data"], dict):
+#             inner_data = personal_data.pop("data")
+#             personal_data.update(inner_data)
+
+#         # Extract additional fields from client form
+#         client_details = client_data.get("clientDetail", {})
+#         additional_info = {
+#             "clientName": client_details.get("clientName"),
+#             "city": client_details.get("city"),
+#             "state": client_details.get("state"),
+#             "clientEmail": client_details.get("clientEmail"),
+#             "clientDob": client_details.get("clientDob"),
+#             "clientContact": client_details.get("clientContact"),
+#             "maritalStatus": client_details.get("maritalStatus")
+#         }
+
+#         personal_data.update(additional_info)
+
+#         # Role-Based Access Control
+#         if role == "super_admin":
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+#         if role == "admin" and personal_data.get('organization') == organization:
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+#         if role == "user" and personal_data.get('submittedBy') == email:
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+#         return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 ################################################################################################
 
