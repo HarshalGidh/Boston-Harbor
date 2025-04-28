@@ -3403,69 +3403,69 @@ def save_key_points_for_client(client_id, client_name, client_email, client_cont
 
 # v-1 :
 # updated save personal details data api :
-# @app.route('/api/save-personal-details', methods=['POST'])
-# @jwt_required()
-# def save_personal_details():
-#     try:
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({"message": "Invalid or missing request payload"}), 400
+@app.route('/api/save-personal-details', methods=['POST'])
+@jwt_required()
+def save_personal_details():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid or missing request payload"}), 400
 
-#         # Get client ID
-#         client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
-#         if not client_id:
-#             return jsonify({"message": "Client ID is required"}), 400
+        # Get client ID
+        client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
 
-#         filename = get_personal_data_filename(client_id)
-#         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        filename = get_personal_data_filename(client_id)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-#         data["last_modified_date"] = current_time
-#         data["uniqueId"] = client_id
+        data["last_modified_date"] = current_time
+        data["uniqueId"] = client_id
 
-#         # Load existing data if present
-#         if USE_AWS:
-#             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
-#             try:
-#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
-#                 is_update = True
-#             except Exception:
-#                 existing_data = {}
-#                 is_update = False
-#         else:
-#             folder_path = os.path.join(PERSONAL_DATA_FOLDER)
-#             os.makedirs(folder_path, exist_ok=True)
-#             file_path = os.path.join(folder_path, filename)
+        # Load existing data if present
+        if USE_AWS:
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
+        else:
+            folder_path = os.path.join(PERSONAL_DATA_FOLDER)
+            os.makedirs(folder_path, exist_ok=True)
+            file_path = os.path.join(folder_path, filename)
 
-#             if os.path.exists(file_path):
-#                 with open(file_path, 'r') as f:
-#                     existing_data = json.load(f)
-#                 is_update = True
-#             else:
-#                 existing_data = {}
-#                 is_update = False
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                is_update = True
+            else:
+                existing_data = {}
+                is_update = False
 
-#         # Deep merge incoming data into existing data (replace keys properly)
-#         merged_data = deep_merge(existing_data, data)
+        # Deep merge incoming data into existing data (replace keys properly)
+        merged_data = deep_merge(existing_data, data)
 
-#         # Save merged data
-#         if USE_AWS:
-#             s3.put_object(
-#                 Bucket=S3_BUCKET_NAME,
-#                 Key=file_key,
-#                 Body=json.dumps(merged_data, indent=4),
-#                 ContentType="application/json"
-#             )
-#         else:
-#             with open(file_path, 'w') as f:
-#                 json.dump(merged_data, f, indent=4)
+        # Save merged data
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(merged_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(merged_data, f, indent=4)
 
-#         action = "updated" if is_update else "created"
-#         return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
+        action = "updated" if is_update else "created"
+        return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
 
-#     except Exception as e:
-#         logging.error(f"Error saving personal details: {e}")
-#         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
+    except Exception as e:
+        logging.error(f"Error saving personal details: {e}")
+        return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
 
 
@@ -6196,7 +6196,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                 for row in csv_reader:
                     symbol, name, exchange, asset_type = row[0], row[1], row[2], row[3]
                     if exchange.upper() == exchange_code.upper():
-                        asset_type = 'stock' if asset_type.lower() == 'stock' else 'ETF'
+                        asset_type = 'stock' if asset_type.lower() == 'stock' or asset_type.lower() == 'stocks' else 'ETF'
                         # if preference == ''
                         assets.append({"symbol": symbol, "name": name, "type": asset_type})
                 return assets
@@ -6240,7 +6240,7 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     cols = row.find_all("td")
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
-                    if not preference or preference == "stock":
+                    if not preference or preference == "stock" or preference == "stocks":
                         assets.append({
                             "name": name,
                             "symbol": symbol,
