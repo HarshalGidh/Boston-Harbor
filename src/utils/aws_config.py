@@ -16,6 +16,8 @@ signUp_user_folder = os.getenv('signUp_user_folder')
 PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
 chat_history_folder = os.getenv("chat_history_folder")
 tax_assessment_folder = os.getenv('tax_assessment_folder')
+# PERSONAL_DATA_FOLDER = os.getenv('PERSONAL_DATA_FOLDER')
+PERSONAL_DATA_FOLDER = '' #'personal_data'
 TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
 todos_folder = os.getenv('todos_folder')
 # Connecting to Amazon S3
@@ -179,7 +181,11 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # FILE_KEY = "chat_history_folder//chats.json"
 # FILE_KEY = "todos_folder//todos_list.json"
 
-#Delete files using file keys : 
+# FILE_KEY = "client_summary_folder/personal_data/JJ5298_personal_data.json"
+# FILE_KEY= "client_summary_folder/personal_data/TC5034_personal_data.json"
+# FILE_KEY = "client_summary_folder/personal_data/TN4545_personal_data.json"
+
+# #Delete files using file keys : 
 # def delete_file_from_s3(bucket_name, file_key):
 #     """
 #     Deletes a specified file from an S3 bucket.
@@ -204,6 +210,7 @@ LOCAL_STORAGE_PATH = os.getenv('LOCAL_STORAGE_PATH')
 # delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
 # list_s3_keys(S3_BUCKET_NAME, todos_folder) 
 # list_s3_keys(S3_BUCKET_NAME, chat_history_folder) 
+# list_s3_keys(S3_BUCKET_NAME, PERSONAL_DATA_FOLDER) 
 
 
 # list_s3_keys(S3_BUCKET_NAME, client_summary_folder) 

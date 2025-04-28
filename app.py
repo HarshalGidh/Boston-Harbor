@@ -3340,9 +3340,11 @@ def load_progress():
 # Stores the JSON data as <client_id>_personal_data.json under the personal_data folder.
 
 # Constants (move these to config if preferred)
-PERSONAL_DATA_FOLDER = "personal_data"
+PERSONAL_DATA_FOLDER = os.getenv('PERSONAL_DATA_FOLDER','personal_data')  #"personal_data"
+
 def get_personal_data_filename(client_id): return f"{client_id}_personal_data.json"
 
+# updated save personal details data api :
 @app.route('/api/save-personal-details', methods=['POST'])
 @jwt_required()
 def save_personal_details():
@@ -3362,28 +3364,95 @@ def save_personal_details():
         data["last_modified_date"] = current_time
         data["uniqueId"] = client_id
 
+        # Load existing data if present
         if USE_AWS:
             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=file_key,
-                Body=json.dumps(data, indent=4),
-                ContentType="application/json"
-            )
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
         else:
             folder_path = os.path.join(PERSONAL_DATA_FOLDER)
             os.makedirs(folder_path, exist_ok=True)
             file_path = os.path.join(folder_path, filename)
-            with open(file_path, 'w') as f:
-                json.dump(data, f, indent=4)
 
-        return jsonify({"message": f"Personal details saved successfully for client ID: {client_id}"}), 200
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                is_update = True
+            else:
+                existing_data = {}
+                is_update = False
+
+        # Deep merge incoming data into existing data (replace keys properly)
+        merged_data = deep_merge(existing_data, data)
+
+        # Save merged data
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(merged_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(merged_data, f, indent=4)
+
+        action = "updated" if is_update else "created"
+        return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
 
     except Exception as e:
         logging.error(f"Error saving personal details: {e}")
         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
 
+# previous version created nested data objects :
+# @app.route('/api/save-personal-details', methods=['POST'])
+# @jwt_required()
+# def save_personal_details():
+#     try:
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({"message": "Invalid or missing request payload"}), 400
+
+#         # Get client ID
+#         client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         filename = get_personal_data_filename(client_id)
+#         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+#         data["last_modified_date"] = current_time
+#         data["uniqueId"] = client_id
+
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             folder_path = os.path.join(PERSONAL_DATA_FOLDER)
+#             os.makedirs(folder_path, exist_ok=True)
+#             file_path = os.path.join(folder_path, filename)
+#             with open(file_path, 'w') as f:
+#                 json.dump(data, f, indent=4)
+
+#         return jsonify({"message": f"Personal details saved successfully for client ID: {client_id}"}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving personal details: {e}")
+#         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
+
+
+# new personal details :
 @app.route('/api/get-personal-details', methods=['GET'])
 @jwt_required()
 def get_personal_details():
@@ -3402,11 +3471,19 @@ def get_personal_details():
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
-
             except s3.exceptions.NoSuchKey:
                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
             except Exception as e:
                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
+            # Now also load client form data (for additional details)
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return jsonify({'message': f"Error retrieving client data: {str(e)}"}), 500
 
         else:
             file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
@@ -3415,6 +3492,29 @@ def get_personal_details():
 
             with open(file_path, 'r') as f:
                 personal_data = json.load(f)
+
+            # Now also load client form data (for additional details)
+            client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({'message': f"No client data found for client ID: {client_id}"}), 404
+
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+
+        # Extract additional fields from client form
+        client_details = client_data.get("clientDetail", {})
+        additional_info = {
+            "clientName": client_details.get("clientName"),
+            "city": client_details.get("city"),
+            "state": client_details.get("state"),
+            "clientEmail": client_details.get("clientEmail"),
+            "clientDob": client_details.get("clientDob"),
+            "clientContact": client_details.get("clientContact"),
+            "maritalStatus": client_details.get("maritalStatus")
+        }
+
+        # Merge additional fields into personal_data
+        personal_data.update(additional_info)
 
         # Role-Based Access Control
         if role == "super_admin":
@@ -3428,6 +3528,7 @@ def get_personal_details():
 
     except Exception as e:
         return jsonify({'message': f"An error occurred: {e}"}), 500
+
 
 
 
