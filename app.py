@@ -3467,6 +3467,25 @@ def save_personal_details():
         logging.error(f"Error saving personal details: {e}")
         return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
 
+def load_personal_data(uniqueId):
+    try:
+        # filename = f"{uniqueId}.json"
+        filename = get_personal_data_filename(uniqueId)
+        
+        if USE_AWS:
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            # file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+            print(f"Found Personal Data of : {uniqueId}")
+            return json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    return json.load(f)
+    except Exception as e:
+        logging.warning(f"No personal data found for {uniqueId}: {e}")
+    return {}
 
 
 # new personal details :
@@ -19652,6 +19671,11 @@ def load_key_points(client_id):
         logging.warning(f"Key points not found for {client_id}: {e}")
         return None
 
+def is_duplicate_task(events, uniqueId, occasion, date):
+    return any(
+        t["uniqueId"] == uniqueId and t["occasion"] == occasion and t["date"] == date.strftime("%B %d, %Y")
+        for t in events
+    )
 
 
 @app.route('/api/todos', methods=['GET'])
@@ -19687,22 +19711,19 @@ def get_todos():
             clientContact = client_detail.get("clientContact", "N/A")
 
             # Load personal data (anniversary/graduation)
-            personal_data = {}
-            try:
-                filename = get_personal_data_filename(uniqueId)
-                if USE_AWS:
-                    file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
-                    response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-                    personal_data = json.loads(response['Body'].read().decode('utf-8'))
-                else:
-                    file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
-                    if os.path.exists(file_path):
-                        with open(file_path, 'r') as f:
-                            personal_data = json.load(f)
-            except Exception as e:
-                logging.warning(f"No personal data found for {uniqueId}: {e}")
+            personal_data  = load_personal_data(uniqueId) #{}
+            print(f"Found Personal Data of : {uniqueId} \n {personal_data}")
 
             last_date, last_action_type = get_last_interaction(clientName)
+            
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Birthday", next_anniversary):
+            #     continue
+
+            # proceed with creating the birthday_task
 
             # --- Birthday Handling ---
             if client_dob:
@@ -19722,7 +19743,18 @@ def get_todos():
                     logging.error(f"Error parsing DOB for {clientName}: {e}")
 
             # --- Anniversary Handling ---
-            anniversary_date = personal_data.get("anniversaryDate")
+            
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Wedding Anniversary", next_anniversary):
+            #     continue
+
+            # proceed with creating the anniversary_task
+
+            anniversary_date = personal_data.get("data", {}).get("anniversaryDate")
+            print(anniversary_date)
             if anniversary_date:
                 try:
                     anniv_date = datetime.strptime(anniversary_date, "%Y-%m-%d").date()
@@ -19740,7 +19772,15 @@ def get_todos():
                     logging.error(f"Error parsing Anniversary for {clientName}: {e}")
 
             # --- Graduation Client Handling ---
-            graduation_year = personal_data.get("graduation")
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Graduation-Client", next_anniversary):
+            #     continue
+
+            graduation_year = personal_data.get("data", {}).get("graduation")
+            print(graduation_year)
             if graduation_year:
                 try:
                     grad_year = int(graduation_year)
@@ -19756,7 +19796,9 @@ def get_todos():
                     logging.error(f"Error parsing Client Graduation for {clientName}: {e}")
 
             # --- Graduation Child Handling ---
-            children = personal_data.get("children", [])
+            # children = personal_data.get("children", [])
+            children = personal_data.get("data", {}).get("children", [])
+            print(children)
             for child in children:
                 if not child.get("graduation"):
                     continue
