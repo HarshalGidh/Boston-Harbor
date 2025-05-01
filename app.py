@@ -20729,41 +20729,174 @@ def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
     
     return candlestick_data, ema_data, rsi_data
 
-@app.route('/api/market-movers',methods=['POST'])
+
+# new : added overview 
+@app.route('/api/market-movers', methods=['POST'])
 def get_chart_data():
     try:
-        ticker = request.json.get('ticker','^IXIC') # By default show NASDAQ Data
-        interval = request.json.get('interval','1d') # Default interval is 1 day
-        # Check if the provided interval is valid
-        if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
-            return jsonify({"error": "Invalid interval"}), 400
-        
-        ema_period = int(request.json.get('ema_period',None))
-        # Check if the provided ema_period is valid:
-        if not ema_period:
-            ema_period = 1 # Default 1d ema period
-            
-        # Check if the provided rsi_period is valid :    
-        rsi_period = int(request.json.get('rsi_period',None))
-        if not rsi_period:
-            rsi_period = 1 # Default 1d rsi period
-            
-        ema_period = max(1, min(ema_period, 50))  # Limit EMA period to 50
-        rsi_period = max(1, min(rsi_period, 50))  # Limit RSI period to 50
-        # Fetch Candlestick Data for the Given Ticker,Interval and RSI Period and EMA Period
-        candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
-        print("Fetched Data Succesfully")
-        return jsonify({'message':"Fetched Data Succesfully",
-                        'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data}),200
+        ticker   = request.json.get('ticker', '^IXIC')
+        interval = request.json.get('interval', '1d')
+        if interval not in ['1m','5m','15m','60m','1d','1wk','1mo']:
+            return jsonify(error="Invalid interval"), 400
+
+        ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
+        rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+
+        # main chart data
+        candlestick, ema, rsi = fetch_yahoo_data(
+            ticker, interval, ema_period, rsi_period
+        )
+
+        # overview metrics
+        today = datetime.now().date()
+        one_year_ago = today - timedelta(days=365)
+        hist = yf.download(
+            ticker,
+            start=one_year_ago,
+            end=today + timedelta(days=1),
+            interval='1d',
+            progress=False
+        )
+
+        overview = {
+            '52_week_low': None,
+            '52_week_high': None,
+            'last_year_close': None
+        }
+
+        if not hist.empty:
+            lows  = hist['Low'].astype(float)
+            highs = hist['High'].astype(float)
+            overview['52_week_low']  = round(float(lows.min()), 2)
+            overview['52_week_high'] = round(float(highs.max()), 2)
+
+            last_year = today.year - 1
+            # filter index by year string => returns DataFrame slice
+            ly = hist.loc[hist.index.year == last_year]
+            if not ly.empty:
+                # take the last available close price of that year
+                overview['last_year_close'] = round(
+                    float(ly.iloc[-1]['Close']), 2
+                )
+
+        return jsonify(
+            message="Fetched Data Successfully",
+            candlestick=candlestick,
+            ema=ema,
+            rsi=rsi,
+            overview=overview
+        ), 200
+
     except Exception as e:
         logging.error(f"Error fetching market movers data: {e}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify(error=f"Internal server error: {e}"), 500
 
+# previous
+# @app.route('/api/market-movers',methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker','^IXIC') # By default show NASDAQ Data
+#         interval = request.json.get('interval','1d') # Default interval is 1 day
+#         # Check if the provided interval is valid
+#         if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
+#             return jsonify({"error": "Invalid interval"}), 400
+        
+#         ema_period = int(request.json.get('ema_period',None))
+#         # Check if the provided ema_period is valid:
+#         if not ema_period:
+#             ema_period = 1 # Default 1d ema period
+            
+#         # Check if the provided rsi_period is valid :    
+#         rsi_period = int(request.json.get('rsi_period',None))
+#         if not rsi_period:
+#             rsi_period = 1 # Default 1d rsi period
+            
+#         ema_period = max(1, min(ema_period, 50))  # Limit EMA period to 50
+#         rsi_period = max(1, min(rsi_period, 50))  # Limit RSI period to 50
+#         # Fetch Candlestick Data for the Given Ticker,Interval and RSI Period and EMA Period
+#         candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+#         print("Fetched Data Succesfully")
+#         return jsonify({'message':"Fetched Data Succesfully",
+#                         'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data}),200
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# basic :
 
 # @app.route('/api/data/<ticker>/<interval>/<int:ema_period>/<int:rsi_period>')
 # def get_data(ticker, interval, ema_period, rsi_period):
 #     candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
-#     return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})
+#     return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})\
+    
+    
+###############################################################################################################################
+
+### Bull vs Bear Markets :
+
+# get bull and bear markets :
+from flask import request, jsonify
+import yfinance as yf
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
+@app.route('/api/market-cycles', methods=['POST'])
+def get_market_cycles():
+    try:
+        ticker = request.json.get('ticker', '^GSPC')
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * 40)
+
+        df = yf.download(ticker, start=start_date, end=end_date, interval='1d', progress=False)
+        if df.empty or 'Close' not in df.columns:
+            return jsonify({'error': "No data found or 'Close' column missing"}), 400
+
+        data = df['Close'].dropna().copy()
+        in_bear = False
+        cycles = []
+        peak = float(data.iloc[0])
+        peak_date = data.index[0]
+
+        for date, price in data.items():
+            price = float(price)
+            if not in_bear:
+                drawdown = (price - peak) / peak
+                if drawdown <= -0.2:
+                    in_bear = True
+                    start_date = peak_date
+                    trough = price
+                    trough_date = date
+                elif price > peak:
+                    peak = price
+                    peak_date = date
+            else:
+                gain = (price - trough) / trough
+                if gain >= 0.2:
+                    in_bear = False
+                    end_date = trough_date
+                    duration = relativedelta(end_date, start_date)
+                    duration_months = duration.years * 12 + duration.months
+                    total_return = ((trough - peak) / peak) * 100
+                    annualized = ((trough / peak) ** (12 / max(1, duration_months)) - 1) * 100
+
+                    cycles.append({
+                        "type": "Bear",
+                        "start_date": str(start_date.date()),
+                        "end_date": str(end_date.date()),
+                        "duration_months": duration_months,
+                        "total_return_percent": round(total_return, 2),
+                        "annualized_return_percent": round(annualized, 2)
+                    })
+
+                    peak = price
+                    peak_date = date
+
+        return jsonify({'message': "Bear market cycles detected", 'cycles': cycles}), 200
+
+    except Exception as e:
+        logging.error(f"Error in market cycles endpoint: {e}")
+        return jsonify({'error': f"{str(e)}"}), 500
 
 
 #################################################################################################################################
