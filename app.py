@@ -20836,10 +20836,21 @@ def get_chart_data():
 ### Bull vs Bear Markets :
 
 # get bull and bear markets :
+
+# from flask import request, jsonify
+# import yfinance as yf
+# from datetime import datetime, timedelta
+# from dateutil.relativedelta import relativedelta
+# import logging
+
 from flask import request, jsonify
 import yfinance as yf
+import pandas as pd
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import logging
+
+# v-2 : plots the chart as well :
 
 @app.route('/api/market-cycles', methods=['POST'])
 def get_market_cycles():
@@ -20848,55 +20859,219 @@ def get_market_cycles():
         end_date = datetime.now()
         start_date = end_date - timedelta(days=365 * 40)
 
-        df = yf.download(ticker, start=start_date, end=end_date, interval='1d', progress=False)
-        if df.empty or 'Close' not in df.columns:
-            return jsonify({'error': "No data found or 'Close' column missing"}), 400
+        df = yf.download(ticker, start=start_date, end=end_date, interval='1d', auto_adjust=False, progress=False)
 
-        data = df['Close'].dropna().copy()
-        in_bear = False
+        # If columns are MultiIndex, flatten them
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        # Ensure 'Close' column exists
+        if 'Close' not in df.columns:
+            logging.error(f"'Close' column not found in data for {ticker}. Columns returned: {df.columns}")
+            return jsonify({'error': "'Close' column not found in data"}), 400
+
+        df = df.dropna(subset=['Close'])
+        data = df['Close']
+        data.index = pd.to_datetime(data.index)
+
+        prices = data.values
+        dates = data.index
+
         cycles = []
-        peak = float(data.iloc[0])
-        peak_date = data.index[0]
+        plot_points = []
 
-        for date, price in data.items():
-            price = float(price)
-            if not in_bear:
+        in_bear = False
+        in_bull = False
+
+        peak = prices[0]
+        peak_date = dates[0]
+        trough = prices[0]
+        trough_date = dates[0]
+
+        # Full chart data for frontend plotting
+        full_chart = [
+            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+            for dt, p in zip(dates, prices)
+        ]
+
+        for i in range(1, len(prices)):
+            price = prices[i]
+            date = dates[i]
+
+            if not in_bear and not in_bull:
                 drawdown = (price - peak) / peak
                 if drawdown <= -0.2:
                     in_bear = True
-                    start_date = peak_date
+                    bear_start = peak_date
                     trough = price
                     trough_date = date
                 elif price > peak:
                     peak = price
                     peak_date = date
-            else:
+                else:
+                    gain = (price - trough) / trough
+                    if gain >= 0.2:
+                        in_bull = True
+                        bull_start = trough_date
+                        peak = price
+                        peak_date = date
+
+            elif in_bear:
+                if price < trough:
+                    trough = price
+                    trough_date = date
                 gain = (price - trough) / trough
                 if gain >= 0.2:
                     in_bear = False
-                    end_date = trough_date
-                    duration = relativedelta(end_date, start_date)
-                    duration_months = duration.years * 12 + duration.months
+                    duration = relativedelta(trough_date, bear_start)
+                    months = duration.years * 12 + duration.months
                     total_return = ((trough - peak) / peak) * 100
-                    annualized = ((trough / peak) ** (12 / max(1, duration_months)) - 1) * 100
+                    annualized = ((trough / peak) ** (12 / max(1, months)) - 1) * 100
+
+                    segment_df = data[bear_start:trough_date]
+                    plot_points.append({
+                        "start_date": bear_start.strftime('%Y-%m-%d'),
+                        "end_date": trough_date.strftime('%Y-%m-%d'),
+                        "type": "Bear",
+                        "prices": [
+                            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+                            for dt, p in segment_df.items()
+                        ]
+                    })
 
                     cycles.append({
                         "type": "Bear",
-                        "start_date": str(start_date.date()),
-                        "end_date": str(end_date.date()),
-                        "duration_months": duration_months,
+                        "start_date": bear_start.strftime('%Y-%m-%d'),
+                        "end_date": trough_date.strftime('%Y-%m-%d'),
+                        "duration_months": months,
                         "total_return_percent": round(total_return, 2),
                         "annualized_return_percent": round(annualized, 2)
                     })
 
+                    in_bull = True
+                    bull_start = trough_date
                     peak = price
                     peak_date = date
 
-        return jsonify({'message': "Bear market cycles detected", 'cycles': cycles}), 200
+            elif in_bull:
+                if price > peak:
+                    peak = price
+                    peak_date = date
+                drawdown = (price - peak) / peak
+                if drawdown <= -0.2:
+                    in_bull = False
+                    duration = relativedelta(peak_date, bull_start)
+                    months = duration.years * 12 + duration.months
+                    total_return = ((peak - trough) / trough) * 100
+                    annualized = ((peak / trough) ** (12 / max(1, months)) - 1) * 100
+
+                    segment_df = data[bull_start:peak_date]
+                    plot_points.append({
+                        "start_date": bull_start.strftime('%Y-%m-%d'),
+                        "end_date": peak_date.strftime('%Y-%m-%d'),
+                        "type": "Bull",
+                        "prices": [
+                            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+                            for dt, p in segment_df.items()
+                        ]
+                    })
+
+                    cycles.append({
+                        "type": "Bull",
+                        "start_date": bull_start.strftime('%Y-%m-%d'),
+                        "end_date": peak_date.strftime('%Y-%m-%d'),
+                        "duration_months": months,
+                        "total_return_percent": round(total_return, 2),
+                        "annualized_return_percent": round(annualized, 2)
+                    })
+
+                    trough = price
+                    trough_date = date
+
+        return jsonify({
+            "message": f"Bull/Bear market cycles detected for {ticker}",
+            "cycles": cycles,
+            "plot_data": plot_points,
+            "full_chart": full_chart
+        }), 200
 
     except Exception as e:
         logging.error(f"Error in market cycles endpoint: {e}")
-        return jsonify({'error': f"{str(e)}"}), 500
+        return jsonify({'error': str(e)}), 500
+
+
+# v-1 : shows the cycle of bear and bull markets duration gain and loss during that time :
+
+# @app.route('/api/market-cycles', methods=['POST'])
+# def get_market_cycles():
+#     try:
+#         ticker = request.json.get('ticker', '^GSPC')
+#         end_date = datetime.now()
+#         start_date = end_date - timedelta(days=365 * 40)
+
+#         df = yf.download(ticker, start=start_date, end=end_date, interval='1d', progress=False)
+#         if df.empty or 'Close' not in df.columns:
+#             return jsonify({'error': "No data found or 'Close' column missing"}), 400
+
+#         data = df['Close'].dropna()
+#         prices = data.values
+#         dates = data.index
+
+#         cycles = []
+#         in_bear = False
+#         in_bull = False
+#         peak = prices[0]
+#         peak_date = dates[0]
+#         trough = prices[0]
+#         trough_date = dates[0]
+
+#         for i in range(1, len(prices)):
+#             price = prices[i]
+#             date = dates[i]
+
+#             if not in_bear:
+#                 drawdown = (price - peak) / peak
+#                 if drawdown <= -0.2:
+#                     in_bear = True
+#                     bear_start = peak_date
+#                     trough = price
+#                     trough_date = date
+#                 elif price > peak:
+#                     peak = price
+#                     peak_date = date
+#             else:
+#                 if price < trough:
+#                     trough = price
+#                     trough_date = date
+#                 gain = (price - trough) / trough
+#                 if gain >= 0.2:
+#                     in_bear = False
+#                     duration = relativedelta(trough_date, bear_start)
+#                     months = duration.years * 12 + duration.months
+#                     total_return = ((trough - peak) / peak) * 100
+#                     annualized = ((trough / peak) ** (12 / max(1, months)) - 1) * 100
+
+#                     cycles.append({
+#                         "type": "Bear",
+#                         "start_date": bear_start.strftime('%Y-%m-%d'),
+#                         "end_date": trough_date.strftime('%Y-%m-%d'),
+#                         "duration_months": months,
+#                         "total_return_percent": round(float(total_return), 2),
+#                         "annualized_return_percent": round(float(annualized), 2)
+#                     })
+
+#                     # Start of potential bull
+#                     peak = price
+#                     peak_date = date
+
+#         return jsonify({
+#             "message": f"Bull/Bear market cycles detected for {ticker}",
+#             "cycles": cycles
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in market cycles endpoint: {e}")
+#         return jsonify({'error': str(e)}), 500
 
 
 #################################################################################################################################
