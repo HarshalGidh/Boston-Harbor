@@ -6391,62 +6391,168 @@ def get_bonds():
     except Exception as e:
         print(f"Error in get-bonds API: {e}")
         return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
+    
 
+# new fallback mechanism :
+import yfinance as yf
+from alpha_vantage.timeseries import TimeSeries
+from flask import request, jsonify
+import os, time, pickle, logging
+from datetime import datetime
+
+# Replace this with your real key
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY1')
+BOND_CACHE_DIR = "cache_bonds"
+os.makedirs(BOND_CACHE_DIR, exist_ok=True)
+
+def get_cached_bond_price(ticker):
+    cache_path = os.path.join(BOND_CACHE_DIR, f"{ticker}_price.pkl")
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            cached = pickle.load(f)
+            if cached["date"] == time.strftime('%Y-%m-%d'):
+                return cached["price"]
+    return None
+
+def cache_bond_price(ticker, price):
+    with open(os.path.join(BOND_CACHE_DIR, f"{ticker}_price.pkl"), "wb") as f:
+        pickle.dump({"date": time.strftime('%Y-%m-%d'), "price": price}, f)
+
+def fetch_bond_price_yfinance(ticker, retries=3, delay=5):
+    for attempt in range(retries):
+        try:
+            df = yf.download(ticker, period="1mo", interval="1d", progress=False)
+            if not df.empty:
+                return round(float(df['Close'].iloc[-1]), 2)
+            raise ValueError("Empty DataFrame")
+        except Exception as e:
+            logging.warning(f"[yfinance Retry {attempt+1}] for {ticker}: {e}")
+            time.sleep(delay)
+    return None
+
+def fetch_bond_price_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        df, _ = ts.get_daily(symbol=ticker, outputsize='compact')
+        df.rename(columns={
+            '1. open': 'Open',
+            '2. high': 'High',
+            '3. low': 'Low',
+            '4. close': 'Close',
+            '5. volume': 'Volume'
+        }, inplace=True)
+        if not df.empty:
+            return round(float(df['Close'].iloc[0]), 2)
+    except Exception as e:
+        logging.error(f"Alpha Vantage failed for {ticker}: {e}")
+    return None
 
 @app.route('/api/fetch-bonds', methods=['POST'])
 def fetch_bonds():
-    """
-    Fetches the price of a specific bond using the ticker provided in the request payload.
-    """
     try:
         data = request.get_json()
-        category = data.get("category", "").lower()
+        selected_ticker = data.get("ticker", "")
+        if not selected_ticker:
+            return jsonify({"message": "Ticker not provided", "price": "N/A"}), 400
 
-        if not category:
+        # Step 1: yfinance attempt
+        price = fetch_bond_price_yfinance(selected_ticker)
+        if price is not None:
+            cache_bond_price(selected_ticker, price)  # update cache with fresh value
             return jsonify({
-                "message": "Ticker not provided in the request.",
-                "price": "N/A"
-            }), 400
-            
-        selected_ticker = data.get("ticker")
-
-        # testing mutual funds : (Assuming fetch_MutualFunds() is defined elsewhere)
-        # fetch_MutualFunds()
-        
-        # Function to fetch the latest closing price
-        def fetch_price(ticker):
-            try:
-                # Fetch historical data for the bond without using any custom session.
-                data = yf.download(ticker, period="1mo", interval="1d")
-                if not data.empty:
-                    # Get the latest closing price and convert it to float.
-                    price = data['Close'].iloc[-1]
-                    return round(float(price), 2)
-                else:
-                    return None
-            except Exception as e:
-                print(f"Error fetching data for ticker {ticker}: {e}")
-                return None
-
-        # Fetch price for the selected Bond
-        price = fetch_price(selected_ticker)
-        print(f"Bond price for {selected_ticker}:\n{price}")
-        if not price :
-            return jsonify({
-                "message": f"Price for {selected_ticker}  is not available.",
+                "message": f"Price for {selected_ticker} fetched from yfinance.",
                 "ticker": selected_ticker,
-                "price": 0.0
-            }), 404
+                "price": price
+            }), 200
 
+        # Step 2: Alpha Vantage attempt
+        price = fetch_bond_price_alpha_vantage(selected_ticker)
+        if price is not None:
+            cache_bond_price(selected_ticker, price)
+            return jsonify({
+                "message": f"Price for {selected_ticker} fetched from Alpha Vantage.",
+                "ticker": selected_ticker,
+                "price": price
+            }), 200
+
+        # Step 3: Fallback to cache
+        cached = get_cached_bond_price(selected_ticker)
+        if cached is not None:
+            return jsonify({
+                "message": f"Price for {selected_ticker} fetched from cache (stale fallback).",
+                "ticker": selected_ticker,
+                "price": cached
+            }), 200
+
+        # Step 4: Final fallback if all sources fail
         return jsonify({
-            "message": f"Price for {selected_ticker} fetched successfully",
+            "message": f"Price for {selected_ticker} is not available from any source.",
             "ticker": selected_ticker,
-            "price": price
-        }), 200
+            "price": 0.0
+        }), 500
 
     except Exception as e:
-        print(f"Error fetching bond prices: {e}")
+        logging.error(f"Error fetching bond prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+    
+
+# previous :
+# @app.route('/api/fetch-bonds', methods=['POST'])
+# def fetch_bonds():
+#     """
+#     Fetches the price of a specific bond using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         category = data.get("category", "").lower()
+
+#         if not category:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+            
+#         selected_ticker = data.get("ticker")
+
+#         # testing mutual funds : (Assuming fetch_MutualFunds() is defined elsewhere)
+#         # fetch_MutualFunds()
+        
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the bond without using any custom session.
+#                 data = yf.download(ticker, period="1mo", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price and convert it to float.
+#                     price = data['Close'].iloc[-1]
+#                     return round(float(price), 2)
+#                 else:
+#                     return None
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return None
+
+#         # Fetch price for the selected Bond
+#         price = fetch_price(selected_ticker)
+#         print(f"Bond price for {selected_ticker}:\n{price}")
+#         if not price :
+#             return jsonify({
+#                 "message": f"Price for {selected_ticker}  is not available.",
+#                 "ticker": selected_ticker,
+#                 "price": 0.0
+#             }), 404
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "ticker": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching bond prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 
@@ -7136,53 +7242,89 @@ def fetch_MutualFunds():
 # # Call clear_yfinance_cache() on startup (or before making requests)
 # clear_yfinance_cache()
 
+########################################################################################################
+
+# previous : 
+# def get_stock_price(ticker, retries=3, delay=5):
+#     """
+#     Attempts to fetch the current stock price for the given ticker.
+#     It first uses the regularMarketPrice from the ticker.info dictionary.
+#     If that returns None or raises an exception (e.g. due to rate limiting),
+#     it falls back to retrieving the latest closing price from historical data.
+#     Retries up to 'retries' times with a 'delay' between attempts.
+#     """
+#     attempt = 0
+#     while attempt < retries:
+#         try:
+#             # Create a Ticker object without passing a custom session.
+#             stock = yf.Ticker(ticker)
+            
+#             # Primary method: use the info field.
+#             price = stock.info.get('regularMarketPrice')
+#             if price is not None:
+#                 return price
+            
+#             # Fallback: use historical data for the last day.
+#             hist = stock.history(period='1d')
+#             if not hist.empty:
+#                 return hist['Close'].iloc[-1]
+            
+#             raise ValueError("No valid price data found.")
+#         except Exception as e:
+#             attempt += 1
+#             print(f"Attempt {attempt} for {ticker} failed: {e}")
+#             time.sleep(delay)
+    
+#     # Final fallback: try once more using default Ticker.
+#     stock = yf.Ticker(ticker)
+#     current_price = stock.info.get('regularMarketPrice')
+#     if not current_price:
+#         print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+#         current_price = stock.history(period='1d')['Close'].iloc[-1]
+#         return current_price
+    
+#     if current_price is None:
+#         # Check for mutual fund-specific fields.
+#         print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+#         fund_close_price = stock.history(period="1d")['Close']
+#         if len(fund_close_price) > 0:
+#             current_price = fund_close_price.iloc[-1]
+#         return current_price
+        
+#     raise Exception(f"Failed to retrieve price for {ticker} after {retries} attempts.")
+
+def get_price_from_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_quote_endpoint(symbol=ticker)
+        if not data.empty:
+            return float(data['05. price'].iloc[0])
+    except Exception as e:
+        logging.error(f"Alpha Vantage failed for {ticker}: {e}")
+    return None
+
 def get_stock_price(ticker, retries=3, delay=5):
     """
-    Attempts to fetch the current stock price for the given ticker.
-    It first uses the regularMarketPrice from the ticker.info dictionary.
-    If that returns None or raises an exception (e.g. due to rate limiting),
-    it falls back to retrieving the latest closing price from historical data.
-    Retries up to 'retries' times with a 'delay' between attempts.
+    Attempts to get the stock price using yfinance.
+    Falls back to Alpha Vantage if all attempts fail.
     """
-    attempt = 0
-    while attempt < retries:
+    for attempt in range(retries):
         try:
-            # Create a Ticker object without passing a custom session.
             stock = yf.Ticker(ticker)
-            
-            # Primary method: use the info field.
             price = stock.info.get('regularMarketPrice')
             if price is not None:
                 return price
-            
-            # Fallback: use historical data for the last day.
+
             hist = stock.history(period='1d')
             if not hist.empty:
                 return hist['Close'].iloc[-1]
-            
-            raise ValueError("No valid price data found.")
         except Exception as e:
-            attempt += 1
-            print(f"Attempt {attempt} for {ticker} failed: {e}")
+            logging.warning(f"yfinance Attempt {attempt + 1} failed for {ticker}: {e}")
             time.sleep(delay)
-    
-    # Final fallback: try once more using default Ticker.
-    stock = yf.Ticker(ticker)
-    current_price = stock.info.get('regularMarketPrice')
-    if not current_price:
-        print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
-        current_price = stock.history(period='1d')['Close'].iloc[-1]
-        return current_price
-    
-    if current_price is None:
-        # Check for mutual fund-specific fields.
-        print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
-        fund_close_price = stock.history(period="1d")['Close']
-        if len(fund_close_price) > 0:
-            current_price = fund_close_price.iloc[-1]
-        return current_price
-        
-    raise Exception(f"Failed to retrieve price for {ticker} after {retries} attempts.")
+
+    logging.warning(f"yfinance failed for {ticker}. Trying Alpha Vantage...")
+    return get_price_from_alpha_vantage(ticker)
+
 
 @app.route('/api/current_stock_price', methods=['POST'])
 def current_stock_price():
@@ -7211,36 +7353,6 @@ def current_stock_price():
         
         return jsonify({"error": str(e)}), 500
 
-# @app.route('/api/current_stock_price', methods=['POST'])
-# def current_stock_price():
-#     try:
-#         ticker = request.json.get('ticker')
-        # stock = yf.Ticker(ticker)
-#         # Fetch the current stock price using the 'regularMarketPrice' field
-#         current_price = stock.info.get('regularMarketPrice')
-        
-        # if not current_price:
-        #     print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
-        #     current_price = stock.history(period='1d')['Close'].iloc[-1]
-        #     return jsonify({"current_price":current_price})
-        
-        # if current_price is None:
-        #     # If still None, check for mutual fund-specific fields
-        #     print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
-        #     fund_close_price = stock.history(period="1d")['Close']
-        #     if len(fund_close_price) > 0:
-        #         current_price = fund_close_price.iloc[-1]  # Last available closing price
-        #     return jsonify({"current_price":current_price})
-
-#         # If everything fails, raise an error
-#         if current_price is None:
-#             raise ValueError(f"Unable to retrieve price for {ticker}.")
-
-#         return jsonify({"current_price":current_price})
-    
-#     except Exception as e:
-#         print(f"Failed to retrieve the current price for {ticker} : {e}")
-#         return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
 
 
 @app.route('/api/dividend_yield', methods=['POST'])
@@ -20665,131 +20777,455 @@ def get_last_interaction(client_name: str):
 # ###Home Page :
 # #Market movers :
 
+import os
+import time
+import pickle
+import logging
+import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
-import pandas as pd
 from datetime import datetime, timedelta
+from flask import request, jsonify
+from alpha_vantage.timeseries import TimeSeries
 
-def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY1')
+CACHE_DIR = "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Mapping for indexes not supported by Alpha Vantage
+SYMBOL_MAP = {
+    "^IXIC": "QQQ",
+    "^GSPC": "SPY",
+    "^DJI": "DIA"
+}
+
+# Retry-safe yfinance wrapper
+def safe_yf_download(ticker, start, end, interval, retries=3):
+    for attempt in range(retries):
+        try:
+            data = yf.download(ticker, start=start, end=end, interval=interval,
+                               auto_adjust=False, progress=False)
+            if not data.empty:
+                return data
+            raise ValueError("Empty data returned")
+        except Exception as e:
+            logging.warning(f"[yfinance Retry {attempt + 1}] for {ticker}: {e}")
+            time.sleep(10)
+    return None
+
+# Alpha Vantage fallback
+def fetch_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=ticker, outputsize='full')
+        data.rename(columns={
+            '1. open': 'Open', '2. high': 'High', '3. low': 'Low',
+            '4. close': 'Close', '5. volume': 'Volume'
+        }, inplace=True)
+        data.index = pd.to_datetime(data.index)
+        return data.sort_index()
+    except Exception as e:
+        logging.error(f"Alpha Vantage error: {e}")
+        return None
+
+# Master fetcher
+def fetch_market_data(ticker, interval='1d'):
     end_date = datetime.now()
     if interval in ['1m', '5m']:
         start_date = end_date - timedelta(days=7)
     elif interval in ['15m', '60m']:
         start_date = end_date - timedelta(days=60)
-    elif interval == '1d':
-        start_date = end_date - timedelta(days=365*5)
-    elif interval == '1wk':
-        start_date = end_date - timedelta(weeks=365*5)
-    elif interval == '1mo':
-        start_date = end_date - timedelta(days=365*5)
+    else:
+        start_date = end_date - timedelta(days=365)
 
-    # Force auto_adjust=False to get original column names.
-    data = yf.download(ticker, start=start_date, end=end_date, interval=interval, auto_adjust=False)
-    
-    # Flatten MultiIndex columns if present
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-    
-    # For debugging, print out the column names
-    print("Downloaded data columns:", data.columns)
-    
-    # Calculate EMA and RSI using the 'Close' column.
-    data['EMA'] = ta.ema(data['Close'], length=ema_period)
-    data['RSI'] = ta.rsi(data['Close'], length=rsi_period)
+    # First try yfinance
+    data = safe_yf_download(ticker, start=start_date, end=end_date, interval=interval)
+    if data is not None and not data.empty:
+        logging.info(f"Fetched data for {ticker} from yfinance.")
+        # Cache it
+        filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+        pickle.dump(data, open(filename, "wb"))
+        return data
 
-    candlestick_data = [
-        {
-            'time': int(row.Index.timestamp()),
-            'open': row.Open,
-            'high': row.High,
-            'low': row.Low,
-            'close': row.Close
-        }
-        for row in data.itertuples()
-    ]
+    # Then try Alpha Vantage
+    alt_ticker = SYMBOL_MAP.get(ticker, ticker)
+    data = fetch_alpha_vantage(alt_ticker)
+    if data is not None and not data.empty:
+        logging.info(f"Fetched data for {ticker} from Alpha Vantage.")
+        filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+        pickle.dump(data, open(filename, "wb"))
+        return data
 
-    ema_data = [
-        {
-            'time': int(row.Index.timestamp()),
-            'value': row.EMA
-        }
-        for row in data.itertuples() if not pd.isna(row.EMA)
-    ]
+    # Finally, try cache
+    filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+    if os.path.exists(filename):
+        logging.warning(f"Falling back to cached data for {ticker}")
+        return pickle.load(open(filename, "rb"))
 
-    rsi_data = [
-        {
-            'time': int(row.Index.timestamp()),
-            'value': row.RSI if not pd.isna(row.RSI) else 0
-        }
-        for row in data.itertuples()
-    ]
-    # print("Candlestick Data for", ticker, "is:", candlestick_data)
-    # print("EMA Data for", ticker, "is:", ema_data)
-    # print("RSI Data for", ticker, "is:", rsi_data)
-    
-    return candlestick_data, ema_data, rsi_data
+    logging.error(f"No valid data source found for {ticker}")
+    return pd.DataFrame()
 
-
-# new : added overview 
+# Main API
 @app.route('/api/market-movers', methods=['POST'])
 def get_chart_data():
     try:
-        ticker   = request.json.get('ticker', '^IXIC')
+        ticker = request.json.get('ticker', '^IXIC')
         interval = request.json.get('interval', '1d')
-        if interval not in ['1m','5m','15m','60m','1d','1wk','1mo']:
-            return jsonify(error="Invalid interval"), 400
+        ema_period = max(1, min(int(request.json.get('ema_period', 14)), 50))
+        rsi_period = max(1, min(int(request.json.get('rsi_period', 14)), 50))
 
-        ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
-        rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+        df = fetch_market_data(ticker, interval)
+        if df is None or df.empty or 'Close' not in df.columns:
+            return jsonify(error="No market data available."), 500
 
-        # main chart data
-        candlestick, ema, rsi = fetch_yahoo_data(
-            ticker, interval, ema_period, rsi_period
-        )
+        df = df.copy()
+        df['EMA'] = ta.ema(df['Close'], length=ema_period)
+        df['RSI'] = ta.rsi(df['Close'], length=rsi_period)
+        df = df.dropna()
 
-        # overview metrics
-        today = datetime.now().date()
-        one_year_ago = today - timedelta(days=365)
-        hist = yf.download(
-            ticker,
-            start=one_year_ago,
-            end=today + timedelta(days=1),
-            interval='1d',
-            progress=False
-        )
+        # Chart data
+        candlestick = [{
+            'time': int(idx.timestamp()),
+            'open': float(row['Open']), 'high': float(row['High']),
+            'low': float(row['Low']), 'close': float(row['Close'])
+        } for idx, row in df.iterrows()]
 
+        ema = [{
+            'time': int(idx.timestamp()), 'value': float(val)
+        } for idx, val in df['EMA'].items() if not pd.isna(val)]
+
+        rsi = [{
+            'time': int(idx.timestamp()), 'value': float(val if not pd.isna(val) else 0)
+        } for idx, val in df['RSI'].items()]
+
+        # Overview
         overview = {
-            '52_week_low': None,
-            '52_week_high': None,
-            'last_year_close': None
+            '52_week_low': round(df['Low'].min(), 2),
+            '52_week_high': round(df['High'].max(), 2),
+            'current_price': round(df['Close'].iloc[-1], 2) if not df['Close'].empty else None,
+            'latest_volume': int(df['Volume'].iloc[-1]) if not df['Volume'].empty else None,
+            'average_volume_30d': int(df['Volume'].tail(30).mean()) if not df['Volume'].empty else None
         }
 
-        if not hist.empty:
-            lows  = hist['Low'].astype(float)
-            highs = hist['High'].astype(float)
-            overview['52_week_low']  = round(float(lows.min()), 2)
-            overview['52_week_high'] = round(float(highs.max()), 2)
+        today = datetime.now()
+        last_year = today.year - 1
+        year_close = df[df.index.year == last_year]['Close']
+        if not year_close.empty:
+            overview['last_year_close'] = round(year_close.iloc[-1], 2)
 
-            last_year = today.year - 1
-            # filter index by year string => returns DataFrame slice
-            ly = hist.loc[hist.index.year == last_year]
-            if not ly.empty:
-                # take the last available close price of that year
-                overview['last_year_close'] = round(
-                    float(ly.iloc[-1]['Close']), 2
-                )
+        first_of_year = df[df.index >= datetime(today.year, 1, 1)]
+        if not first_of_year.empty and not df['Close'].empty:
+            try:
+                ytd_return = ((df['Close'].iloc[-1] / first_of_year['Close'].iloc[0]) - 1) * 100
+                overview['ytd_return_percent'] = round(ytd_return, 2)
+            except Exception as e:
+                logging.warning(f"YTD calc error: {e}")
 
-        return jsonify(
-            message="Fetched Data Successfully",
-            candlestick=candlestick,
-            ema=ema,
-            rsi=rsi,
-            overview=overview
-        ), 200
+        if len(df) > 1:
+            try:
+                one_year_return = ((df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1) * 100
+                overview['1yr_return_percent'] = round(one_year_return, 2)
+            except Exception as e:
+                logging.warning(f"1Yr Return calc error: {e}")
+
+        return jsonify({
+            'message': "Fetched Data Successfully",
+            'candlestick': candlestick,
+            'ema': ema,
+            'rsi': rsi,
+            'overview': overview
+        }), 200
 
     except Exception as e:
-        logging.error(f"Error fetching market movers data: {e}")
-        return jsonify(error=f"Internal server error: {e}"), 500
+        logging.error(f"Error in get_chart_data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+
+#####################################################################################################
+
+# previous :
+# def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
+#     end_date = datetime.now()
+#     if interval in ['1m', '5m']:
+#         start_date = end_date - timedelta(days=7)
+#     elif interval in ['15m', '60m']:
+#         start_date = end_date - timedelta(days=60)
+#     elif interval == '1d':
+#         start_date = end_date - timedelta(days=365*5)
+#     elif interval == '1wk':
+#         start_date = end_date - timedelta(weeks=365*5)
+#     elif interval == '1mo':
+#         start_date = end_date - timedelta(days=365*5)
+
+#     # Force auto_adjust=False to get original column names.
+#     data = yf.download(ticker, start=start_date, end=end_date, interval=interval, auto_adjust=False)
+    
+#     # Flatten MultiIndex columns if present
+#     if isinstance(data.columns, pd.MultiIndex):
+#         data.columns = data.columns.get_level_values(0)
+    
+#     # For debugging, print out the column names
+#     print("Downloaded data columns:", data.columns)
+    
+#     # Calculate EMA and RSI using the 'Close' column.
+#     data['EMA'] = ta.ema(data['Close'], length=ema_period)
+#     data['RSI'] = ta.rsi(data['Close'], length=rsi_period)
+
+#     candlestick_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'open': row.Open,
+#             'high': row.High,
+#             'low': row.Low,
+#             'close': row.Close
+#         }
+#         for row in data.itertuples()
+#     ]
+
+#     ema_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'value': row.EMA
+#         }
+#         for row in data.itertuples() if not pd.isna(row.EMA)
+#     ]
+
+#     rsi_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'value': row.RSI if not pd.isna(row.RSI) else 0
+#         }
+#         for row in data.itertuples()
+#     ]
+#     # print("Candlestick Data for", ticker, "is:", candlestick_data)
+#     # print("EMA Data for", ticker, "is:", ema_data)
+#     # print("RSI Data for", ticker, "is:", rsi_data)
+    
+#     return candlestick_data, ema_data, rsi_data
+
+# #new v-2 : added more overview : previous :
+# from flask import request, jsonify
+# from datetime import datetime, timedelta
+# import yfinance as yf
+# import logging
+
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         ema_period = max(1, min(int(request.json.get('ema_period', 14)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 14)), 50))
+
+#         df = fetch_market_data(ticker, interval)
+#         if df is None or df.empty or 'Close' not in df.columns:
+#             return jsonify(error="No market data available."), 500
+
+#         df = df.copy()
+#         df['EMA'] = ta.ema(df['Close'], length=ema_period)
+#         df['RSI'] = ta.rsi(df['Close'], length=rsi_period)
+
+#         df = df.dropna()
+
+#         candlestick = [{
+#             'time': int(idx.timestamp() if hasattr(idx, 'timestamp') else time.mktime(idx.timetuple())),
+#             'open': float(row['Open']), 'high': float(row['High']),
+#             'low': float(row['Low']), 'close': float(row['Close'])
+#         } for idx, row in df.iterrows()]
+
+#         ema = [{
+#             'time': int(idx.timestamp()),
+#             'value': float(val)
+#         } for idx, val in df['EMA'].items() if not pd.isna(val)]
+
+#         rsi = [{
+#             'time': int(idx.timestamp()),
+#             'value': float(val) if not pd.isna(val) else 0
+#         } for idx, val in df['RSI'].items()]
+
+#         overview = {
+#             '52_week_low': round(df['Low'].min(), 2),
+#             '52_week_high': round(df['High'].max(), 2),
+#             'current_price': round(df['Close'].iloc[-1], 2),
+#             'latest_volume': int(df['Volume'].iloc[-1]),
+#             'average_volume_30d': int(df['Volume'].tail(30).mean())
+#         }
+
+#         today = datetime.now()
+#         last_year = today.year - 1
+#         year_close = df[df.index.year == last_year]['Close']
+#         if not year_close.empty:
+#             overview['last_year_close'] = round(year_close.iloc[-1], 2)
+
+#         first_of_year = df[df.index >= datetime(today.year, 1, 1)]
+#         if not first_of_year.empty:
+#             ytd_return = ((df['Close'].iloc[-1] / first_of_year['Close'].iloc[0]) - 1) * 100
+#             overview['ytd_return_percent'] = round(ytd_return, 2)
+
+#         if len(df) > 1:
+#             one_year_return = ((df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1) * 100
+#             overview['1yr_return_percent'] = round(one_year_return, 2)
+
+#         return jsonify({
+#             'message': "Fetched Data Successfully",
+#             'candlestick': candlestick,
+#             'ema': ema,
+#             'rsi': rsi,
+#             'overview': overview
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in get_chart_data: {e}")
+#         return jsonify({'error': str(e)}), 500
+
+# previous with lesser data
+# from flask import request, jsonify
+# from datetime import datetime, timedelta
+# import yfinance as yf
+# import logging
+
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
+#             return jsonify(error="Invalid interval"), 400
+
+#         ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+
+#         candlestick, ema, rsi = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+
+#         today = datetime.now().date()
+#         one_year_ago = today - timedelta(days=365)
+#         hist = yf.download(
+#             ticker,
+#             start=one_year_ago,
+#             end=today + timedelta(days=1),
+#             interval='1d',
+#             progress=False,
+#             auto_adjust=True  # to suppress warning
+#         )
+
+#         overview = {
+#             '52_week_low': None,
+#             '52_week_high': None,
+#             'last_year_close': None,
+#             'current_price': None,
+#             'ytd_return_percent': None,
+#             'latest_volume': None,
+#             'average_volume_30d': None,
+#             '1yr_return_percent': None
+#         }
+
+#         if not hist.empty:
+#             lows = hist['Low']
+#             highs = hist['High']
+#             closes = hist['Close']
+#             volumes = hist['Volume']
+
+#             overview['52_week_low'] = round(float(lows.min()), 2)
+#             overview['52_week_high'] = round(float(highs.max()), 2)
+
+#             last_year = today.year - 1
+#             ly = hist[hist.index.year == last_year]
+#             if not ly.empty:
+#                 overview['last_year_close'] = round(float(ly['Close'].iloc[-1]), 2)
+
+#             latest_close = float(closes.iloc[-1])
+#             overview['current_price'] = round(latest_close, 2)
+
+#             first_of_year = hist[hist.index >= datetime(today.year, 1, 1)]
+#             if not first_of_year.empty:
+#                 first_close = float(first_of_year['Close'].iloc[0])
+#                 ytd_return = ((latest_close / first_close) - 1) * 100
+#                 overview['ytd_return_percent'] = round(ytd_return, 2)
+
+#             latest_volume_val = volumes.iloc[-1]
+#             overview['latest_volume'] = int(latest_volume_val.item() if hasattr(latest_volume_val, 'item') else latest_volume_val)
+
+#             avg_volume_30d = volumes.tail(30).mean()
+#             overview['average_volume_30d'] = int(avg_volume_30d.item() if hasattr(avg_volume_30d, 'item') else avg_volume_30d)
+
+#             one_year_close = float(closes.iloc[0])
+#             one_year_return = ((latest_close / one_year_close) - 1) * 100
+#             overview['1yr_return_percent'] = round(one_year_return, 2)
+
+#         return jsonify(
+#             message="Fetched Data Successfully",
+#             candlestick=candlestick,
+#             ema=ema,
+#             rsi=rsi,
+#             overview=overview
+#         ), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify(error=f"Internal server error: {str(e)}"), 500
+
+
+# new : added overview : basics : v-1 
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker   = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         if interval not in ['1m','5m','15m','60m','1d','1wk','1mo']:
+#             return jsonify(error="Invalid interval"), 400
+
+#         ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+
+#         # main chart data
+#         candlestick, ema, rsi = fetch_yahoo_data(
+#             ticker, interval, ema_period, rsi_period
+#         )
+
+#         # overview metrics
+#         today = datetime.now().date()
+#         one_year_ago = today - timedelta(days=365)
+#         hist = yf.download(
+#             ticker,
+#             start=one_year_ago,
+#             end=today + timedelta(days=1),
+#             interval='1d',
+#             progress=False
+#         )
+
+#         overview = {
+#             '52_week_low': None,
+#             '52_week_high': None,
+#             'last_year_close': None
+#         }
+
+#         if not hist.empty:
+#             lows  = hist['Low'].astype(float)
+#             highs = hist['High'].astype(float)
+#             overview['52_week_low']  = round(float(lows.min()), 2)
+#             overview['52_week_high'] = round(float(highs.max()), 2)
+
+#             last_year = today.year - 1
+#             # filter index by year string => returns DataFrame slice
+#             ly = hist.loc[hist.index.year == last_year]
+#             if not ly.empty:
+#                 # take the last available close price of that year
+#                 overview['last_year_close'] = round(
+#                     float(ly.iloc[-1]['Close']), 2
+#                 )
+
+#         return jsonify(
+#             message="Fetched Data Successfully",
+#             candlestick=candlestick,
+#             ema=ema,
+#             rsi=rsi,
+#             overview=overview
+#         ), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify(error=f"Internal server error: {e}"), 500
 
 # previous
 # @app.route('/api/market-movers',methods=['POST'])
