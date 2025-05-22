@@ -6651,50 +6651,118 @@ def fetch_bonds():
 
 # API to Fetch commodity data :
 
-# #V2 : working properly 
+# v-2 :
+
+ALPHA_FALLBACK_SYMBOLS = {
+    "GC=F": "GOLD",        # Gold Futures
+    "SI=F": "SILVER",      # Silver Futures
+    "CL=F": "WTI",         # Crude Oil WTI Futures
+    "BZ=F": "BRENT",       # Brent Crude Oil
+    "NG=F": "NATGAS"       # Natural Gas
+}
+
+def fetch_price_yfinance(ticker):
+    try:
+        df = yf.download(ticker, period="1d", interval="1d", progress=False)
+        if not df.empty and 'Close' in df:
+            return round(float(df['Close'].iloc[-1]), 2)
+    except Exception as e:
+        logging.warning(f"YFinance fetch failed for {ticker}: {e}")
+    return None
+
+def fetch_price_alpha_vantage(ticker):
+    try:
+        mapped = ALPHA_FALLBACK_SYMBOLS.get(ticker)
+        if not mapped:
+            return None
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=mapped, outputsize='compact')
+        if not data.empty:
+            data.columns = [col.split('. ')[1] for col in data.columns]
+            price = float(data['close'].iloc[-1])
+            return round(price, 2)
+    except Exception as e:
+        logging.warning(f"Alpha Vantage fallback failed for {ticker}: {e}")
+    return None
+
 @app.route('/api/fetch-commodities', methods=['POST'])
 def fetch_commodities():
-    """
-    Fetches the price of a specific commodity using the ticker provided in the request payload.
-    """
     try:
         data = request.get_json()
-        selected_ticker = data.get("commodities")
+        ticker = data.get("commodities")
+        if not ticker:
+            return jsonify({"message": "Commodity ticker not provided.", "price": "N/A"}), 400
 
-        if not selected_ticker:
+        # Try yfinance first
+        price = fetch_price_yfinance(ticker)
+
+        # Fallback to Alpha Vantage if needed
+        if price is None:
+            price = fetch_price_alpha_vantage(ticker)
+
+        if price is None:
             return jsonify({
-                "message": "Ticker not provided in the request.",
+                "message": f"Price for {ticker} is not available.",
+                "symbol": ticker,
                 "price": "N/A"
-            }), 400
-
-        # Function to fetch the latest closing price
-        def fetch_price(ticker):
-            try:
-                # Fetch historical data for the commodity
-                data = yf.download(ticker, period="1d", interval="1d")
-                if not data.empty:
-                    # Get the latest closing price and convert it to a float
-                    price_value = data['Close'].iloc[-1]
-                    return round(float(price_value), 2)
-                else:
-                    return "Price not available"
-            except Exception as e:
-                print(f"Error fetching data for ticker {ticker}: {e}")
-                return "Price not available"
-
-        # Fetch price for the selected commodity
-        price = fetch_price(selected_ticker)
-        print(f"Commodity price for {selected_ticker}:\n{price}")
+            }), 404
 
         return jsonify({
-            "message": f"Price for {selected_ticker} fetched successfully",
-            "symbol": selected_ticker,
+            "message": f"Price for {ticker} fetched successfully",
+            "symbol": ticker,
             "price": price
         }), 200
 
     except Exception as e:
-        print(f"Error fetching commodity prices: {e}")
+        logging.error(f"Error in fetch_commodities: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+    
+    
+
+# #V1 :was working properly 
+# @app.route('/api/fetch-commodities', methods=['POST'])
+# def fetch_commodities():
+#     """
+#     Fetches the price of a specific commodity using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         selected_ticker = data.get("commodities")
+
+#         if not selected_ticker:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the commodity
+#                 data = yf.download(ticker, period="1d", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price and convert it to a float
+#                     price_value = data['Close'].iloc[-1]
+#                     return round(float(price_value), 2)
+#                 else:
+#                     return "Price not available"
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return "Price not available"
+
+#         # Fetch price for the selected commodity
+#         price = fetch_price(selected_ticker)
+#         print(f"Commodity price for {selected_ticker}:\n{price}")
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "symbol": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching commodity prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
@@ -7122,105 +7190,207 @@ def get_reit_price():
 
 # updated version :
 
-# V-1 : best version fetches all the list and prices
+# v-2 :
 
-# Function to fetch the latest price
-def fetch_price(ticker):
-    """
-    Fetch the latest price of a mutual fund using Yahoo Finance.
-    :param ticker: The symbol of the mutual fund.
-    :return: The latest closing price or "Price not available".
-    """
+# Static fallback list of US mutual funds (symbols)
+FALLBACK_MUTUAL_FUNDS = [
+    {"symbol": "VFIAX", "name": "Vanguard 500 Index Fund Admiral Shares"},
+    {"symbol": "SWPPX", "name": "Schwab S&P 500 Index Fund"},
+    {"symbol": "FXAIX", "name": "Fidelity 500 Index Fund"},
+    {"symbol": "VTSAX", "name": "Vanguard Total Stock Market Index Fund Admiral Shares"},
+    {"symbol": "VWELX", "name": "Vanguard Wellington Fund Investor Shares"}
+]
+
+# Get price from Alpha Vantage
+def fetch_price_from_alphavantage(symbol):
     try:
-        # Fetch data for the mutual fund with valid period and interval
-        data = yf.download(ticker, period="1mo", interval="1d")
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=symbol, outputsize='compact')
         if not data.empty:
-            # Get the latest closing price and convert it to float
-            price_value = data['Close'].iloc[-1]
-            return round(float(price_value), 2)
-        else:
-            return "Price not available"
+            last_close = data['4. close'].iloc[-1]
+            return round(float(last_close), 2)
     except Exception as e:
-        print(f"Error fetching data for ticker {ticker}: {e}")
-        return "Price not available"
+        logging.warning(f"Alpha Vantage error for {symbol}: {e}")
+    return "Price not available"
 
+# Try Yahoo first, then fallback to Alpha Vantage
+def fetch_price(ticker):
+    try:
+        data = yf.download(ticker, period="1mo", interval="1d", progress=False)
+        if not data.empty:
+            return round(float(data['Close'].iloc[-1]), 2)
+    except Exception as e:
+        logging.warning(f"Yahoo Finance error for {ticker}: {e}")
+
+    # fallback
+    return fetch_price_from_alphavantage(ticker)
+
+# Try scraping from Yahoo, fallback to static + AlphaVantage
 def fetch_mutual_funds_from_yahoo():
-    """
-    Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
-    :return: List of mutual funds with symbol, name, and price.
-    """
     try:
         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0",
             "Accept-Language": "en-US,en;q=0.9"
         }
-        max_attempts = 3
-        attempts = 0
-        response = None
-        while attempts < max_attempts:
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                break
-            else:
-                print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
-                attempts += 1
-                time.sleep(5)
-        if not response or response.status_code != 200:
-            return []
+
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            raise Exception("Failed to fetch page")
 
         soup = BeautifulSoup(response.content, "html.parser")
-        table = soup.find("table")  # Locate the main table with mutual fund data
+        table = soup.find("table")
         if not table:
-            print("No table found on the Yahoo Finance page.")
-            return []
+            raise Exception("No table found")
 
-        rows = table.find_all("tr")[1:]  # Skip the header row
+        rows = table.find_all("tr")[1:]
         mutual_funds = []
 
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) < 3:  # Ensure required columns are present
+            if len(cols) < 2:
                 continue
-
             symbol = cols[0].text.strip()
             name = cols[1].text.strip()
-            price = fetch_price(symbol)  # Fetch the price dynamically
+            price = fetch_price(symbol)
+            if price != "Price not available":
+                mutual_funds.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "price": price
+                })
 
-            # Skip mutual funds where the price is not available
-            if price == "Price not available":
-                continue
-
-            mutual_funds.append({
-                "symbol": symbol,
-                "name": name,
-                "price": price
-            })
+        # fallback if list is empty
+        if not mutual_funds:
+            raise Exception("No data found from Yahoo")
 
         return mutual_funds
 
     except Exception as e:
-        print(f"Error fetching mutual funds from Yahoo Finance: {e}")
-        return []
+        logging.warning(f"Yahoo scraping failed: {e}")
+        fallback_funds = []
+        for fund in FALLBACK_MUTUAL_FUNDS:
+            price = fetch_price(fund['symbol'])
+            if price != "Price not available":
+                fallback_funds.append({
+                    "symbol": fund['symbol'],
+                    "name": fund['name'],
+                    "price": price
+                })
+        return fallback_funds
 
-# Endpoint to fetch mutual funds
+# API endpoint
 @app.route('/api/fetch-MutualFunds', methods=['POST'])
 def fetch_MutualFunds():
-    """
-    Fetch and return mutual funds and their details.
-    """
     try:
         mutual_funds = fetch_mutual_funds_from_yahoo()
-        print(f"Mutual funds: {mutual_funds}")
         return jsonify({
             "message": "Mutual funds fetched successfully.",
             "mutual_funds": mutual_funds
         }), 200
-
     except Exception as e:
-        print(f"Failed to fetch mutual funds: {e}")
         return jsonify({"error": f"Failed to fetch mutual funds: {e}"}), 500
+    
+
+# V-1 : best version fetches all the list and prices, now stopped working 
+
+# # Function to fetch the latest price
+# def fetch_price(ticker):
+#     """
+#     Fetch the latest price of a mutual fund using Yahoo Finance.
+#     :param ticker: The symbol of the mutual fund.
+#     :return: The latest closing price or "Price not available".
+#     """
+#     try:
+#         # Fetch data for the mutual fund with valid period and interval
+#         data = yf.download(ticker, period="1mo", interval="1d")
+#         if not data.empty:
+#             # Get the latest closing price and convert it to float
+#             price_value = data['Close'].iloc[-1]
+#             return round(float(price_value), 2)
+#         else:
+#             return "Price not available"
+#     except Exception as e:
+#         print(f"Error fetching data for ticker {ticker}: {e}")
+#         return "Price not available"
+
+# def fetch_mutual_funds_from_yahoo():
+#     """
+#     Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
+#     :return: List of mutual funds with symbol, name, and price.
+#     """
+#     try:
+#         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
+#         headers = {
+#             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+#                           "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+#             "Accept-Language": "en-US,en;q=0.9"
+#         }
+#         max_attempts = 3
+#         attempts = 0
+#         response = None
+#         while attempts < max_attempts:
+#             response = requests.get(url, headers=headers, timeout=10)
+#             if response.status_code == 200:
+#                 break
+#             else:
+#                 print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+#                 attempts += 1
+#                 time.sleep(5)
+#         if not response or response.status_code != 200:
+#             return []
+
+#         soup = BeautifulSoup(response.content, "html.parser")
+#         table = soup.find("table")  # Locate the main table with mutual fund data
+#         if not table:
+#             print("No table found on the Yahoo Finance page.")
+#             return []
+
+#         rows = table.find_all("tr")[1:]  # Skip the header row
+#         mutual_funds = []
+
+#         for row in rows:
+#             cols = row.find_all("td")
+#             if len(cols) < 3:  # Ensure required columns are present
+#                 continue
+
+#             symbol = cols[0].text.strip()
+#             name = cols[1].text.strip()
+#             price = fetch_price(symbol)  # Fetch the price dynamically
+
+#             # Skip mutual funds where the price is not available
+#             if price == "Price not available":
+#                 continue
+
+#             mutual_funds.append({
+#                 "symbol": symbol,
+#                 "name": name,
+#                 "price": price
+#             })
+
+#         return mutual_funds
+
+#     except Exception as e:
+#         print(f"Error fetching mutual funds from Yahoo Finance: {e}")
+#         return []
+
+# # Endpoint to fetch mutual funds
+# @app.route('/api/fetch-MutualFunds', methods=['POST'])
+# def fetch_MutualFunds():
+#     """
+#     Fetch and return mutual funds and their details.
+#     """
+#     try:
+#         mutual_funds = fetch_mutual_funds_from_yahoo()
+#         print(f"Mutual funds: {mutual_funds}")
+#         return jsonify({
+#             "message": "Mutual funds fetched successfully.",
+#             "mutual_funds": mutual_funds
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Failed to fetch mutual funds: {e}")
+#         return jsonify({"error": f"Failed to fetch mutual funds: {e}"}), 500
 
 
 ####################################################################################
@@ -21508,6 +21678,625 @@ def get_market_cycles():
 #     except Exception as e:
 #         logging.error(f"Error in market cycles endpoint: {e}")
 #         return jsonify({'error': str(e)}), 500
+
+#################################################################################################################################
+# # AI Notes Taker :
+
+# transcribe the uploaded audio :
+from flask import Flask, request, jsonify
+import os
+import whisper
+from datetime import datetime
+import tempfile
+
+# Configure Gemini
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+import requests
+import time
+
+# ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')  
+# # print("API Key:", ASSEMBLYAI_API_KEY)
+
+# headers = {
+#     "authorization": ASSEMBLYAI_API_KEY,
+#     "content-type": "application/json"
+# }
+
+# def upload_audio(file_path):
+#     with open(file_path, 'rb') as f:
+#         response = requests.post(
+#             'https://api.assemblyai.com/v2/upload',
+#             headers={"authorization": ASSEMBLYAI_API_KEY},
+#             files={'file': f}
+#         )
+    
+#     # Catch failed responses or bad JSON
+#     try:
+#         response.raise_for_status()
+#         result = response.json()
+#         return result['upload_url']
+#     except requests.exceptions.RequestException as e:
+#         print("Upload failed:", e)
+#         print("Response:", response.text)
+#         raise
+#     except ValueError as e:
+#         print("Failed to decode JSON:", e)
+#         print("Response:", response.text)
+#         raise
+
+
+# def transcribe_audio(audio_url):
+#     transcript_request = {
+#         'audio_url': audio_url
+#     }
+#     response = requests.post(
+#         'https://api.assemblyai.com/v2/transcript',
+#         json=transcript_request,
+#         headers=headers
+#     )
+#     return response.json()['id']
+
+# def poll_transcription(transcript_id):
+#     polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
+#     while True:
+#         response = requests.get(polling_endpoint, headers=headers)
+#         status = response.json()['status']
+#         if status == 'completed':
+#             return response.json()['text']
+#         elif status == 'error':
+#             raise Exception("Transcription failed.")
+#         time.sleep(5)
+
+# # Example usage:
+# # file_path = r"C:\Users\Harshal\DownloadsLearningEnglishConversations-20250513-TheEnglishWeSpeakGrindSomeonesGears.mp3"
+# file_path = r"uploads\LearningEnglishConversations-20250513-TheEnglishWeSpeakGrindSomeonesGears.mp3"
+# audio_url = upload_audio(file_path)
+# transcript_id = transcribe_audio(audio_url)
+# transcript_text = poll_transcription(transcript_id)
+
+# def transcribe_audio_file(file_path):
+#     try:
+#         audio_url = upload_audio(file_path)
+#         transcript_id = transcribe_audio(audio_url)
+#         transcript_text = poll_transcription(transcript_id)
+#         return transcript_text
+#     except Exception as e:
+#         return f"Failed to transcribe: {e}"
+
+
+# print("Transcript:", transcript_text)
+
+# print(transcribe_audio_file(file_path))
+
+#########################################################################################################################
+# Jitsi :
+
+# <script src="https://meet.jit.si/external_api.js"></script>
+
+# <div id="jitsi-container" style="height: 700px; width: 100%;"></div>
+
+# const domain = "meet.jit.si";
+# const options = {
+#     roomName: "YourUniqueRoomName",
+#     width: "100%",
+#     height: 700,
+#     parentNode: document.getElementById("jitsi-container"),
+#     interfaceConfigOverwrite: { /* custom interface options */ },
+#     configOverwrite: { /* custom configuration options */ }
+# };
+# const api = new JitsiMeetExternalAPI(domain, options);
+
+########################################################################################################################
+
+# zoom :
+
+# import os
+# import requests
+# from flask import Flask, redirect, request, jsonify
+# from urllib.parse import urlencode
+
+# # === SETUP ===
+# ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
+# ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
+# ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
+# ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
+# ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
+# ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
+
+# # Authorization URL
+# # Use the generated authorization URL to share the app within your account
+# # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+
+# # === STEP 1: Redirect to Zoom OAuth Consent Screen ===
+# @app.route('/api/zoom/auth')
+# def zoom_auth():
+#     query_params = urlencode({
+#         "response_type": "code",
+#         "client_id": ZOOM_CLIENT_ID,
+#         "redirect_uri": ZOOM_REDIRECT_URI
+#     })
+#     return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
+
+# # === STEP 2: Zoom Redirects to this URL with `code` ===
+# @app.route('/api/zoom/callback')
+# def zoom_callback():
+#     code = request.args.get("code")
+#     if not code:
+#         return jsonify({"error": "No code provided by Zoom"}), 400
+
+#     # Exchange code for access token
+#     token_response = requests.post(
+#         ZOOM_OAUTH_TOKEN_URL,
+#         headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+#         data={
+#             "grant_type": "authorization_code",
+#             "code": code,
+#             "redirect_uri": ZOOM_REDIRECT_URI
+#         }
+#     )
+
+#     if token_response.status_code != 200:
+#         return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
+
+#     tokens = token_response.json()
+#     access_token = tokens['access_token']
+
+#     # Example: Create a meeting with this token
+#     meeting_info = create_zoom_meeting(access_token)
+
+#     return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
+
+# # === Helper: Basic Auth for Zoom Token ===
+# def get_basic_auth_token():
+#     import base64
+#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
+#     return base64.b64encode(creds.encode()).decode()
+
+# # === Helper: Create a Zoom Meeting ===
+# # prev :
+# # def create_zoom_meeting(access_token):
+# #     headers = {
+# #         "Authorization": f"Bearer {access_token}",
+# #         "Content-Type": "application/json"
+# #     }
+# #     payload = {
+# #         "topic": "Test Wealth Manager Meeting",
+# #         "type": 1,  # Instant meeting
+# #         "settings": {
+# #             "host_video": True,
+# #             "participant_video": True
+# #         }
+# #     }
+# #     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
+# #     if response.status_code == 201:
+# #         return response.json()
+# #     return {"error": "Failed to create meeting", "details": response.json()}
+
+# from flask import Flask, request, jsonify
+# import os, base64, requests
+
+# # === Refresh Access Token if needed (optional improvement) ===
+# def get_basic_auth_token():
+#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
+#     return base64.b64encode(creds.encode()).decode()
+
+# # === Create a Zoom Meeting ===
+# def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
+#     headers = {
+#         "Authorization": f"Bearer {access_token}",
+#         "Content-Type": "application/json"
+#     }
+
+#     payload = {
+#         "topic": topic,
+#         "type": 1,  # 1: instant | 2: scheduled
+#         "duration": duration,
+#         "settings": {
+#             "host_video": True,
+#             "participant_video": True
+#         }
+#     }
+
+#     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
+
+#     if response.status_code == 201:
+#         meeting = response.json()
+#         return {
+#             "meeting_id": meeting["id"],
+#             "join_url": meeting["join_url"],
+#             "start_url": meeting["start_url"],
+#             "topic": meeting["topic"],
+#             "status": meeting["status"],
+#             "created_at": meeting["created_at"]
+#         }
+#     return {"error": "Failed to create meeting", "details": response.json()}
+
+# # === API Endpoint ===
+# @app.route('/api/create-zoom-meeting', methods=['POST'])
+# def create_meeting():
+#     try:
+#         # Assuming you've already got the OAuth access token stored securely
+#         access_token = request.json.get("access_token")
+
+#         if not access_token:
+#             return jsonify({"error": "Access token not provided"}), 400
+
+#         topic = request.json.get("topic", "Wealth Management Call")
+#         duration = int(request.json.get("duration", 30))
+
+#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+#         if "error" in meeting_info:
+#             return jsonify(meeting_info), 500
+
+#         return jsonify({
+#             "message": "Meeting created successfully",
+#             "join_url": meeting_info["join_url"],
+#             "start_url": meeting_info["start_url"],
+#             "topic": meeting_info["topic"],
+#             "meeting_id": meeting_info["meeting_id"],
+#             "status": meeting_info["status"],
+#             "created_at": meeting_info["created_at"]
+#         })
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+#########################################################################################################################
+# zoom new version :
+import os
+import json
+import base64
+import requests
+from flask import Flask, redirect, request, jsonify
+from urllib.parse import urlencode
+
+
+# === SETUP ===
+ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
+ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
+ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
+ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
+ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
+ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
+
+# # Authorization URL
+# # Use the generated authorization URL to share the app within your account
+# # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+
+# === In-Memory Token Store (for development/testing) ===
+ZOOM_SESSION_STORE = {}  # key: user_id or email, value: token dict
+
+# === STEP 1: Redirect to Zoom OAuth Consent Screen ===
+@app.route('/api/zoom/auth')
+def zoom_auth():
+    query_params = urlencode({
+        "response_type": "code",
+        "client_id": ZOOM_CLIENT_ID,
+        "redirect_uri": ZOOM_REDIRECT_URI
+    })
+    return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
+
+# === STEP 2: Zoom Redirects to this URL with `code` ===
+@app.route('/api/zoom/callback')
+def zoom_callback():
+    code = request.args.get("code")
+    if not code:
+        return jsonify({"error": "No code provided by Zoom"}), 400
+
+    token_response = requests.post(
+        ZOOM_OAUTH_TOKEN_URL,
+        headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": ZOOM_REDIRECT_URI
+        }
+    )
+
+    if token_response.status_code != 200:
+        return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
+
+    tokens = token_response.json()
+    access_token = tokens['access_token']
+    refresh_token = tokens.get('refresh_token')
+
+    # Store tokens locally and globally (file-based persistence)
+    user_id = "harshal"
+    ZOOM_SESSION_STORE[user_id] = tokens
+    save_tokens_to_file(user_id, tokens)
+
+    meeting_info = create_zoom_meeting(access_token)
+
+    return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
+
+# === Helper: Save/Load Tokens to/from File ===
+def save_tokens_to_file(user_id, tokens):
+    with open(f"zoom_tokens_{user_id}.json", "w") as f:
+        json.dump(tokens, f)
+
+def load_tokens_from_file(user_id):
+    try:
+        with open(f"zoom_tokens_{user_id}.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+# === Helper: Basic Auth for Zoom Token ===
+def get_basic_auth_token():
+    creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
+    return base64.b64encode(creds.encode()).decode()
+
+# === Helper: Create a Zoom Meeting ===
+def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "topic": topic,
+        "type": 1,
+        "duration": duration,
+        "settings": {
+            "host_video": True,
+            "participant_video": True
+        }
+    }
+    response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
+    if response.status_code == 201:
+        meeting = response.json()
+        return {
+            "meeting_id": meeting["id"],
+            "join_url": meeting["join_url"],
+            "start_url": meeting["start_url"],
+            "topic": meeting["topic"],
+            "status": meeting["status"],
+            "created_at": meeting["created_at"]
+        }
+    return {"error": "Failed to create meeting", "details": response.json()}
+
+# === API: Create Meeting with Stored Token ===
+@app.route('/api/create-zoom-meeting', methods=['POST'])
+def create_meeting():
+    try:
+        user_id = request.json.get("user_id", "harshal")
+        tokens = ZOOM_SESSION_STORE.get(user_id) or load_tokens_from_file(user_id)
+        if not tokens:
+            return jsonify({"error": "No stored Zoom access token"}), 401
+
+        access_token = tokens["access_token"]
+        topic = request.json.get("topic", "Wealth Management Call")
+        duration = int(request.json.get("duration", 30))
+
+        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+        if "error" in meeting_info:
+            return jsonify(meeting_info), 500
+
+        return jsonify({
+            "message": "Meeting created successfully",
+            **meeting_info
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+#########################################################################################################################
+
+# ffmpeg path : 
+os.environ["PATH"] += os.pathsep + r"C:\Users\Harshal\ffmpeg\bin"
+# Load Whisper model
+whisper_model = whisper.load_model("base")
+# transcription = whisper_model.transcribe(r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\uploads\Voice 213-1 1.wav")
+
+
+@app.route('/api/process-audio', methods=['POST'])
+def process_audio():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file uploaded"}), 400
+
+    audio_file = request.files['audio']
+    if not audio_file.filename.endswith(".wav"):
+        return jsonify({"error": "Only WAV files are supported in this environment"}), 400
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            audio_file.save(tmp.name)
+            transcription = whisper_model.transcribe(tmp.name)
+            transcript = transcription["text"]
+            analysis = analyze_meeting_transcript(transcript)
+
+        return jsonify({
+            "message": "Transcript processed successfully",
+            "transcript": transcript,
+            "analysis": analysis
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/api/process-audio', methods=['POST'])
+# def process_audio():
+#     if 'audio' not in request.files:
+#         return jsonify({"error": "No audio file uploaded"}), 400
+
+#     audio_file = request.files['audio']
+#     if not audio_file.filename.endswith(".wav"):
+#     # if audio_file.filename == '':
+#         return jsonify({"error": "Only wav file uploaded can be processed"}), 400
+#         # return jsonify({"error": "Empty file uploaded"}), 400
+
+#     try:
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+#         # with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp:
+#             audio_file.save(tmp.name)
+
+#             # Use Whisper model to transcribe
+#             transcription = whisper_model.transcribe(tmp.name)
+#             transcript = transcription["text"]
+
+#             # Analyze with Gemini
+#             analysis = analyze_meeting_transcript(transcript)
+
+#         return jsonify({
+#             "message": "Transcript processed successfully",
+#             "transcript": transcript,
+#             "analysis": analysis
+#         }), 200
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+    
+    
+# Sentiment Analysis of Client, Summary of Meeting , Key Points and next Actionable Steps :   
+
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+
+def analyze_meeting_transcript(transcript: str):
+    
+    # previous :
+    # prompt = f"""
+    #     You are an assistant that analyzes client meetings.
+
+    #     Meeting Transcript:
+    #     {transcript}
+
+    #     Tasks:
+    #     1. Provide an overall **sentiment analysis** (Positive, Negative, or Neutral) and explain why.
+    #     2. Summarize the **meeting** in simple terms.
+    #     3. Highlight the **top 5 key talking points** discussed.
+
+    #     Please return the output in JSON format with the following keys:
+    #     - sentiment
+    #     - summary
+    #     - key_points (as a list)
+    #     """
+    
+    prompt = f"""
+            You are an AI assistant designed to analyze wealth management client meetings.
+            You are exceptionally very good to analyse Client Meeting for a wealth manager
+
+            Meeting Transcript:
+            {transcript}
+
+            Perform the following tasks:
+            1. Analyze and return the **overall sentiment** of the client in the meeting. Use one of: Positive, Neutral, Negative.
+            2. Briefly explain **why** you selected this sentiment.
+            3. Generate a concise and professional **summary** of the meeting suitable for internal advisor notes.
+            4. Extract the **top 5 key talking points** discussed in the meeting.
+            5. Extract any **client concerns** mentioned (risk, uncertainty, product confusion, etc).
+            6. Suggest 2-3 **action items** for the wealth manager based on this call.
+            7. Estimate a **confidence score** (0-100%) in your sentiment classification.
+
+            Return your answer strictly in JSON with the following format:
+
+            {{
+            "sentiment": "<Positive | Neutral | Negative>",
+            "sentiment_reason": "<reason>",
+            "confidence_score": <float>,
+            "summary": "<summary>",
+            "key_points": ["point1", "point2", "point3", "point4", "point5"],
+            "client_concerns": ["concern1", "concern2"],
+            "action_items": ["action1", "action2"]
+            }}
+            """
+
+
+    response = model.generate_content(prompt)
+    print("Response of the Analayisis :",response.text)
+    try:
+        json_start = response.text.find('{')
+        cleaned_json = response.text[json_start:].strip('`\n ')
+        sentiment_analysis = json.loads(cleaned_json)
+        return sentiment_analysis
+    except Exception as e:
+        print("Error parsing LLM response:", e)
+        return {"error": "Failed to parse AI response."}
+    
+    # print("Text O/P :",response.text)
+    # sentiment_analysis = response.text
+    # # Process the response from LLM
+    # sentiment_analysis = markdown_to_text_new(response.text)
+    # sentiment_analysis = markdown.markdown(sentiment_analysis, extensions=["extra"]) 
+
+    # return sentiment_analysis
+
+# api :
+@app.route('/api/process-transcript', methods=['POST'])
+def process_transcript():
+    data = request.get_json()
+    transcript = data.get('transcript')
+
+    if not transcript:
+        return jsonify({"error": "Transcript not provided"}), 400
+
+    # summary = summarizer(transcript, max_length=150, min_length=40, do_sample=False)[0]['summary_text']
+    # sentiment = sentiment_analyzer(transcript)[0]
+    
+    sentiment = analyze_meeting_transcript(transcript)
+
+    return jsonify({
+        "sentiment": sentiment,
+        "message" : "Sentiment Analysis and Meeting Summary completed !"
+    }), 200
+
+
+# Onboarding Call :
+
+transcript_text = """
+Client: Hi, thanks for taking the time to meet today. I’ve been thinking about starting to invest but I’m a bit overwhelmed.
+
+Advisor: Absolutely, I’m glad you reached out. It’s perfectly normal to feel that way when starting. My goal is to simplify things for you and create a plan aligned with your goals.
+
+Client: That sounds good. I just don’t know where to start. I’ve mostly kept my savings in a bank account.
+
+Advisor: That’s common, and a great first step is setting some financial goals. Are you looking at short-term returns, retirement, saving for a house, or something else?
+
+Client: I’d say my main goal is long-term wealth building. Retirement is top of mind, but I’d also like to invest in a way that’s relatively safe.
+
+Advisor: Perfect. Based on that, we can look into diversified portfolios—some stocks for growth, some bonds for stability, maybe even tax-efficient instruments like index funds.
+
+Client: Sounds interesting. But how risky is it? I’m not comfortable losing a lot of money.
+
+Advisor: Completely understandable. We’ll start by assessing your risk tolerance. Based on your responses, we’ll recommend a moderate or conservative strategy. Your investments will be diversified to reduce exposure to any single asset.
+
+Client: Okay, and how often would we review the investments?
+
+Advisor: We recommend quarterly reviews and rebalancing annually, but you can always reach out if the market changes or your situation does.
+
+Client: And how do I track all of this?
+
+Advisor: You’ll have access to a personal dashboard where you can see your portfolio, performance, and recommendations updated in real-time. We also send monthly summaries.
+
+Client: That’s helpful. What’s the next step?
+
+Advisor: We’ll start by creating your investor profile—gather some financial details and preferences. Once that’s done, I’ll generate your personalized investment plan. Sound good?
+
+Client: Yes, let’s do it. I feel more confident after this conversation.
+
+Advisor: I’m glad to hear that! I’ll send you a link to get started right away.
+"""
+
+
+# performance call :
+# transcript_text = """
+# Client: Hi, I'm worried about my investment performance lately. The market seems so unstable.
+# Advisor: Yes, there's been some volatility, but we’re still aligned with your long-term plan.
+# Client: Should we move some money into safer assets like bonds?
+# Advisor: That’s an option. Let’s evaluate your risk tolerance again and diversify accordingly.
+# Client: I appreciate the guidance. I just don’t want another quarter like the last one.
+# """
+
+# result = analyze_meeting_transcript(transcript_text)
+# print(json.dumps(result, indent=2))
+# print(result)
+
 
 
 #################################################################################################################################
