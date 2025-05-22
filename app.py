@@ -21680,272 +21680,12 @@ def get_market_cycles():
 #         return jsonify({'error': str(e)}), 500
 
 #################################################################################################################################
-# # AI Notes Taker :
-
-# transcribe the uploaded audio :
-from flask import Flask, request, jsonify
-import os
-import whisper
-from datetime import datetime
-import tempfile
-
-# Configure Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-
-import requests
-import time
-
-# ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')  
-# # print("API Key:", ASSEMBLYAI_API_KEY)
-
-# headers = {
-#     "authorization": ASSEMBLYAI_API_KEY,
-#     "content-type": "application/json"
-# }
-
-# def upload_audio(file_path):
-#     with open(file_path, 'rb') as f:
-#         response = requests.post(
-#             'https://api.assemblyai.com/v2/upload',
-#             headers={"authorization": ASSEMBLYAI_API_KEY},
-#             files={'file': f}
-#         )
-    
-#     # Catch failed responses or bad JSON
-#     try:
-#         response.raise_for_status()
-#         result = response.json()
-#         return result['upload_url']
-#     except requests.exceptions.RequestException as e:
-#         print("Upload failed:", e)
-#         print("Response:", response.text)
-#         raise
-#     except ValueError as e:
-#         print("Failed to decode JSON:", e)
-#         print("Response:", response.text)
-#         raise
-
-
-# def transcribe_audio(audio_url):
-#     transcript_request = {
-#         'audio_url': audio_url
-#     }
-#     response = requests.post(
-#         'https://api.assemblyai.com/v2/transcript',
-#         json=transcript_request,
-#         headers=headers
-#     )
-#     return response.json()['id']
-
-# def poll_transcription(transcript_id):
-#     polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
-#     while True:
-#         response = requests.get(polling_endpoint, headers=headers)
-#         status = response.json()['status']
-#         if status == 'completed':
-#             return response.json()['text']
-#         elif status == 'error':
-#             raise Exception("Transcription failed.")
-#         time.sleep(5)
-
-# # Example usage:
-# # file_path = r"C:\Users\Harshal\DownloadsLearningEnglishConversations-20250513-TheEnglishWeSpeakGrindSomeonesGears.mp3"
-# file_path = r"uploads\LearningEnglishConversations-20250513-TheEnglishWeSpeakGrindSomeonesGears.mp3"
-# audio_url = upload_audio(file_path)
-# transcript_id = transcribe_audio(audio_url)
-# transcript_text = poll_transcription(transcript_id)
-
-# def transcribe_audio_file(file_path):
-#     try:
-#         audio_url = upload_audio(file_path)
-#         transcript_id = transcribe_audio(audio_url)
-#         transcript_text = poll_transcription(transcript_id)
-#         return transcript_text
-#     except Exception as e:
-#         return f"Failed to transcribe: {e}"
-
-
-# print("Transcript:", transcript_text)
-
-# print(transcribe_audio_file(file_path))
+# ########Create Meeting And Transcribe Audio and Process it :
 
 #########################################################################################################################
-# Jitsi :
+####### Create Meetings via Zoom : 
 
-# <script src="https://meet.jit.si/external_api.js"></script>
-
-# <div id="jitsi-container" style="height: 700px; width: 100%;"></div>
-
-# const domain = "meet.jit.si";
-# const options = {
-#     roomName: "YourUniqueRoomName",
-#     width: "100%",
-#     height: 700,
-#     parentNode: document.getElementById("jitsi-container"),
-#     interfaceConfigOverwrite: { /* custom interface options */ },
-#     configOverwrite: { /* custom configuration options */ }
-# };
-# const api = new JitsiMeetExternalAPI(domain, options);
-
-########################################################################################################################
-
-# zoom :
-
-# import os
-# import requests
-# from flask import Flask, redirect, request, jsonify
-# from urllib.parse import urlencode
-
-# # === SETUP ===
-# ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
-# ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
-# ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
-# ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
-# ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
-# ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
-
-# # Authorization URL
-# # Use the generated authorization URL to share the app within your account
-# # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
-
-# # === STEP 1: Redirect to Zoom OAuth Consent Screen ===
-# @app.route('/api/zoom/auth')
-# def zoom_auth():
-#     query_params = urlencode({
-#         "response_type": "code",
-#         "client_id": ZOOM_CLIENT_ID,
-#         "redirect_uri": ZOOM_REDIRECT_URI
-#     })
-#     return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
-
-# # === STEP 2: Zoom Redirects to this URL with `code` ===
-# @app.route('/api/zoom/callback')
-# def zoom_callback():
-#     code = request.args.get("code")
-#     if not code:
-#         return jsonify({"error": "No code provided by Zoom"}), 400
-
-#     # Exchange code for access token
-#     token_response = requests.post(
-#         ZOOM_OAUTH_TOKEN_URL,
-#         headers={"Authorization": f"Basic {get_basic_auth_token()}"},
-#         data={
-#             "grant_type": "authorization_code",
-#             "code": code,
-#             "redirect_uri": ZOOM_REDIRECT_URI
-#         }
-#     )
-
-#     if token_response.status_code != 200:
-#         return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
-
-#     tokens = token_response.json()
-#     access_token = tokens['access_token']
-
-#     # Example: Create a meeting with this token
-#     meeting_info = create_zoom_meeting(access_token)
-
-#     return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
-
-# # === Helper: Basic Auth for Zoom Token ===
-# def get_basic_auth_token():
-#     import base64
-#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
-#     return base64.b64encode(creds.encode()).decode()
-
-# # === Helper: Create a Zoom Meeting ===
-# # prev :
-# # def create_zoom_meeting(access_token):
-# #     headers = {
-# #         "Authorization": f"Bearer {access_token}",
-# #         "Content-Type": "application/json"
-# #     }
-# #     payload = {
-# #         "topic": "Test Wealth Manager Meeting",
-# #         "type": 1,  # Instant meeting
-# #         "settings": {
-# #             "host_video": True,
-# #             "participant_video": True
-# #         }
-# #     }
-# #     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
-# #     if response.status_code == 201:
-# #         return response.json()
-# #     return {"error": "Failed to create meeting", "details": response.json()}
-
-# from flask import Flask, request, jsonify
-# import os, base64, requests
-
-# # === Refresh Access Token if needed (optional improvement) ===
-# def get_basic_auth_token():
-#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
-#     return base64.b64encode(creds.encode()).decode()
-
-# # === Create a Zoom Meeting ===
-# def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
-#     headers = {
-#         "Authorization": f"Bearer {access_token}",
-#         "Content-Type": "application/json"
-#     }
-
-#     payload = {
-#         "topic": topic,
-#         "type": 1,  # 1: instant | 2: scheduled
-#         "duration": duration,
-#         "settings": {
-#             "host_video": True,
-#             "participant_video": True
-#         }
-#     }
-
-#     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
-
-#     if response.status_code == 201:
-#         meeting = response.json()
-#         return {
-#             "meeting_id": meeting["id"],
-#             "join_url": meeting["join_url"],
-#             "start_url": meeting["start_url"],
-#             "topic": meeting["topic"],
-#             "status": meeting["status"],
-#             "created_at": meeting["created_at"]
-#         }
-#     return {"error": "Failed to create meeting", "details": response.json()}
-
-# # === API Endpoint ===
-# @app.route('/api/create-zoom-meeting', methods=['POST'])
-# def create_meeting():
-#     try:
-#         # Assuming you've already got the OAuth access token stored securely
-#         access_token = request.json.get("access_token")
-
-#         if not access_token:
-#             return jsonify({"error": "Access token not provided"}), 400
-
-#         topic = request.json.get("topic", "Wealth Management Call")
-#         duration = int(request.json.get("duration", 30))
-
-#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
-
-#         if "error" in meeting_info:
-#             return jsonify(meeting_info), 500
-
-#         return jsonify({
-#             "message": "Meeting created successfully",
-#             "join_url": meeting_info["join_url"],
-#             "start_url": meeting_info["start_url"],
-#             "topic": meeting_info["topic"],
-#             "meeting_id": meeting_info["meeting_id"],
-#             "status": meeting_info["status"],
-#             "created_at": meeting_info["created_at"]
-#         })
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-
-#########################################################################################################################
-# zoom new version :
+# #zoom new version :
 import os
 import json
 import base64
@@ -22010,7 +21750,8 @@ def zoom_callback():
 
     meeting_info = create_zoom_meeting(access_token)
 
-    return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
+    # return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
+    return redirect(meeting_info["join_url"])
 
 # === Helper: Save/Load Tokens to/from File ===
 def save_tokens_to_file(user_id, tokens):
@@ -22086,97 +21827,61 @@ def create_meeting():
 
 
 #########################################################################################################################
+# ########################## Trasncribe the Audio and Process it :
+# # AI Notes Taker :
 
-# ffmpeg path : 
-os.environ["PATH"] += os.pathsep + r"C:\Users\Harshal\ffmpeg\bin"
-# Load Whisper model
-whisper_model = whisper.load_model("base")
-# transcription = whisper_model.transcribe(r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\uploads\Voice 213-1 1.wav")
+# transcribe the uploaded audio :
 
+# ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')  
+import os
+import assemblyai as aai
+from flask import Flask, request, jsonify
+import tempfile
 
-@app.route('/api/process-audio', methods=['POST'])
-def process_audio():
+# Set your API key
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+
+@app.route('/api/transcribe-audio', methods=['POST'])
+def transcribe_audio():
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file uploaded"}), 400
 
     audio_file = request.files['audio']
-    if not audio_file.filename.endswith(".wav"):
-        return jsonify({"error": "Only WAV files are supported in this environment"}), 400
+    if not audio_file.filename:
+        return jsonify({"error": "Empty filename"}), 400
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        # Save the uploaded file to a temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
             audio_file.save(tmp.name)
-            transcription = whisper_model.transcribe(tmp.name)
-            transcript = transcription["text"]
-            analysis = analyze_meeting_transcript(transcript)
+            local_path = tmp.name
+
+        # Transcribe using AssemblyAI SDK
+        config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(local_path)
+
+        if transcript.status == "error":
+            return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
 
         return jsonify({
-            "message": "Transcript processed successfully",
-            "transcript": transcript,
-            "analysis": analysis
+            "message": "Transcription completed successfully",
+            "transcript": transcript.text
         }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-# @app.route('/api/process-audio', methods=['POST'])
-# def process_audio():
-#     if 'audio' not in request.files:
-#         return jsonify({"error": "No audio file uploaded"}), 400
-
-#     audio_file = request.files['audio']
-#     if not audio_file.filename.endswith(".wav"):
-#     # if audio_file.filename == '':
-#         return jsonify({"error": "Only wav file uploaded can be processed"}), 400
-#         # return jsonify({"error": "Empty file uploaded"}), 400
-
-#     try:
-#         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-#         # with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp:
-#             audio_file.save(tmp.name)
-
-#             # Use Whisper model to transcribe
-#             transcription = whisper_model.transcribe(tmp.name)
-#             transcript = transcription["text"]
-
-#             # Analyze with Gemini
-#             analysis = analyze_meeting_transcript(transcript)
-
-#         return jsonify({
-#             "message": "Transcript processed successfully",
-#             "transcript": transcript,
-#             "analysis": analysis
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
     
-    
-# Sentiment Analysis of Client, Summary of Meeting , Key Points and next Actionable Steps :   
-
+##############################################################################################################################   
+ 
+# Sentiment Analysis of Client, Summary of Meeting , Key Points and next Actionable Steps : 
+  
+# Configure Gemini
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-
 def analyze_meeting_transcript(transcript: str):
-    
-    # previous :
-    # prompt = f"""
-    #     You are an assistant that analyzes client meetings.
-
-    #     Meeting Transcript:
-    #     {transcript}
-
-    #     Tasks:
-    #     1. Provide an overall **sentiment analysis** (Positive, Negative, or Neutral) and explain why.
-    #     2. Summarize the **meeting** in simple terms.
-    #     3. Highlight the **top 5 key talking points** discussed.
-
-    #     Please return the output in JSON format with the following keys:
-    #     - sentiment
-    #     - summary
-    #     - key_points (as a list)
-    #     """
     
     prompt = f"""
             You are an AI assistant designed to analyze wealth management client meetings.

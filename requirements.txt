@@ -58,3 +58,4 @@ win10toast_click
 holidays
 openai-whisper
 ffmpeg-python
+assemblyai
