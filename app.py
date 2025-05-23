@@ -21685,16 +21685,16 @@ def get_market_cycles():
 #########################################################################################################################
 ####### Create Meetings via Zoom : 
 
-# #zoom new version :
+# #zoom new version : with refresh tokens storing :
 import os
 import json
 import base64
 import requests
 from flask import Flask, redirect, request, jsonify
 from urllib.parse import urlencode
+from datetime import datetime, timedelta
 
-
-# === SETUP ===
+# === ENVIRONMENT ===
 ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
 ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
 ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
@@ -21702,14 +21702,13 @@ ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
 ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
 
-# # Authorization URL
-# # Use the generated authorization URL to share the app within your account
+# # # Authorization URL
+# # # Use the generated authorization URL to share the app within your account :
+# https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+# previous :
 # # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
 
-# === In-Memory Token Store (for development/testing) ===
-ZOOM_SESSION_STORE = {}  # key: user_id or email, value: token dict
-
-# === STEP 1: Redirect to Zoom OAuth Consent Screen ===
+# === STEP 1: Redirect user to Zoom OAuth ===
 @app.route('/api/zoom/auth')
 def zoom_auth():
     query_params = urlencode({
@@ -21719,7 +21718,9 @@ def zoom_auth():
     })
     return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
 
-# === STEP 2: Zoom Redirects to this URL with `code` ===
+from datetime import datetime, timedelta
+# === STEP 2: Zoom redirects here with code ===
+
 @app.route('/api/zoom/callback')
 def zoom_callback():
     code = request.args.get("code")
@@ -21742,36 +21743,88 @@ def zoom_callback():
     tokens = token_response.json()
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
+    expires_in = tokens.get('expires_in', 3600)
 
-    # Store tokens locally and globally (file-based persistence)
-    user_id = "harshal"
-    ZOOM_SESSION_STORE[user_id] = tokens
-    save_tokens_to_file(user_id, tokens)
+    # Save tokens
+    user_id = "harshal"  # Replace this later with dynamic user info
+    token_data = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_at": (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+    }
 
-    meeting_info = create_zoom_meeting(access_token)
+    save_tokens_to_file(user_id, token_data)
 
-    # return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
-    return redirect(meeting_info["join_url"])
+    # ✅ ADD THIS RETURN TO AVOID 500 ERROR
+    return redirect("http://localhost:5000/calendar")  
 
-# === Helper: Save/Load Tokens to/from File ===
-def save_tokens_to_file(user_id, tokens):
-    with open(f"zoom_tokens_{user_id}.json", "w") as f:
-        json.dump(tokens, f)
+    # return redirect(meeting_info["join_url"])
+    # return redirect("http://localhost:5000/calendar") 
 
-def load_tokens_from_file(user_id):
+# === API to create meeting ===
+@app.route('/api/create-zoom-meeting', methods=['POST'])
+def create_meeting():
     try:
-        with open(f"zoom_tokens_{user_id}.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
+        user_id = request.json.get("user_id", "harshal")
+        tokens = load_tokens_from_file(user_id)
+        if not tokens:
+            return jsonify({"error": "No Zoom tokens found"}), 401
 
-# === Helper: Basic Auth for Zoom Token ===
+        # Refresh if needed
+        tokens = refresh_token_if_expired(user_id, tokens)
+        access_token = tokens["access_token"]
+
+        topic = request.json.get("topic", "Client Wealth Meeting")
+        duration = int(request.json.get("duration", 30))
+        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+        return jsonify({
+            "message": "Meeting created successfully",
+            **meeting_info
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# === Refresh token if expired ===
+def refresh_token_if_expired(user_id, tokens):
+    expires_at = datetime.fromisoformat(tokens["expires_at"])
+    if datetime.utcnow() < expires_at:
+        return tokens  # Not expired
+
+    # Refresh the token
+    refresh_token = tokens["refresh_token"]
+    response = requests.post(
+        ZOOM_OAUTH_TOKEN_URL,
+        headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+    )
+
+    if response.status_code != 200:
+        raise Exception("Failed to refresh Zoom token")
+
+    new_tokens = response.json()
+    new_access_token = new_tokens['access_token']
+    new_refresh_token = new_tokens.get('refresh_token')
+    expires_in = new_tokens.get('expires_in', 3600)
+
+    updated = {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "expires_at": (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+    }
+
+    save_tokens_to_file(user_id, updated)
+    return updated
+
+# === Zoom API helpers ===
 def get_basic_auth_token():
     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
     return base64.b64encode(creds.encode()).decode()
 
-# === Helper: Create a Zoom Meeting ===
-def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
+def create_zoom_meeting(access_token, topic, duration):
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
@@ -21798,31 +21851,159 @@ def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30
         }
     return {"error": "Failed to create meeting", "details": response.json()}
 
-# === API: Create Meeting with Stored Token ===
-@app.route('/api/create-zoom-meeting', methods=['POST'])
-def create_meeting():
+# === File Storage Helpers ===
+def save_tokens_to_file(user_id, tokens):
+    with open(f"zoom_tokens_{user_id}.json", "w") as f:
+        json.dump(tokens, f)
+
+def load_tokens_from_file(user_id):
     try:
-        user_id = request.json.get("user_id", "harshal")
-        tokens = ZOOM_SESSION_STORE.get(user_id) or load_tokens_from_file(user_id)
-        if not tokens:
-            return jsonify({"error": "No stored Zoom access token"}), 401
+        with open(f"zoom_tokens_{user_id}.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
 
-        access_token = tokens["access_token"]
-        topic = request.json.get("topic", "Wealth Management Call")
-        duration = int(request.json.get("duration", 30))
 
-        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
 
-        if "error" in meeting_info:
-            return jsonify(meeting_info), 500
 
-        return jsonify({
-            "message": "Meeting created successfully",
-            **meeting_info
-        })
+# previous working Version  : 
+# import os
+# import json
+# import base64
+# import requests
+# from flask import Flask, redirect, request, jsonify
+# from urllib.parse import urlencode
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+
+# # === SETUP ===
+# ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
+# ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
+# ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
+# ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
+# ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
+# ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
+
+# # # Authorization URL
+# # # Use the generated authorization URL to share the app within your account
+# # # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+
+# # === In-Memory Token Store (for development/testing) ===
+# ZOOM_SESSION_STORE = {}  # key: user_id or email, value: token dict
+
+# # === STEP 1: Redirect to Zoom OAuth Consent Screen ===
+# @app.route('/api/zoom/auth')
+# def zoom_auth():
+#     query_params = urlencode({
+#         "response_type": "code",
+#         "client_id": ZOOM_CLIENT_ID,
+#         "redirect_uri": ZOOM_REDIRECT_URI
+#     })
+#     return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
+
+# # === STEP 2: Zoom Redirects to this URL with `code` ===
+# @app.route('/api/zoom/callback')
+# def zoom_callback():
+#     code = request.args.get("code")
+#     if not code:
+#         return jsonify({"error": "No code provided by Zoom"}), 400
+
+#     token_response = requests.post(
+#         ZOOM_OAUTH_TOKEN_URL,
+#         headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+#         data={
+#             "grant_type": "authorization_code",
+#             "code": code,
+#             "redirect_uri": ZOOM_REDIRECT_URI
+#         }
+#     )
+
+#     if token_response.status_code != 200:
+#         return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
+
+#     tokens = token_response.json()
+#     access_token = tokens['access_token']
+#     refresh_token = tokens.get('refresh_token')
+
+#     # Store tokens locally and globally (file-based persistence)
+#     user_id = "harshal"
+#     ZOOM_SESSION_STORE[user_id] = tokens
+#     save_tokens_to_file(user_id, tokens)
+
+#     meeting_info = create_zoom_meeting(access_token)
+
+#     # return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
+#     return redirect(meeting_info["join_url"])
+
+# # === Helper: Save/Load Tokens to/from File ===
+# def save_tokens_to_file(user_id, tokens):
+#     with open(f"zoom_tokens_{user_id}.json", "w") as f:
+#         json.dump(tokens, f)
+
+# def load_tokens_from_file(user_id):
+#     try:
+#         with open(f"zoom_tokens_{user_id}.json", "r") as f:
+#             return json.load(f)
+#     except FileNotFoundError:
+#         return None
+
+# # === Helper: Basic Auth for Zoom Token ===
+# def get_basic_auth_token():
+#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
+#     return base64.b64encode(creds.encode()).decode()
+
+# # === Helper: Create a Zoom Meeting ===
+# def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
+#     headers = {
+#         "Authorization": f"Bearer {access_token}",
+#         "Content-Type": "application/json"
+#     }
+#     payload = {
+#         "topic": topic,
+#         "type": 1,
+#         "duration": duration,
+#         "settings": {
+#             "host_video": True,
+#             "participant_video": True
+#         }
+#     }
+#     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
+#     if response.status_code == 201:
+#         meeting = response.json()
+#         return {
+#             "meeting_id": meeting["id"],
+#             "join_url": meeting["join_url"],
+#             "start_url": meeting["start_url"],
+#             "topic": meeting["topic"],
+#             "status": meeting["status"],
+#             "created_at": meeting["created_at"]
+#         }
+#     return {"error": "Failed to create meeting", "details": response.json()}
+
+# # === API: Create Meeting with Stored Token ===
+# @app.route('/api/create-zoom-meeting', methods=['POST'])
+# def create_meeting():
+#     try:
+#         user_id = request.json.get("user_id", "harshal")
+#         tokens = ZOOM_SESSION_STORE.get(user_id) or load_tokens_from_file(user_id)
+#         if not tokens:
+#             return jsonify({"error": "No stored Zoom access token"}), 401
+
+#         access_token = tokens["access_token"]
+#         topic = request.json.get("topic", "Wealth Management Call")
+#         duration = int(request.json.get("duration", 30))
+
+#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+#         if "error" in meeting_info:
+#             return jsonify(meeting_info), 500
+
+#         return jsonify({
+#             "message": "Meeting created successfully",
+#             **meeting_info
+#         })
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 
