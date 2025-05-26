@@ -21781,7 +21781,7 @@ def create_meeting():
         return jsonify({
             "message": "Meeting created successfully",
             **meeting_info
-        })
+        }),200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
