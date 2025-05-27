@@ -20755,26 +20755,30 @@ def load_portfolio_data(client_id):
     
 # Completed tasks and last action date, last action type and last meeting summary :
 
+from datetime import datetime
+
 def get_last_interaction(client_name: str):
-    """
-    Returns the most recent last_action_date and type for the given client_name.
-    """
-    client_name = client_name.strip().lower()  # Normalize
+    client_name = client_name.strip().lower()
     all_todos = load_todos() + load_completed_todos()
-    
+
     interactions = [
         todo for todo in all_todos
         if todo.get("clientName", "").strip().lower() == client_name
         and todo.get("checked") == True
     ]
 
-    # Sort by last_action_date if present, fallback to "date"
     def parse_date(todo):
         date_str = todo.get("last_action_date") or todo.get("date")
-        try:
-            return datetime.strptime(date_str, "%B %d, %Y")
-        except:
-            return datetime.min
+        formats = ["%B %d, %Y", "%m/%d/%Y, %H:%M:%S", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except (ValueError, TypeError):
+                continue
+
+        logging.error(f"Unrecognized date format: {date_str}")
+        return datetime.min
 
     interactions.sort(key=parse_date, reverse=True)
 
@@ -20782,6 +20786,36 @@ def get_last_interaction(client_name: str):
         latest = interactions[0]
         return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
     return "N/A", "N/A"
+
+
+# previous : had issues 
+# def get_last_interaction(client_name: str):
+#     """
+#     Returns the most recent last_action_date and type for the given client_name.
+#     """
+#     client_name = client_name.strip().lower()  # Normalize
+#     all_todos = load_todos() + load_completed_todos()
+    
+#     interactions = [
+#         todo for todo in all_todos
+#         if todo.get("clientName", "").strip().lower() == client_name
+#         and todo.get("checked") == True
+#     ]
+
+#     # Sort by last_action_date if present, fallback to "date"
+#     def parse_date(todo):
+#         date_str = todo.get("last_action_date") or todo.get("date")
+#         try:
+#             return datetime.strptime(date_str, "%B %d, %Y")
+#         except:
+#             return datetime.min
+
+#     interactions.sort(key=parse_date, reverse=True)
+
+#     if interactions:
+#         latest = interactions[0]
+#         return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
+#     return "N/A", "N/A"
 
 
 
@@ -21762,6 +21796,8 @@ def zoom_callback():
     # return redirect("http://localhost:5000/calendar") 
 
 # === API to create meeting ===
+CALL_LOGS_FOLDER = os.getenv("CALL_LOGS_FOLDER", "call_logs")
+
 @app.route('/api/create-zoom-meeting', methods=['POST'])
 def create_meeting():
     try:
@@ -21776,14 +21812,61 @@ def create_meeting():
 
         topic = request.json.get("topic", "Client Wealth Meeting")
         duration = int(request.json.get("duration", 30))
+        client_name = request.json.get("client_name", "Unknown")
+        date = request.json.get("date",datetime.utcnow().strftime("%Y-%m-%d"))
+
         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+        # Save call metadata in S3
+        if meeting_info.get("meeting_id"):
+            metadata = {
+                "meeting_id": meeting_info["meeting_id"],
+                "client_name": client_name,
+                "call_duration": f"{duration} mins",
+                "date": date,
+                "created_at": meeting_info["created_at"],
+                "user_email": user_id
+            }
+
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+                Body=json.dumps(metadata),
+                ContentType="application/json"
+            )
 
         return jsonify({
             "message": "Meeting created successfully",
             **meeting_info
-        }),200
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
+# previous :
+# @app.route('/api/create-zoom-meeting', methods=['POST'])
+# def create_meeting():
+#     try:
+#         user_id = request.json.get("user_id", "harshal")
+#         tokens = load_tokens_from_file(user_id)
+#         if not tokens:
+#             return jsonify({"error": "No Zoom tokens found"}), 401
+
+#         # Refresh if needed
+#         tokens = refresh_token_if_expired(user_id, tokens)
+#         access_token = tokens["access_token"]
+
+#         topic = request.json.get("topic", "Client Wealth Meeting")
+#         duration = int(request.json.get("duration", 30))
+#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+#         return jsonify({
+#             "message": "Meeting created successfully",
+#             **meeting_info
+#         }),200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 # === Refresh token if expired ===
 def refresh_token_if_expired(user_id, tokens):
@@ -21863,10 +21946,48 @@ def load_tokens_from_file(user_id):
     except FileNotFoundError:
         return None
 
+######################################################################################################################
+# Call Logs :
+
+@app.route('/api/call-history', methods=['GET'])
+@jwt_required()
+def get_call_history():
+    try:
+        user_email = get_jwt_identity()
+        prefix = CALL_LOGS_FOLDER # + "/"
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=prefix)
+        objects = response.get("Contents", [])
+
+        meeting_ids = set(obj["Key"].split("/")[1] for obj in objects if "metadata.json" in obj["Key"])
+        call_logs = []
+
+        for mid in meeting_ids:
+            try:
+                key = f"{CALL_LOGS_FOLDER}/{mid}/metadata.json"
+                obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+                metadata = json.loads(obj["Body"].read())
+                if metadata.get("user_email") == user_email:  # user-level filter
+                    call_logs.append({
+                        "client_name": metadata.get("client_name", "Unknown"),
+                        "meeting_id": metadata.get("meeting_id"),
+                        "call_duration": metadata.get("call_duration", "N/A"),
+                        "date": metadata.get("date", "N/A")
+                    })
+            except Exception as e:
+                logging.warning(f"Error reading metadata for {mid}: {e}")
+                continue
+
+        call_logs.sort(key=lambda x: x['date'], reverse=True)
+        return jsonify({"call_history": call_logs}), 200
+
+    except Exception as e:
+        logging.error(f"Failed to fetch call history: {e}")
+        return jsonify({"error": "Failed to fetch call history"}), 500
 
 
+######################################################################################################################
 
-# previous working Version  : 
+# previous working Version of Zoom Meetings : 
 # import os
 # import json
 # import base64
@@ -22049,7 +22170,22 @@ def transcribe_audio():
         meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
         print("Meeting Id for the Uploaded Audio File : ",meeting_id)
         
-        # Save to S3
+        meeting_metadata = {
+            "client_name": request.form.get('client_name', 'Unknown'),
+            "meeting_id": meeting_id,
+            "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
+            "date": datetime.utcnow().strftime('%Y-%m-%d')
+        }
+        
+        # Save to S3 all the meta data :
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
+            Body=json.dumps(meeting_metadata),
+            ContentType='application/json'
+        )
+        
+        # Save to S3 the transcrpits :
         transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
         s3.put_object(
             Bucket=S3_BUCKET_NAME,
