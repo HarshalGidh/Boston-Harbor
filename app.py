@@ -22021,6 +22021,7 @@ import tempfile
 
 # Set your API key
 aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+TRANSCRIPTS_FOLDER = os.getenv("TRANSCRIPTS_FOLDER") #"meeting_transcripts"
 
 @app.route('/api/transcribe-audio', methods=['POST'])
 def transcribe_audio():
@@ -22032,12 +22033,12 @@ def transcribe_audio():
         return jsonify({"error": "Empty filename"}), 400
 
     try:
-        # Save the uploaded file to a temporary location
+        # Save audio to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
             audio_file.save(tmp.name)
             local_path = tmp.name
 
-        # Transcribe using AssemblyAI SDK
+        # Transcribe using AssemblyAI
         config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
         transcriber = aai.Transcriber(config=config)
         transcript = transcriber.transcribe(local_path)
@@ -22045,13 +22046,74 @@ def transcribe_audio():
         if transcript.status == "error":
             return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
 
+        meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        print("Meeting Id for the Uploaded Audio File : ",meeting_id)
+        
+        # Save to S3
+        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=transcript_key,
+            Body=json.dumps({
+                "meeting_id": meeting_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "transcript": transcript.text
+            }),
+            ContentType='application/json'
+        )
+
         return jsonify({
             "message": "Transcription completed successfully",
+            "meeting_id": meeting_id,
             "transcript": transcript.text
         }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/get-transcript/<meeting_id>', methods=['GET'])
+def get_transcript(meeting_id):
+    try:
+        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
+        data = response['Body'].read().decode('utf-8')
+        return jsonify(json.loads(data)), 200
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            return jsonify({"error": "Transcript not found"}), 404
+        return jsonify({"error": str(e)}), 500
+    
+# Previous 
+# @app.route('/api/transcribe-audio', methods=['POST'])
+# def transcribe_audio():
+#     if 'audio' not in request.files:
+#         return jsonify({"error": "No audio file uploaded"}), 400
+
+#     audio_file = request.files['audio']
+#     if not audio_file.filename:
+#         return jsonify({"error": "Empty filename"}), 400
+
+#     try:
+#         # Save the uploaded file to a temporary location
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+#             audio_file.save(tmp.name)
+#             local_path = tmp.name
+
+#         # Transcribe using AssemblyAI SDK
+#         config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+#         transcriber = aai.Transcriber(config=config)
+#         transcript = transcriber.transcribe(local_path)
+
+#         if transcript.status == "error":
+#             return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+#         return jsonify({
+#             "message": "Transcription completed successfully",
+#             "transcript": transcript.text
+#         }), 200
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
     
 ##############################################################################################################################   
  
@@ -22112,12 +22174,42 @@ def analyze_meeting_transcript(transcript: str):
     # sentiment_analysis = markdown.markdown(sentiment_analysis, extensions=["extra"]) 
 
     # return sentiment_analysis
+    
+    
+transcript_folder = os.getenv('transcript_folder') # "transcripts"
+
+# === Save to AWS S3 ===
+def save_transcript_data(meeting_id, data, transcript):
+    folder = f"{transcript_folder}{meeting_id}"
+    transcript_key = f"{folder}/transcript.txt"
+    analysis_key = f"{folder}/analysis.json"
+
+    try:
+        s3.put_object(Bucket=S3_BUCKET_NAME, Key=transcript_key, Body=transcript)
+        s3.put_object(Bucket=S3_BUCKET_NAME, Key=analysis_key, Body=json.dumps(data, indent=4))
+    except Exception as e:
+        logging.error(f"Error saving transcript to S3: {e}")
+
+
+# === Get from AWS S3 ===
+def get_transcript_data(meeting_id):
+    folder = f"{transcript_folder}{meeting_id}"
+    transcript_key = f"{folder}/transcript.txt"
+    analysis_key = f"{folder}/analysis.json"
+    try:
+        transcript = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
+        analysis = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
+        return transcript, json.loads(analysis)
+    except ClientError as e:
+        logging.error(f"Error retrieving data from S3: {e}")
+        return None, None
 
 # api :
 @app.route('/api/process-transcript', methods=['POST'])
 def process_transcript():
     data = request.get_json()
     transcript = data.get('transcript')
+    meeting_id = data.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
 
     if not transcript:
         return jsonify({"error": "Transcript not provided"}), 400
@@ -22125,14 +22217,34 @@ def process_transcript():
     # summary = summarizer(transcript, max_length=150, min_length=40, do_sample=False)[0]['summary_text']
     # sentiment = sentiment_analyzer(transcript)[0]
     
-    sentiment = analyze_meeting_transcript(transcript)
+    analysis = analyze_meeting_transcript(transcript)
+    
+    # Save to AWS
+    if USE_AWS:
+        save_transcript_data(meeting_id, analysis, transcript)
 
     return jsonify({
-        "sentiment": sentiment,
+        "analysis": analysis,
         "message" : "Sentiment Analysis and Meeting Summary completed !"
     }), 200
 
+# === GET Endpoint ===
+@app.route('/api/get-transcript-summary/<meeting_id>', methods=['GET'])
+def get_transcript_summary(meeting_id):
+    if not meeting_id:
+        return jsonify({"error": "Meeting ID required"}), 400
 
+    transcript, analysis = get_transcript_data(meeting_id)
+    if transcript is None:
+        return jsonify({"error": "Transcript or analysis not found for this meeting ID"}), 404
+
+    return jsonify({
+        "meeting_id": meeting_id,
+        "transcript": transcript,
+        "analysis": analysis
+    }), 200
+    
+    
 # Onboarding Call :
 
 transcript_text = """
