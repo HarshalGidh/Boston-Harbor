@@ -51,7 +51,8 @@ mistune
 pytz
 calcom
 requests_cache
-apscheduler python-dateutil
+apscheduler 
+python-dateutil
 plyer
 pandas-ta
 win10toast_click
@@ -59,3 +60,7 @@ holidays
 openai-whisper
 ffmpeg-python
 assemblyai
+alpha_vantage
+win10toast_click --no-deps
+plyer
+win32api

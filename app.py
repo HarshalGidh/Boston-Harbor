@@ -18828,8 +18828,8 @@ def check_reminders():
             if now >= reminder_time and now < event_start: 
                 print("Condition met: now is within the reminder window.")
                 email_sent = send_reminder_email(event["user_email"], event)
-                notif_sent = send_reminder_notification(event)
-                if email_sent and notif_sent:
+                # notif_sent = send_reminder_notification(event)
+                if email_sent : # and notif_sent:
                     event["reminder_sent"] = True
                     updated = True
             else:
@@ -18883,83 +18883,54 @@ def cleanup_completed_events():
 import threading, time
 from plyer import notification
 
+# for linux :
+
+
 # updated :
 
 import webbrowser
-from win10toast_click import ToastNotifier
-import logging
-logging.getLogger("win10toast_click").setLevel(logging.ERROR)
+# from win10toast_click import ToastNotifier
+# import logging
+# logging.getLogger("win10toast_click").setLevel(logging.ERROR)
 
-# updated :
-
-def send_reminder_notification(event):
-    """
-    Sends a desktop notification for the event using win10toast-click.
-    The notification uses a long duration and always passes a callback that returns 0.
-    If a meeting link is provided, clicking the notification opens the link.
-    """
-    try:
-        # Set your icon path
-        icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
-        meeting_link = event.get("meeting_link", "").strip()
-
-        # Define a callback that opens the meeting link (if available) and returns 0.
-        def open_link_callback():
-            if meeting_link:
-                webbrowser.open(meeting_link)
-            return 0  # Required integer return
-
-        # If no meeting link is provided, use a dummy callback that does nothing but returns 0.
-        def dummy_callback():
-            return 0
-
-        # Always assign a callback function, avoiding None.
-        callback = open_link_callback if meeting_link else dummy_callback
-
-        toaster = ToastNotifier()
-
-        # Set a long duration (e.g., 3600 seconds). Note that Windows may auto-dismiss toasts,
-        # unless your application is registered as a persistent app.
-        toaster.show_toast(
-            "Wealth Manager – Event Reminder",  # Custom title
-            f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
-            icon_path=icon_path,
-            # duration=3600,  # Attempt to keep the toast visible for 1 hour
-            duration=None,
-            threaded=True,
-            callback_on_click=callback
-        )
-        logging.info(f"Desktop notification sent for event '{event['title']}'")
-        return True
-    except Exception as e:
-        logging.error(f"Error sending desktop notification: {e}")
-        return False
-
-
-# previous :
-# allows redirection link :
+# # updated :
+# # for windows : 
 # def send_reminder_notification(event):
+#     """
+#     Sends a desktop notification for the event using win10toast-click.
+#     The notification uses a long duration and always passes a callback that returns 0.
+#     If a meeting link is provided, clicking the notification opens the link.
+#     """
 #     try:
+#         # Set your icon path
 #         icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
-#         # icon_path = r"icon\alarm_alert_bell.ico"
 #         meeting_link = event.get("meeting_link", "").strip()
 
-#         # Define a callback that returns 0 after opening the link.
-#         def callback_on_click():
+#         # Define a callback that opens the meeting link (if available) and returns 0.
+#         def open_link_callback():
 #             if meeting_link:
 #                 webbrowser.open(meeting_link)
-#             return 0  # Return an integer as required by WPARAM
+#             return 0  # Required integer return
+
+#         # If no meeting link is provided, use a dummy callback that does nothing but returns 0.
+#         def dummy_callback():
+#             return 0
+
+#         # Always assign a callback function, avoiding None.
+#         callback = open_link_callback if meeting_link else dummy_callback
 
 #         toaster = ToastNotifier()
+
+#         # Set a long duration (e.g., 3600 seconds). Note that Windows may auto-dismiss toasts,
+#         # unless your application is registered as a persistent app.
 #         toaster.show_toast(
-#             "Event Reminder",  # Title with custom name
+#             "Wealth Manager – Event Reminder",  # Custom title
 #             f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
 #             icon_path=icon_path,
-#             # duration=60,
+#             # duration=3600,  # Attempt to keep the toast visible for 1 hour
 #             duration=None,
 #             threaded=True,
-#             callback_on_click=callback_on_click if meeting_link else None,
-        
+#             callback_on_click=callback
 #         )
 #         logging.info(f"Desktop notification sent for event '{event['title']}'")
 #         return True
@@ -18967,36 +18938,6 @@ def send_reminder_notification(event):
 #         logging.error(f"Error sending desktop notification: {e}")
 #         return False
 
-
-
-# previous :
-
-# def send_reminder_notification(event):
-#     """
-#     Sends a desktop notification for the event using Plyer.
-#     """
-#     try:
-#         icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
-#         notification.notify(
-#             title="Event Reminder",
-#             message=f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
-#             app_icon=icon_path,
-#             timeout=30
-#         )
-#         logging.info(f"Desktop notification sent for event '{event['title']}'")
-#         return True
-#     except Exception as e:
-#         logging.error(f"Error sending desktop notification: {e}")
-#         return False
-
-# def send_startup_notification():
-#     icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
-#     notification.notify(
-#         title="Server is running",
-#         message="Server is up and running on port 5000",
-#         app_icon=icon_path,
-#         timeout=10
-#     ) 
 
 def delayed_notification(event):
     time.sleep(5)  # Delay to ensure the server is up
@@ -21729,8 +21670,8 @@ from urllib.parse import urlencode
 from datetime import datetime, timedelta
 
 # === ENVIRONMENT ===
-ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
-ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
+ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID") # os.getenv("ZOOM_CLIENT_ID_PROD") #production 
+ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET") # os.getenv("ZOOM_CLIENT_ID_PROD") # production 
 ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
 ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
 ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
@@ -21741,6 +21682,10 @@ ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
 # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
 # previous :
 # # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+
+# Authorization URL
+# Use the generated authorization URL to share the app.
+# # https://zoom.us/oauth/authorize?response_type=code&client_id=TO4oxDDKSFqgkwoR8Pul6A&redirect_uri=https://wealth-management.mresult.net/api/zoom/callback
 
 # === STEP 1: Redirect user to Zoom OAuth ===
 @app.route('/api/zoom/auth')
@@ -21798,52 +21743,6 @@ def zoom_callback():
 # === API to create meeting ===
 CALL_LOGS_FOLDER = os.getenv("CALL_LOGS_FOLDER", "call_logs")
 
-@app.route('/api/create-zoom-meeting', methods=['POST'])
-def create_meeting():
-    try:
-        user_id = request.json.get("user_id", "harshal")
-        tokens = load_tokens_from_file(user_id)
-        if not tokens:
-            return jsonify({"error": "No Zoom tokens found"}), 401
-
-        # Refresh if needed
-        tokens = refresh_token_if_expired(user_id, tokens)
-        access_token = tokens["access_token"]
-
-        topic = request.json.get("topic", "Client Wealth Meeting")
-        duration = int(request.json.get("duration", 30))
-        client_name = request.json.get("client_name", "Unknown")
-        date = request.json.get("date",datetime.utcnow().strftime("%Y-%m-%d"))
-
-        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
-
-        # Save call metadata in S3
-        if meeting_info.get("meeting_id"):
-            metadata = {
-                "meeting_id": meeting_info["meeting_id"],
-                "client_name": client_name,
-                "call_duration": f"{duration} mins",
-                "date": date,
-                "created_at": meeting_info["created_at"],
-                "user_email": user_id
-            }
-
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
-                Body=json.dumps(metadata),
-                ContentType="application/json"
-            )
-
-        return jsonify({
-            "message": "Meeting created successfully",
-            **meeting_info
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-
 # previous :
 # @app.route('/api/create-zoom-meeting', methods=['POST'])
 # def create_meeting():
@@ -21859,14 +21758,89 @@ def create_meeting():
 
 #         topic = request.json.get("topic", "Client Wealth Meeting")
 #         duration = int(request.json.get("duration", 30))
+#         client_name = request.json.get("client_name", "Unknown")
+#         date = request.json.get("date",datetime.utcnow().strftime("%Y-%m-%d"))
+
 #         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+#         # Save call metadata in S3
+#         if meeting_info.get("meeting_id"):
+#             metadata = {
+#                 "meeting_id": meeting_info["meeting_id"],
+#                 "client_name": client_name,
+#                 "call_duration": f"{duration} mins",
+#                 "date": date,
+#                 "created_at": meeting_info["created_at"],
+#                 "user_email": user_id
+#             }
+
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+#                 Body=json.dumps(metadata),
+#                 ContentType="application/json"
+#             )
 
 #         return jsonify({
 #             "message": "Meeting created successfully",
 #             **meeting_info
-#         }),200
+#         }), 200
 #     except Exception as e:
 #         return jsonify({"error": str(e)}), 500
+
+# #Properly Working and saving correctly in Call History :
+
+@app.route('/api/create-zoom-meeting', methods=['POST'])
+@jwt_required()
+def create_meeting():
+    try:
+        user_email = get_jwt_identity()
+        #  Hard Coded for Development Purpose
+        user_id = 'harshal'
+        tokens = load_tokens_from_file(user_id)
+        # tokens = load_tokens_from_file(user_email)
+        if not tokens:
+            return jsonify({"error": "No Zoom tokens found"}), 401
+
+        # Refresh if needed
+        #  Hard Coded for Development Purpose
+        tokens = refresh_token_if_expired(user_id, tokens) 
+        # tokens = refresh_token_if_expired(user_email, tokens)
+        access_token = tokens["access_token"]
+
+        topic = request.json.get("topic", "Client Wealth Meeting")
+        duration = int(request.json.get("duration", 30))
+        client_name = request.json.get("client_name", "Unknown")
+        date = request.json.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
+
+        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+        # Save call metadata in S3
+        if meeting_info.get("meeting_id"):
+            metadata = {
+                "meeting_id": meeting_info["meeting_id"],
+                "client_name": client_name,
+                "call_duration": f"{duration} mins",
+                "date": date,
+                "created_at": meeting_info["created_at"],
+                "user_email": user_email  # use consistent email
+            }
+            print("Metadata : ",metadata)
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+                Body=json.dumps(metadata),
+                ContentType="application/json"
+            )
+
+        return jsonify({
+            "message": "Meeting created successfully",
+            **meeting_info
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 # === Refresh token if expired ===
 def refresh_token_if_expired(user_id, tokens):
@@ -21954,21 +21928,39 @@ def load_tokens_from_file(user_id):
 def get_call_history():
     try:
         user_email = get_jwt_identity()
-        prefix = CALL_LOGS_FOLDER # + "/"
+
+        # For development override (optional)
+        dev_override_user_id = request.args.get("dev_user_id")
+        if dev_override_user_id:
+            user_email = dev_override_user_id
+
+        prefix = CALL_LOGS_FOLDER if not CALL_LOGS_FOLDER.endswith("/") else CALL_LOGS_FOLDER[:-1]
+
         response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=prefix)
         objects = response.get("Contents", [])
 
-        meeting_ids = set(obj["Key"].split("/")[1] for obj in objects if "metadata.json" in obj["Key"])
-        call_logs = []
+        meeting_ids = set()
+        for obj in objects:
+            key = obj["Key"]
+            if key.count("/") >= 2 and key.endswith("metadata.json"):
+                parts = key.split("/")
+                meeting_id = parts[1] if len(parts) > 2 else None
+                if meeting_id:
+                    meeting_ids.add(meeting_id)
 
+        call_logs = []
         for mid in meeting_ids:
             try:
                 key = f"{CALL_LOGS_FOLDER}/{mid}/metadata.json"
                 obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
                 metadata = json.loads(obj["Body"].read())
-                if metadata.get("user_email") == user_email:  # user-level filter
+
+                if metadata.get("user_email") == user_email:
+                    client_info = metadata.get("client_name", {})
+                    client_display_name = client_info.get("clientName", "Unknown") if isinstance(client_info, dict) else client_info
+
                     call_logs.append({
-                        "client_name": metadata.get("client_name", "Unknown"),
+                        "client_name": client_display_name,
                         "meeting_id": metadata.get("meeting_id"),
                         "call_duration": metadata.get("call_duration", "N/A"),
                         "date": metadata.get("date", "N/A")
@@ -21978,153 +21970,12 @@ def get_call_history():
                 continue
 
         call_logs.sort(key=lambda x: x['date'], reverse=True)
+        print(call_logs)
         return jsonify({"call_history": call_logs}), 200
 
     except Exception as e:
         logging.error(f"Failed to fetch call history: {e}")
         return jsonify({"error": "Failed to fetch call history"}), 500
-
-
-######################################################################################################################
-
-# previous working Version of Zoom Meetings : 
-# import os
-# import json
-# import base64
-# import requests
-# from flask import Flask, redirect, request, jsonify
-# from urllib.parse import urlencode
-
-
-# # === SETUP ===
-# ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
-# ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
-# ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
-# ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
-# ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
-# ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
-
-# # # Authorization URL
-# # # Use the generated authorization URL to share the app within your account
-# # # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
-
-# # === In-Memory Token Store (for development/testing) ===
-# ZOOM_SESSION_STORE = {}  # key: user_id or email, value: token dict
-
-# # === STEP 1: Redirect to Zoom OAuth Consent Screen ===
-# @app.route('/api/zoom/auth')
-# def zoom_auth():
-#     query_params = urlencode({
-#         "response_type": "code",
-#         "client_id": ZOOM_CLIENT_ID,
-#         "redirect_uri": ZOOM_REDIRECT_URI
-#     })
-#     return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
-
-# # === STEP 2: Zoom Redirects to this URL with `code` ===
-# @app.route('/api/zoom/callback')
-# def zoom_callback():
-#     code = request.args.get("code")
-#     if not code:
-#         return jsonify({"error": "No code provided by Zoom"}), 400
-
-#     token_response = requests.post(
-#         ZOOM_OAUTH_TOKEN_URL,
-#         headers={"Authorization": f"Basic {get_basic_auth_token()}"},
-#         data={
-#             "grant_type": "authorization_code",
-#             "code": code,
-#             "redirect_uri": ZOOM_REDIRECT_URI
-#         }
-#     )
-
-#     if token_response.status_code != 200:
-#         return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
-
-#     tokens = token_response.json()
-#     access_token = tokens['access_token']
-#     refresh_token = tokens.get('refresh_token')
-
-#     # Store tokens locally and globally (file-based persistence)
-#     user_id = "harshal"
-#     ZOOM_SESSION_STORE[user_id] = tokens
-#     save_tokens_to_file(user_id, tokens)
-
-#     meeting_info = create_zoom_meeting(access_token)
-
-#     # return jsonify({"message": "Zoom integration successful", "meeting": meeting_info})
-#     return redirect(meeting_info["join_url"])
-
-# # === Helper: Save/Load Tokens to/from File ===
-# def save_tokens_to_file(user_id, tokens):
-#     with open(f"zoom_tokens_{user_id}.json", "w") as f:
-#         json.dump(tokens, f)
-
-# def load_tokens_from_file(user_id):
-#     try:
-#         with open(f"zoom_tokens_{user_id}.json", "r") as f:
-#             return json.load(f)
-#     except FileNotFoundError:
-#         return None
-
-# # === Helper: Basic Auth for Zoom Token ===
-# def get_basic_auth_token():
-#     creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
-#     return base64.b64encode(creds.encode()).decode()
-
-# # === Helper: Create a Zoom Meeting ===
-# def create_zoom_meeting(access_token, topic="Client Wealth Meeting", duration=30):
-#     headers = {
-#         "Authorization": f"Bearer {access_token}",
-#         "Content-Type": "application/json"
-#     }
-#     payload = {
-#         "topic": topic,
-#         "type": 1,
-#         "duration": duration,
-#         "settings": {
-#             "host_video": True,
-#             "participant_video": True
-#         }
-#     }
-#     response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
-#     if response.status_code == 201:
-#         meeting = response.json()
-#         return {
-#             "meeting_id": meeting["id"],
-#             "join_url": meeting["join_url"],
-#             "start_url": meeting["start_url"],
-#             "topic": meeting["topic"],
-#             "status": meeting["status"],
-#             "created_at": meeting["created_at"]
-#         }
-#     return {"error": "Failed to create meeting", "details": response.json()}
-
-# # === API: Create Meeting with Stored Token ===
-# @app.route('/api/create-zoom-meeting', methods=['POST'])
-# def create_meeting():
-#     try:
-#         user_id = request.json.get("user_id", "harshal")
-#         tokens = ZOOM_SESSION_STORE.get(user_id) or load_tokens_from_file(user_id)
-#         if not tokens:
-#             return jsonify({"error": "No stored Zoom access token"}), 401
-
-#         access_token = tokens["access_token"]
-#         topic = request.json.get("topic", "Wealth Management Call")
-#         duration = int(request.json.get("duration", 30))
-
-#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
-
-#         if "error" in meeting_info:
-#             return jsonify(meeting_info), 500
-
-#         return jsonify({
-#             "message": "Meeting created successfully",
-#             **meeting_info
-#         })
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
 
 
 
@@ -22144,68 +21995,174 @@ import tempfile
 aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
 TRANSCRIPTS_FOLDER = os.getenv("TRANSCRIPTS_FOLDER") #"meeting_transcripts"
 
+# # Combined Transcribe Audio and Analysis :
 @app.route('/api/transcribe-audio', methods=['POST'])
 def transcribe_audio():
-    if 'audio' not in request.files:
-        return jsonify({"error": "No audio file uploaded"}), 400
-
-    audio_file = request.files['audio']
-    if not audio_file.filename:
-        return jsonify({"error": "Empty filename"}), 400
-
     try:
-        # Save audio to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-            audio_file.save(tmp.name)
-            local_path = tmp.name
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file uploaded"}), 400
 
-        # Transcribe using AssemblyAI
-        config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
-        transcriber = aai.Transcriber(config=config)
-        transcript = transcriber.transcribe(local_path)
-
-        if transcript.status == "error":
-            return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+        audio_file = request.files['audio']
+        if not audio_file.filename:
+            return jsonify({"error": "Empty filename"}), 400
 
         meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
-        print("Meeting Id for the Uploaded Audio File : ",meeting_id)
-        
-        meeting_metadata = {
-            "client_name": request.form.get('client_name', 'Unknown'),
-            "meeting_id": meeting_id,
-            "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
-            "date": datetime.utcnow().strftime('%Y-%m-%d')
-        }
-        
-        # Save to S3 all the meta data :
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
-            Body=json.dumps(meeting_metadata),
-            ContentType='application/json'
-        )
-        
-        # Save to S3 the transcrpits :
+        client_name = request.form.get('client_name', 'Unknown')
+        call_duration = request.form.get('call_duration', '30 mins')
+
         transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=transcript_key,
-            Body=json.dumps({
+        metadata_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json"
+        analysis_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/analysis.json"
+
+        transcript_exists = False
+        analysis_exists = False
+
+        try:
+            s3.head_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
+            transcript_exists = True
+        except ClientError:
+            pass
+
+        try:
+            s3.head_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)
+            analysis_exists = True
+        except ClientError:
+            pass
+
+        if transcript_exists:
+            transcript_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
+            transcript_json = json.loads(transcript_data)
+        else:
+            # Transcribe audio
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                audio_file.save(tmp.name)
+                local_path = tmp.name
+
+            config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+            transcriber = aai.Transcriber(config=config)
+            transcript = transcriber.transcribe(local_path)
+
+            if transcript.status == "error":
+                return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+            transcript_json = {
                 "meeting_id": meeting_id,
                 "timestamp": datetime.utcnow().isoformat(),
                 "transcript": transcript.text
-            }),
-            ContentType='application/json'
-        )
+            }
+
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=transcript_key,
+                Body=json.dumps(transcript_json),
+                ContentType='application/json'
+            )
+
+            # Store metadata
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=metadata_key,
+                Body=json.dumps({
+                    "client_name": client_name,
+                    "meeting_id": meeting_id,
+                    "call_duration": call_duration,
+                    "date": datetime.utcnow().strftime('%Y-%m-%d')
+                }),
+                ContentType='application/json'
+            )
+
+        if analysis_exists:
+            analysis_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
+            analysis_json = json.loads(analysis_data)
+        else:
+            analysis_json = analyze_meeting_transcript(transcript_json["transcript"])
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=analysis_key,
+                Body=json.dumps(analysis_json, indent=4),
+                ContentType='application/json'
+            )
 
         return jsonify({
-            "message": "Transcription completed successfully",
+            "message": "Audio processed successfully",
             "meeting_id": meeting_id,
-            "transcript": transcript.text
+            "transcript": transcript_json,
+            "analysis": analysis_json,
+            "from_cache": {
+                "transcript": transcript_exists,
+                "analysis": analysis_exists
+            }
         }), 200
 
     except Exception as e:
+        logging.error(f"Error processing audio: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# # Transcribe Audio :
+# @app.route('/api/transcribe-audio', methods=['POST'])
+# def transcribe_audio():
+#     if 'audio' not in request.files:
+#         return jsonify({"error": "No audio file uploaded"}), 400
+
+#     audio_file = request.files['audio']
+#     if not audio_file.filename:
+#         return jsonify({"error": "Empty filename"}), 400
+
+#     try:
+#         # Save audio to temporary file
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+#             audio_file.save(tmp.name)
+#             local_path = tmp.name
+
+#         # Transcribe using AssemblyAI
+#         config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+#         transcriber = aai.Transcriber(config=config)
+#         transcript = transcriber.transcribe(local_path)
+
+#         if transcript.status == "error":
+#             return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+#         meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+#         print("Meeting Id for the Uploaded Audio File : ",meeting_id)
+        
+#         meeting_metadata = {
+#             "client_name": request.form.get('client_name', 'Unknown'),
+#             "meeting_id": meeting_id,
+#             "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
+#             "date": datetime.utcnow().strftime('%Y-%m-%d')
+#         }
+        
+#         # Save to S3 all the meta data :
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
+#             Body=json.dumps(meeting_metadata),
+#             ContentType='application/json'
+#         )
+        
+#         # Save to S3 the transcrpits :
+#         transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=transcript_key,
+#             Body=json.dumps({
+#                 "meeting_id": meeting_id,
+#                 "timestamp": datetime.utcnow().isoformat(),
+#                 "transcript": transcript.text
+#             }),
+#             ContentType='application/json'
+#         )
+
+#         return jsonify({
+#             "message": "Transcription completed successfully",
+#             "meeting_id": meeting_id,
+#             "transcript": transcript.text
+#         }), 200
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+    
     
 @app.route('/api/get-transcript/<meeting_id>', methods=['GET'])
 def get_transcript(meeting_id):
@@ -22219,38 +22176,8 @@ def get_transcript(meeting_id):
             return jsonify({"error": "Transcript not found"}), 404
         return jsonify({"error": str(e)}), 500
     
-# Previous 
-# @app.route('/api/transcribe-audio', methods=['POST'])
-# def transcribe_audio():
-#     if 'audio' not in request.files:
-#         return jsonify({"error": "No audio file uploaded"}), 400
 
-#     audio_file = request.files['audio']
-#     if not audio_file.filename:
-#         return jsonify({"error": "Empty filename"}), 400
 
-#     try:
-#         # Save the uploaded file to a temporary location
-#         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-#             audio_file.save(tmp.name)
-#             local_path = tmp.name
-
-#         # Transcribe using AssemblyAI SDK
-#         config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
-#         transcriber = aai.Transcriber(config=config)
-#         transcript = transcriber.transcribe(local_path)
-
-#         if transcript.status == "error":
-#             return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
-
-#         return jsonify({
-#             "message": "Transcription completed successfully",
-#             "transcript": transcript.text
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-    
 ##############################################################################################################################   
  
 # Sentiment Analysis of Client, Summary of Meeting , Key Points and next Actionable Steps : 
@@ -22312,11 +22239,11 @@ def analyze_meeting_transcript(transcript: str):
     # return sentiment_analysis
     
     
-transcript_folder = os.getenv('transcript_folder') # "transcripts"
+TRANSCRIPTS_FOLDER = os.getenv('TRANSCRIPTS_FOLDER', 'meeting_transcripts')
 
 # === Save to AWS S3 ===
 def save_transcript_data(meeting_id, data, transcript):
-    folder = f"{transcript_folder}{meeting_id}"
+    folder = f"{TRANSCRIPTS_FOLDER}{meeting_id}"
     transcript_key = f"{folder}/transcript.txt"
     analysis_key = f"{folder}/analysis.json"
 
@@ -22329,7 +22256,7 @@ def save_transcript_data(meeting_id, data, transcript):
 
 # === Get from AWS S3 ===
 def get_transcript_data(meeting_id):
-    folder = f"{transcript_folder}{meeting_id}"
+    folder = f"{TRANSCRIPTS_FOLDER}{meeting_id}"
     transcript_key = f"{folder}/transcript.txt"
     analysis_key = f"{folder}/analysis.json"
     try:
@@ -22430,6 +22357,10 @@ Advisor: I’m glad to hear that! I’ll send you a link to get started right aw
 # result = analyze_meeting_transcript(transcript_text)
 # print(json.dumps(result, indent=2))
 # print(result)
+
+
+######################################################################################################################
+
 
 
 
