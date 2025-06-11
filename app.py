@@ -21817,21 +21817,40 @@ def create_meeting():
 
         # Save call metadata in S3
         if meeting_info.get("meeting_id"):
+            mid_str = str(meeting_info["meeting_id"])  # ensure string format
+
             metadata = {
-                "meeting_id": meeting_info["meeting_id"],
+                "meeting_id": mid_str,
                 "client_name": client_name,
                 "call_duration": f"{duration} mins",
                 "date": date,
                 "created_at": meeting_info["created_at"],
-                "user_email": user_email  # use consistent email
+                "user_email": user_email
             }
-            print("Metadata : ",metadata)
+
             s3.put_object(
                 Bucket=S3_BUCKET_NAME,
-                Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+                Key=f"{CALL_LOGS_FOLDER}/{mid_str}/metadata.json",
                 Body=json.dumps(metadata),
                 ContentType="application/json"
             )
+
+        # if meeting_info.get("meeting_id"):
+        #     metadata = {
+        #         "meeting_id": meeting_info["meeting_id"],
+        #         "client_name": client_name,
+        #         "call_duration": f"{duration} mins",
+        #         "date": date,
+        #         "created_at": meeting_info["created_at"],
+        #         "user_email": user_email  # use consistent email
+        #     }
+        #     print("Metadata : ",metadata)
+        #     s3.put_object(
+        #         Bucket=S3_BUCKET_NAME,
+        #         Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+        #         Body=json.dumps(metadata),
+        #         ContentType="application/json"
+        #     )
 
         return jsonify({
             "message": "Meeting created successfully",
@@ -21996,172 +22015,172 @@ aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
 TRANSCRIPTS_FOLDER = os.getenv("TRANSCRIPTS_FOLDER") #"meeting_transcripts"
 
 # # Combined Transcribe Audio and Analysis :
-@app.route('/api/transcribe-audio', methods=['POST'])
-def transcribe_audio():
-    try:
-        if 'audio' not in request.files:
-            return jsonify({"error": "No audio file uploaded"}), 400
-
-        audio_file = request.files['audio']
-        if not audio_file.filename:
-            return jsonify({"error": "Empty filename"}), 400
-
-        meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
-        client_name = request.form.get('client_name', 'Unknown')
-        call_duration = request.form.get('call_duration', '30 mins')
-
-        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
-        metadata_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json"
-        analysis_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/analysis.json"
-
-        transcript_exists = False
-        analysis_exists = False
-
-        try:
-            s3.head_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
-            transcript_exists = True
-        except ClientError:
-            pass
-
-        try:
-            s3.head_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)
-            analysis_exists = True
-        except ClientError:
-            pass
-
-        if transcript_exists:
-            transcript_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
-            transcript_json = json.loads(transcript_data)
-        else:
-            # Transcribe audio
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                audio_file.save(tmp.name)
-                local_path = tmp.name
-
-            config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
-            transcriber = aai.Transcriber(config=config)
-            transcript = transcriber.transcribe(local_path)
-
-            if transcript.status == "error":
-                return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
-
-            transcript_json = {
-                "meeting_id": meeting_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                "transcript": transcript.text
-            }
-
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=transcript_key,
-                Body=json.dumps(transcript_json),
-                ContentType='application/json'
-            )
-
-            # Store metadata
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=metadata_key,
-                Body=json.dumps({
-                    "client_name": client_name,
-                    "meeting_id": meeting_id,
-                    "call_duration": call_duration,
-                    "date": datetime.utcnow().strftime('%Y-%m-%d')
-                }),
-                ContentType='application/json'
-            )
-
-        if analysis_exists:
-            analysis_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
-            analysis_json = json.loads(analysis_data)
-        else:
-            analysis_json = analyze_meeting_transcript(transcript_json["transcript"])
-            s3.put_object(
-                Bucket=S3_BUCKET_NAME,
-                Key=analysis_key,
-                Body=json.dumps(analysis_json, indent=4),
-                ContentType='application/json'
-            )
-
-        return jsonify({
-            "message": "Audio processed successfully",
-            "meeting_id": meeting_id,
-            "transcript": transcript_json,
-            "analysis": analysis_json,
-            "from_cache": {
-                "transcript": transcript_exists,
-                "analysis": analysis_exists
-            }
-        }), 200
-
-    except Exception as e:
-        logging.error(f"Error processing audio: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-# # Transcribe Audio :
 # @app.route('/api/transcribe-audio', methods=['POST'])
 # def transcribe_audio():
-#     if 'audio' not in request.files:
-#         return jsonify({"error": "No audio file uploaded"}), 400
-
-#     audio_file = request.files['audio']
-#     if not audio_file.filename:
-#         return jsonify({"error": "Empty filename"}), 400
-
 #     try:
-#         # Save audio to temporary file
-#         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-#             audio_file.save(tmp.name)
-#             local_path = tmp.name
+#         if 'audio' not in request.files:
+#             return jsonify({"error": "No audio file uploaded"}), 400
 
-#         # Transcribe using AssemblyAI
-#         config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
-#         transcriber = aai.Transcriber(config=config)
-#         transcript = transcriber.transcribe(local_path)
-
-#         if transcript.status == "error":
-#             return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+#         audio_file = request.files['audio']
+#         if not audio_file.filename:
+#             return jsonify({"error": "Empty filename"}), 400
 
 #         meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
-#         print("Meeting Id for the Uploaded Audio File : ",meeting_id)
-        
-#         meeting_metadata = {
-#             "client_name": request.form.get('client_name', 'Unknown'),
-#             "meeting_id": meeting_id,
-#             "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
-#             "date": datetime.utcnow().strftime('%Y-%m-%d')
-#         }
-        
-#         # Save to S3 all the meta data :
-#         s3.put_object(
-#             Bucket=S3_BUCKET_NAME,
-#             Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
-#             Body=json.dumps(meeting_metadata),
-#             ContentType='application/json'
-#         )
-        
-#         # Save to S3 the transcrpits :
+#         client_name = request.form.get('client_name', 'Unknown')
+#         call_duration = request.form.get('call_duration', '30 mins')
+
 #         transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
-#         s3.put_object(
-#             Bucket=S3_BUCKET_NAME,
-#             Key=transcript_key,
-#             Body=json.dumps({
+#         metadata_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json"
+#         analysis_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/analysis.json"
+
+#         transcript_exists = False
+#         analysis_exists = False
+
+#         try:
+#             s3.head_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
+#             transcript_exists = True
+#         except ClientError:
+#             pass
+
+#         try:
+#             s3.head_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)
+#             analysis_exists = True
+#         except ClientError:
+#             pass
+
+#         if transcript_exists:
+#             transcript_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
+#             transcript_json = json.loads(transcript_data)
+#         else:
+#             # Transcribe audio
+#             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+#                 audio_file.save(tmp.name)
+#                 local_path = tmp.name
+
+#             config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+#             transcriber = aai.Transcriber(config=config)
+#             transcript = transcriber.transcribe(local_path)
+
+#             if transcript.status == "error":
+#                 return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+#             transcript_json = {
 #                 "meeting_id": meeting_id,
 #                 "timestamp": datetime.utcnow().isoformat(),
 #                 "transcript": transcript.text
-#             }),
-#             ContentType='application/json'
-#         )
+#             }
+
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=transcript_key,
+#                 Body=json.dumps(transcript_json),
+#                 ContentType='application/json'
+#             )
+
+#             # Store metadata
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=metadata_key,
+#                 Body=json.dumps({
+#                     "client_name": client_name,
+#                     "meeting_id": meeting_id,
+#                     "call_duration": call_duration,
+#                     "date": datetime.utcnow().strftime('%Y-%m-%d')
+#                 }),
+#                 ContentType='application/json'
+#             )
+
+#         if analysis_exists:
+#             analysis_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
+#             analysis_json = json.loads(analysis_data)
+#         else:
+#             analysis_json = analyze_meeting_transcript(transcript_json["transcript"])
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=analysis_key,
+#                 Body=json.dumps(analysis_json, indent=4),
+#                 ContentType='application/json'
+#             )
 
 #         return jsonify({
-#             "message": "Transcription completed successfully",
+#             "message": "Audio processed successfully",
 #             "meeting_id": meeting_id,
-#             "transcript": transcript.text
+#             "transcript": transcript_json,
+#             "analysis": analysis_json,
+#             "from_cache": {
+#                 "transcript": transcript_exists,
+#                 "analysis": analysis_exists
+#             }
 #         }), 200
 
 #     except Exception as e:
+#         logging.error(f"Error processing audio: {e}")
 #         return jsonify({"error": str(e)}), 500
+
+
+# # Transcribe Audio :
+@app.route('/api/transcribe-audio', methods=['POST'])
+def transcribe_audio():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file uploaded"}), 400
+
+    audio_file = request.files['audio']
+    if not audio_file.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    try:
+        # Save audio to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            audio_file.save(tmp.name)
+            local_path = tmp.name
+
+        # Transcribe using AssemblyAI
+        config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(local_path)
+
+        if transcript.status == "error":
+            return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+        meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        print("Meeting Id for the Uploaded Audio File : ",meeting_id)
+        
+        meeting_metadata = {
+            "client_name": request.form.get('client_name', 'Unknown'),
+            "meeting_id": meeting_id,
+            "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
+            "date": datetime.utcnow().strftime('%Y-%m-%d')
+        }
+        
+        # Save to S3 all the meta data :
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
+            Body=json.dumps(meeting_metadata),
+            ContentType='application/json'
+        )
+        
+        # Save to S3 the transcrpits :
+        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=transcript_key,
+            Body=json.dumps({
+                "meeting_id": meeting_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "transcript": transcript.text
+            }),
+            ContentType='application/json'
+        )
+
+        return jsonify({
+            "message": "Transcription completed successfully",
+            "meeting_id": meeting_id,
+            "transcript": transcript.text
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     
     
 @app.route('/api/get-transcript/<meeting_id>', methods=['GET'])
