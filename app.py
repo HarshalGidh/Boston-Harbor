@@ -17435,18 +17435,75 @@ def search_web(query: str) -> str:
     else:
         return "No relevant information found."
 
-def get_stock_info(symbol: str) -> str:
-    """
-    Fetches the current stock price using Yahoo Finance API and returns it in a Markdown table.
-    """
-    stock_tool = YFinanceTools(stock_price=True)
-    stock_price = stock_tool.get_current_stock_price(symbol)
-    if stock_price:
-        table = "| Symbol | Current Price |\n| --- | --- |\n"
-        table += f"| {symbol.upper()} | {stock_price} |\n"
-        return table
-    else:
-        return "No stock data available."
+# previous yfinance code :
+# def get_stock_info(symbol: str) -> str:
+#     """
+#     Fetches the current stock price using Yahoo Finance API and returns it in a Markdown table.
+#     """
+#     stock_tool = YFinanceTools(stock_price=True)
+#     stock_price = stock_tool.get_current_stock_price(symbol)
+#     if stock_price:
+#         table = "| Symbol | Current Price |\n| --- | --- |\n"
+#         table += f"| {symbol.upper()} | {stock_price} |\n"
+#         return table
+#     else:
+#         return "No stock data available."
+
+# backup alpha vantage mechanism and FinHub added :
+def get_stock_info(symbol):
+    print(f"\n🔎 Fetching data for: {symbol.upper()}")
+    
+    # --------- Method 1: Yahoo Finance (public endpoint) ----------
+    try:
+        print("🌐 Trying Yahoo Finance API...")
+        yahoo_url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}'
+        response = requests.get(yahoo_url)
+        response.raise_for_status()
+        data = response.json()
+        result = data["quoteResponse"]["result"]
+        if not result:
+            raise ValueError("No data found in Yahoo response.")
+
+        stock_data = result[0]
+        print("✅ Yahoo Finance success")
+        return {
+            "source": "Yahoo Finance",
+            "symbol": stock_data["symbol"],
+            "name": stock_data.get("shortName", "N/A"),
+            "price": stock_data["regularMarketPrice"],
+            "currency": stock_data.get("currency", "N/A"),
+            "exchange": stock_data.get("fullExchangeName", "N/A")
+        }
+
+    except Exception as e:
+        print(f"⚠️ Yahoo Finance failed: {e}")
+    
+    # --------- Method 2: Alpha Vantage fallback ----------
+    try:
+        print("🔄 Trying Alpha Vantage fallback...")
+        av_url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}'
+        response = requests.get(av_url)
+        response.raise_for_status()
+        data = response.json()
+
+        quote = data.get("Global Quote", {})
+        if not quote or not quote.get("05. price"):
+            raise ValueError("No data found in Alpha Vantage response.")
+
+        print("✅ Alpha Vantage success")
+        return {
+            "source": "Alpha Vantage",
+            "symbol": quote["01. symbol"],
+            "price": float(quote["05. price"]),
+            "currency": "USD",  # Alpha Vantage doesn't provide currency
+            "exchange": "Unknown"
+        }
+
+    except Exception as e:
+        print(f"❌ Alpha Vantage failed: {e}")
+    
+    return {"error": f"Unable to fetch data for symbol: {symbol}"}
+
 
 def get_company_info(symbol: str) -> str:
     """
@@ -21812,6 +21869,9 @@ def create_meeting():
         duration = int(request.json.get("duration", 30))
         client_name = request.json.get("client_name", "Unknown")
         date = request.json.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
+        if date == "":
+            date = datetime.utcnow().strftime("%Y-%m-%d")
+            print(date)
 
         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
 
