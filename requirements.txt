@@ -23,7 +23,6 @@ xlsxwriter
 yfinance
 db-dtypes
 faiss-cpu
-langchain-community-faiss-cpu
 flask
 flask-cors
 markdown
@@ -42,3 +41,26 @@ yahoo_fin
 markdownify
 prettytable
 waitress
+apscheduler
+dnspython
+groq
+phidata
+duckduckgo-search
+openai
+mistune
+pytz
+calcom
+requests_cache
+apscheduler 
+python-dateutil
+plyer
+pandas-ta
+win10toast_click
+holidays
+openai-whisper
+ffmpeg-python
+assemblyai
+alpha_vantage
+win10toast_click --no-deps
+plyer
+win32api

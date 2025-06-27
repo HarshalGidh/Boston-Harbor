@@ -1,3 +1,4 @@
+import markdown
 import markdown2
 from bs4 import BeautifulSoup
 

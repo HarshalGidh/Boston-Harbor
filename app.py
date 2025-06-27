@@ -1,113 +1,29 @@
 # import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-
-import os
-import filetype
-import docx
-import PyPDF2
-import re
-from dotenv import load_dotenv
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import Docx2txtLoader
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.memory import ConversationSummaryMemory
-import asyncio
-import numpy as np
-import json
-
-import google.generativeai as genai
-import pathlib
-import logging
-import sys
-import io
-import matplotlib.pyplot as plt
-import seaborn as sns
-# Import things that are needed generically
-from langchain.pydantic_v1 import BaseModel, Field
-from langchain.tools import BaseTool, StructuredTool, tool
-# Define functions to generate investment suggestions :\
-
-import random
-from datetime import datetime
-import os
-import json
-from email.mime.text import MIMEText
-import smtplib
-import jwt
+# import all libraries:
+from src.utils.libraries import *
 
 USE_AWS = True  # Set to False to use local storage
 
-# # -------------------------------------Start Aws---------------------
-# import paramiko
-
-# # Set up the SSH key file, IP, username, and passphrase
-# key_path = "keys/aws_key.pem"  # Path to the converted .pem file
-# hostname = "172.31.15.173"  # AWS EC2 public IP address
-# username = "pragatidhobe"  # EC2 instance username
-# passphrase = "12345678"  # Passphrase, if any
-
-# # Create an SSH client instance
-# ssh_client = paramiko.SSHClient()
-# ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-# try:
-#     # Load SSH key
-#     key = paramiko.RSAKey.from_private_key_file(key_path, password=passphrase)
-
-#     # Connect to the instance
-#     ssh_client.connect(hostname=hostname, username=username, pkey=key)
-
-#     # Execute a command (example)
-#     stdin, stdout, stderr = ssh_client.exec_command("ls")
-#     print(stdout.read().decode())  # Print command output
-
-# except Exception as e:
-#     print(f"An error occurred: {e}")
-
-# finally:
-#     ssh_client.close()
-
-# # -------------------------------------End Aws---------------------
+# from src.utils.start_aws import *
 
 #########################################################################################################
-
+# Most Important part of the code and cant be imported 
 
 import boto3
 load_dotenv()
 
 from flask import Flask, request, jsonify
-
-# app = Flask(__name__)
-from flask import Flask, request, jsonify, send_file
+from flask import send_file,send_from_directory
 import asyncio
 from flask_cors import CORS
-# app = Flask(__name__)
 
-from config import config
-
-# Load the environment : working for static :
-# env = os.getenv("FLASK_ENV", "development")
-# app_config = config[env]
-
-# app = Flask(__name__)
-# CORS(app)
+# from config import config
 
 env = os.getenv("FLASK_ENV", "development")
 base_url = os.getenv("BASE_URL", "http://localhost:5000")  # Default to localhost if not set
-app_config = config[env]
+# app_config = config[env]
 
-# app = Flask(__name__)
-from flask import Flask, jsonify, request, send_from_directory
-import os
-
-app = Flask(__name__, static_folder="../bostonHarbor/build")
+app = Flask(__name__, static_folder="./build")
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
@@ -120,14 +36,18 @@ def serve_frontend(path):
     
 app.config["BASE_URL"] = base_url  # Set base URL for the backend
 CORS(app, resources={r"/*": {"origins": "*"}})
-# CORS(app, resources={r"/*": {"origins": base_url}})
 
 print(f"Flask is running in {env} mode with base URL: {base_url}")
 
 
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+# # API route : Most Important Code !!!!!!!!!!!!
 
-app.config.from_object(app_config)
+@app.route("/api/data", methods=["GET"])
+def get_data():
+
+    return jsonify({"message": "Hello from Flask API!"})
+
+# app.config.from_object(app_config)
 
 print(f"FLASK_ENV: {os.getenv('FLASK_ENV')}")
 print(f"BASE_URL: {os.getenv('BASE_URL')}")
@@ -136,174 +56,20 @@ print(f"DEBUG: {os.getenv('DEBUG')}")
 #########################################################################################################
 
 # # AWS keys
-aws_access_key = os.getenv('aws_access_key')
-aws_secret_key = os.getenv('aws_secret_key')
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
-client_summary_folder = os.getenv('client_summary_folder') 
-suggestions_folder = os.getenv('suggestions_folder') 
-order_list_folder = os.getenv('order_list_folder')
-portfolio_list_folder = os.getenv('portfolio_list_folder') 
-personality_assessment_folder = os.getenv('personality_assessment_folder') 
-login_folder = os.getenv('login_folder')
-daily_changes_folder = os.getenv('daily_changes_folder')
-signUp_user_folder = os.getenv('signUp_user_folder')
-PREDICTIONS_FOLDER = os.getenv('PREDICTIONS_FOLDER')
-# Connecting to Amazon S3
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=aws_access_key,
-    aws_secret_access_key=aws_secret_key
-)
+from src.utils.aws_config import * 
 
-def list_s3_keys(bucket_name, prefix=""):
-    try:
-        # List objects in the bucket with the given prefix
-        response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-        if 'Contents' in response:
-            print("Keys in the S3 folder:")
-            for obj in response['Contents']:
-                print(obj['Key'])
-        else:
-            print("No files found in the specified folder.")
-    except Exception as e:
-        print(f"Error listing objects in S3: {e}")
-
-# Call the function
-# list_s3_keys(S3_BUCKET_NAME, signUp_user_folder)
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-# list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
-
-
-####################################################################################
-
-# Download the files :
-
-# def download_json_file(bucket_name, file_key, local_file_path):
-#     """
-#     Downloads a JSON file from an S3 bucket to a local file.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) of the file in the bucket
-#     :param local_file_path: Path to save the file locally
-#     """
-#     try:
-#         # Download the file
-#         s3.download_file(bucket_name, file_key, local_file_path)
-#         print(f"File '{file_key}' successfully downloaded to '{local_file_path}'.")
-        
-#         # Load the JSON content to confirm it's valid
-#         with open(local_file_path, 'r') as file:
-#             data = json.load(file)
-#             print("Downloaded JSON content:", data)
-#         return data
-    
-#     except Exception as e:
-#         print(f"Error downloading file: {e}")
-#         return None
-
-# # Example usage 
-# local_file_path = "local_data\orders\orders_SF3648.json"
-# downloaded_data = download_json_file(S3_BUCKET_NAME,"order_list_folder/SF3648_orders.json", local_file_path)
-
-# downloaded_data = download_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
-
-# print(downloaded_data)
-
-######################################################################################
-
-# Upload File :
-
-# def upload_json_file(bucket_name, file_key, local_file_path):
-#     """
-#     Uploads a JSON file from the local file system to an S3 bucket.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) to upload the file to in the bucket
-#     :param local_file_path: Path of the file locally to be uploaded
-#     """
-#     try:
-#         # Upload the file
-#         s3.upload_file(local_file_path, bucket_name, file_key, ExtraArgs={'ContentType': 'application/json'})
-#         print(f"File '{local_file_path}' successfully uploaded to '{file_key}' in bucket '{bucket_name}'.")
-    
-#     except Exception as e:
-#         print(f"Error uploading file: {e}")
-
-# # Example usage
-# local_file_path = "local_data\portfolios\portfolio_SF3648.json"
-# upload_json_file(S3_BUCKET_NAME, "portfolio_list_folder//SF3648.json", local_file_path)
-
-# local_file_path = "local_data\orders\orders_SF3648.json"
-# upload_json_file(S3_BUCKET_NAME, "order_list_folder/SF3648_orders.json", local_file_path)
-
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-
-
-######################################################################################
-
-
-# delete folders/files from bucket :
-
-
-
-# S3 bucket and file details
-
-# FILE_KEY = "order_list_folder/JM4162_orders.json"
-# FILE_KEY = "order_list_folder/JR5059_orders.json"
-# FILE_KEY = "portfolio_list_folder//JM4162.json"
-# FILE_KEY = "portfolio_list_folder//JR5059.json"
-
-# FILE_KEY = "order_list_folder/SF3648_orders.json" 
-
-# FILE_KEY = "order_list_folder/SF3648_orders.json" 
-
-
-# def delete_file_from_s3(bucket_name, file_key):
-#     """
-#     Deletes a specified file from an S3 bucket.
-
-#     :param bucket_name: Name of the S3 bucket
-#     :param file_key: Key (path) of the file in the bucket
-#     """
-#     try:
-#         # Delete the file
-#         response = s3.delete_object(Bucket=bucket_name, Key=file_key)
-        
-#         # Confirm deletion
-#         if response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 204:
-#             print(f"File '{file_key}' successfully deleted from bucket '{bucket_name}'.")
-#         else:
-#             print(f"Failed to delete file '{file_key}' from bucket '{bucket_name}'.")
-    
-#     except Exception as e:
-#         print(f"Error deleting file: {e}")
-
-# # Call the function
-# delete_file_from_s3(S3_BUCKET_NAME, FILE_KEY)
-
-# # list_s3_keys(S3_BUCKET_NAME, portfolio_list_folder) 
-# list_s3_keys(S3_BUCKET_NAME, order_list_folder) 
-
-
+# signUp_user_folder
 
 # =------------------------------------------------------=
 
-
-
-
-
-
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-
-
-# Configure generativeai with your API key
-genai.configure(api_key=GOOGLE_API_KEY)
-
-import markdown
+# Import and Initialize the Model
+from src.utils.model_config import *
 
 ########################### Sign in Sign using aws ###################################################
+from datetime import timedelta
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)  # 🔹 Increase to 12 hours
 
 from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
@@ -315,35 +81,32 @@ from datetime import datetime, timedelta,timezone
 
 bcrypt = Bcrypt(app)
 
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') # 'your_email@gmail.com'
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD') #'your_email_password'
+# Using AWS and Local Storage :
 
-mail = Mail(app)
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
-# In-memory storage for email and OTP (for simplicity)
-otp_store = {}
+# AWS Data Config
+from src.utils.aws_data import *
 
-# API Endpoints
-from flask import Flask, request, jsonify
-import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+#################################################################################
 
-# Replace with your email credentials
-EMAIL_ADDRESS = os.getenv('MAIL_USERNAME')  #'your-email@gmail.com'
-EMAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  #'your-email-password'
+import time
+import yfinance as yf
+import requests_cache
+from flask import Flask, jsonify, request
 
- 
-# Local storage paths
-LOCAL_STORAGE_PATH = "local_storage"
-os.makedirs(LOCAL_STORAGE_PATH, exist_ok=True)
-# otp_store = {}
- 
+
+def clear_yfinance_cache():
+    # This is the default cache folder; adjust if you use a custom location.
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "py-yfinance")
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+        print(f"Cleared yfinance cache at {cache_dir}")
+
+# Call clear_yfinance_cache() on startup (or before making requests)
+clear_yfinance_cache()
+
+###############################################################################
 # def load_from_local(filepath):
 #     try:
 #         if not os.path.exists(filepath):
@@ -353,7 +116,7 @@ os.makedirs(LOCAL_STORAGE_PATH, exist_ok=True)
 #     except Exception as e:
 #         print(f"Error loading file: {e}")
 #         return None
-   
+ 
 # def save_to_local(data, filepath):
 #     try:
 #         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -364,203 +127,248 @@ os.makedirs(LOCAL_STORAGE_PATH, exist_ok=True)
 #         print(f"Error saving file: {e}")  # Debug log
 #         raise
  
- 
 # def delete_from_local(filename):
-    # file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
-    # if os.path.exists(file_path):
-    #     os.remove(file_path)
-       
-# Using AWS and Local Storage :
+#     file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
+#     try:
+#         if os.path.exists(file_path):
+#             os.remove(file_path)
+#             print(f"File {filename} deleted from local storage.")  # Debug log
+#         else:
+#             print(f"File {filename} not found in local storage.")  # Debug log
+#     except Exception as e:
+#         print(f"Error deleting file: {e}")  # Debug log
+#         raise
+ 
+# def save_to_aws(data, filename):
+#     try:
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=filename,
+#             Body=json.dumps(data),
+#             ContentType='application/json'
+#         )
+#         print(f"Data saved to AWS at {filename}")
+#     except (NoCredentialsError, PartialCredentialsError) as e:
+#         print(f"AWS credentials error: {e}")
+#         raise
+#     except Exception as e:
+#         print(f"Error saving to AWS: {e}")
+#         raise
+ 
+# def load_from_aws(filename):
+#     try:
+#         obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+#         return json.loads(obj['Body'].read().decode('utf-8'))
+#     except s3.exceptions.NoSuchKey:
+#         return None
+#     except Exception as e:
+#         print(f"Error loading from AWS: {e}")
+#         return None
+ 
+# def save_user_data(data, email):
+#     if USE_AWS:
+#         # Store in AWS under 'signUp_user_folder/<email>.json'
+#         filename = f"{signUp_user_folder}{email}.json"
+#         save_to_aws(data, filename)
+#     else:
+#         # Store locally under 'users/<email>.json'
+#         filename = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
+#         save_to_local(data, filename)
+ 
+# def load_user_data(email):
+#     if USE_AWS:
+#         filename = f"{signUp_user_folder}{email}.json"
+#         return load_from_aws(filename) or {} # Fixed returning None
+#     else:
+#         filename = f"users/{email}.json"
+#         return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename)) or {} # Fixed returning None
+ 
+# def delete_user_data(email):
+#     if USE_AWS:
+#         try:
+#             filename = f"{signUp_user_folder}{email}.json"
+#             s3.delete_object(Bucket=S3_BUCKET_NAME, Key=filename)
+#             print(f"File {filename} deleted from AWS.")  # Debug log
+#         except Exception as e:
+#             print(f"Error deleting file from AWS: {e}")  # Debug log
+#             raise
+#     else:
+#         filename = f"users/{email}.json"
+#         delete_from_local(filename)
 
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+###################################################################################
 
+# # ✅ Function to Send Email using Office 365 SMTP
 
-def load_from_local(filepath):
-    try:
-        if not os.path.exists(filepath):
-            return None
-        with open(filepath, 'r') as file:
-            return json.load(file)
-    except Exception as e:
-        print(f"Error loading file: {e}")
-        return None
- 
-def save_to_local(data, filepath):
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w') as file:
-            json.dump(data, file)
-        print(f"Data saved at {filepath}")  # Debug log
-    except Exception as e:
-        print(f"Error saving file: {e}")  # Debug log
-        raise
- 
-def delete_from_local(filename):
-    file_path = os.path.join(LOCAL_STORAGE_PATH, filename)
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"File {filename} deleted from local storage.")  # Debug log
-        else:
-            print(f"File {filename} not found in local storage.")  # Debug log
-    except Exception as e:
-        print(f"Error deleting file: {e}")  # Debug log
-        raise
- 
-def save_to_aws(data, filename):
-    try:
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=filename,
-            Body=json.dumps(data),
-            ContentType='application/json'
-        )
-        print(f"Data saved to AWS at {filename}")
-    except (NoCredentialsError, PartialCredentialsError) as e:
-        print(f"AWS credentials error: {e}")
-        raise
-    except Exception as e:
-        print(f"Error saving to AWS: {e}")
-        raise
- 
-def load_from_aws(filename):
-    try:
-        obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
-        return json.loads(obj['Body'].read().decode('utf-8'))
-    except s3.exceptions.NoSuchKey:
-        return None
-    except Exception as e:
-        print(f"Error loading from AWS: {e}")
-        return None
- 
-def save_user_data(data, email):
-    if USE_AWS:
-        # Store in AWS under 'signUp_user_folder/<email>.json'
-        filename = f"{signUp_user_folder}{email}.json"
-        save_to_aws(data, filename)
-    else:
-        # Store locally under 'users/<email>.json'
-        filename = os.path.join(LOCAL_STORAGE_PATH, f"users/{email}.json")
-        save_to_local(data, filename)
- 
-def load_user_data(email):
-    if USE_AWS:
-        filename = f"{signUp_user_folder}{email}.json"
-        return load_from_aws(filename)
-    else:
-        filename = f"users/{email}.json"
-        return load_from_local(os.path.join(LOCAL_STORAGE_PATH, filename))
- 
-def delete_user_data(email):
-    if USE_AWS:
-        try:
-            filename = f"{signUp_user_folder}{email}.json"
-            s3.delete_object(Bucket=S3_BUCKET_NAME, Key=filename)
-            print(f"File {filename} deleted from AWS.")  # Debug log
-        except Exception as e:
-            print(f"Error deleting file from AWS: {e}")  # Debug log
-            raise
-    else:
-        filename = f"users/{email}.json"
-        delete_from_local(filename)
+import urllib.request
+import smtplib
+import ssl
+import os
+from flask import Flask, request, jsonify
+from flask_mail import Mail, Message
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
- 
+# ✅ Office 365 SMTP Configuration
+SMTP_SERVER = "smtp.office365.com"
+SMTP_PORT = 587
+
+# ✅ Get email credentials securely from environment variables
+support_email = os.getenv("support_email", "wealth-mgmt-support@mresult.net")
+support_password = os.getenv("support_password")  # Must be set in environment variables
+
+app.config['MAIL_SERVER'] = SMTP_SERVER
+app.config['MAIL_PORT'] = SMTP_PORT
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = support_email
+app.config['MAIL_PASSWORD'] = support_password
+
+mail = Mail(app)
+print(f"Mail object: {mail}")
+
+# In-memory storage for email and OTP (for simplicity)
+otp_store = {}
+
+# ✅ Function to Send Email using Office 365 SMTP
 def send_email(to_email, otp):
     try:
+        print(f"to_email{to_email}")
         # Validate email format
         if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
             print(f"Invalid email address: {to_email}")
             return False
  
         # Setup email message
-        subject = "Your Reset Password Code"
-        message = f"Your Reset Password Code is: {otp}"
+        subject = "Reset Password Request – Your One-Time Password (OTP)"
+        message = (
+            "Dear Valued User,\n\n"
+            "We received a request to reset your password. To proceed with resetting your password, please use the following One-Time Password (OTP):\n\n"
+            f"    OTP: {otp}\n\n"
+            "This OTP is valid for the next 10 minutes. If you did not request a password reset, please disregard this email or contact our support team immediately.\n\n"
+            "Thank you,\n"
+            "Your Support Team"
+        )
+        
+        # Create a multipart message
         msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
+        msg['From'] = support_email
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(MIMEText(message, 'plain'))
  
         # Send email using SMTP
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_ADDRESS, to_email, msg.as_string())
-        print("Email sent successfully")
+        # ✅ Create a secure connection with TLS 1.2
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.ehlo()  # Identify ourselves to the SMTP server
+            server.starttls(context=context)  # Secure the connection
+            server.ehlo()  # Re-identify after securing the connection
+            server.login(support_email, support_password)  # Login to SMTP server
+            server.sendmail(support_email, to_email, msg.as_string())  # Send email
+        
+        print(f"✅ Email sent successfully to {to_email}")
         return True
+      
     except Exception as e:
         print(f"Error sending email: {e}")
         return False
+
+import dns.resolver  # For checking email domain validity
+import string
+
+# from src.user_login.email_verification import is_valid_email_domain,generate_otp # didnt work
+
+# need to include failsafe system when email bounces back 
+def is_valid_email_domain(email):
+    """Checks if the domain of the email has valid MX records."""
+    try:
+        domain = email.split('@')[1]  # Extract domain from email
+        dns.resolver.resolve(domain, 'MX')  # Check MX records
+        return True
+    except dns.resolver.NoAnswer:
+        return False  # No MX record found
+    except dns.resolver.NXDOMAIN:
+        return False  # Domain does not exist
+    except Exception as e:
+        print(f"DNS lookup error for {email}: {e}")
+        return False  # Other DNS errors
  
-# Email verification :
- 
-@app.route('/email-verification', methods=['POST'])
+# Function to Generate OTP
+import string
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+#################################################################################################
+
+# # 1. Email Verification :
+
+# ✅ Email Verification API : using support email :
+@app.route('/api/email-verification', methods=['POST'])
 def email_verification():
     try:
-        email = request.json.get('email')  # Extract email from the request
+        email = request.json.get('email')
+        url = request.json.get('url', 'http://wealth-management.mresult.net')
+
         if not email:
             return jsonify({"message": "Email is required"}), 400
- 
+        
+        #  Check if Email Domain is Valid (MX Lookup)
+        if not is_valid_email_domain(email):
+            return jsonify({"message": "Invalid email address, please enter a valid email"}), 400
+
         print(f"Processing email verification for: {email}")
- 
-        # Generate the sign-up link
-        sign_up_link = f"http://localhost:3000/signUp/{email}"
- 
-        # Create the email message
+
+        # ✅ Generate the sign-up link
+        sign_up_link = f"{url}/signUp/{email}"
+        
+        # Generate OTP and store it (assuming generate_otp() and otp_store are defined)
+        otp = generate_otp()
+        otp_store[email] = otp
+        print(f"Generated OTP for {email}: {otp}")
+
+        # ✅ Construct email message
         msg = Message(
             "Sign-Up Link - Verify Your Email",
-            sender="your_email@gmail.com",
+            sender=support_email,
             recipients=[email]
         )
+        
         msg.body = (
             f"Dear User,\n\n"
             f"Congratulations! Your email has been successfully verified. You're just one step away from completing your sign-up process.\n\n"
+            f"Your OTP for verification is: {otp}\n\n"
             f"Click the link below to finish setting up your account:\n"
             f"{sign_up_link}\n\n"
             f"Thank you for choosing us.\n\n"
         )
-        # msg.body = (
-        #     f"Hello,\n\n"
-        #     f"Your email has been successfully verified. Use the following link to complete your sign-up process:\n\n"
-        #     f"{sign_up_link}\n\n"
-        #     f"If you did not request this verification, please ignore this email.\n\n"
-        #     f"Thank you."
-        # )
-        print(f"Sending email to: {email}\nContent: {msg.body}")
-       
-        # Send the email
-        mail.send(msg)
-        print("Email sent successfully.")
- 
-        return jsonify({"message": "Sign-up link sent successfully"}), 200
- 
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
- 
- 
- 
-@app.route('/verify-otp', methods=['POST'])
-def verify_otp():
-    data = request.get_json()
-    email = data.get('email')
-    otp = data.get('otp')
- 
-    if not email or not otp:
-        return jsonify({"error": "Email and OTP are required"}), 400
- 
-    if otp_store.get(email) == int(otp):
-        del otp_store[email]
-        return jsonify({"message": "Email verified successfully!"}), 200
-    else:
-        return jsonify({"error": "Invalid OTP"}), 400
- 
 
+        print(f"Sending email to: {email}\nContent: {msg.body}")
+
+        # ✅ Send Email Using Flask-Mail & Backup SMTP
+        
+        try:
+            mail.send(msg)  # Using Flask-Mail
+        except Exception as e:
+            send_email(email,otp)  # Backup SMTP
+            print(f"Error sending email using Flask-Mail.Using Backup send_email to send email: {e}")
+
+        print("✅ Email sent successfully.")
+        return jsonify({"message": "Sign-up link sent successfully"}), 200
+
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+        return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+#####################################################################################################
 
 
 # 2. Sign Up
 
-@app.route('/sign-up', methods=['POST'])
+@app.route('/api/sign-up', methods=['POST'])
 def sign_up():
     try:
         data = request.get_json()
@@ -570,10 +378,11 @@ def sign_up():
         email = data.get('email')
         password = data.get('password')
         confirm_password = data.get('confirm_password')
+        otp = data.get('otp')
         first_name = data.get('first_name')
         last_name = data.get('last_name')
  
-        if not all([email, password, confirm_password, first_name, last_name]):
+        if not all([email, password,otp, confirm_password, first_name, last_name]):
             return jsonify({"message": "All fields are required"}), 400
  
         if password != confirm_password:
@@ -581,6 +390,20 @@ def sign_up():
  
         if load_user_data(email):
             return jsonify({"message": "User already exists"}), 400
+        
+        print(type(otp))
+        # Validate OTP
+        if otp_store[email] == str(otp):  # OTP and user input should both be strings
+            del otp_store[email]
+            print("OTP verified successfully!")
+        else:
+            return jsonify({"message": "Invalid OTP"}), 400
+        
+        # if otp_store.get(email) == int(otp):
+        #     del otp_store[email]
+        #     print("OTP verified successfully!")
+        # else:
+        #     return jsonify({"error": "Invalid OTP"}),400
  
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         user_data = {
@@ -600,37 +423,113 @@ def sign_up():
    
 # 3. Sign in :
 
-@app.route('/sign-in', methods=['POST'])
+from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+
+@app.route('/api/sign-in', methods=['POST'])
 def sign_in():
     try:
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
- 
+
         if not all([email, password]):
             return jsonify({"message": "Email and password are required"}), 400
- 
-        user_data = load_user_data(email)
+
+        user_data = load_user_data(email)  # Load user details from storage
         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
             return jsonify({"message": "Invalid email or password"}), 401
- 
-        token = jwt.encode(
-            {"email": email, "exp": datetime.utcnow() + timedelta(hours=5)},
-            app.config['JWT_SECRET_KEY'],
-            algorithm="HS256"
+        
+        # Force correct role and organization based on email.
+        if email in SUPER_ADMIN_EMAILS:
+            role = "super_admin"
+            organization = "MResult"
+        elif email in ORGANIZATION_ADMIN_EMAILS:
+            organization = user_data.get("organization", "")
+            role = f"{organization}_admin" if organization else "admin"
+        else:
+            role = user_data.get("role", "user")
+            organization = user_data.get("organization", "")
+
+        # Update the user_data to reflect the correct role and organization.
+        user_data["role"] = role
+        user_data["organization"] = organization
+
+        print(f"User Role: {role} and Organization: {organization}\nUser Data: {user_data}\n")
+        # Create JWT tokens with identity set to email and extra claims for role and organization.
+        token = create_access_token(identity=email, additional_claims={"role": role, "organization": organization})
+        refresh_token = create_refresh_token(
+            identity=email,
+            additional_claims={"role": role, "organization": organization},
+            expires_delta=timedelta(days=7)
         )
- 
-        return jsonify({"message": "Sign in successful", "token": token}), 200
+
+        return jsonify({
+            "message": "Sign in successful",
+            "token": token,
+            "refresh_token": refresh_token
+        }), 200
+
     except Exception as e:
         print(f"Error during sign-in: {e}")
         return jsonify({"message": "Internal server error"}), 500
-      
+
+
+# @app.route('/api/sign-in', methods=['POST'])
+# def sign_in():
+#     try:
+#         data = request.get_json()
+#         email = data.get('email')
+#         password = data.get('password')
+
+#         if not all([email, password]):
+#             return jsonify({"message": "Email and password are required"}), 400
+
+#         user_data = load_user_data(email)  # Load user details
+#         if not user_data or not bcrypt.check_password_hash(user_data["password"], password):
+#             return jsonify({"message": "Invalid email or password"}), 401
+        
+#         # Get role and organization from user_data, with an optional override from input.
+#         role = data.get("role", user_data.get("role", "user"))
+#         organization = data.get("organization", user_data.get("organization", ""))
+
+#         # Update user_data to reflect the current role and organization.
+#         user_data["role"] = role
+#         user_data["organization"] = organization
+
+#         # Create JWT tokens using the email as the identity and role/organization as additional claims.
+#         token = create_access_token(identity=email, additional_claims={"role": role, "organization": organization})
+#         refresh_token = create_refresh_token(
+#             identity=email,
+#             additional_claims={"role": role, "organization": organization},
+#             expires_delta=timedelta(days=7)
+#         )
+
+#         return jsonify({
+#             "message": "Sign in successful",
+#             "token": token,
+#             "refresh_token": refresh_token
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error during sign-in: {e}")
+#         return jsonify({"message": "Internal server error"}), 500
+
+
+# can be called to get a new access token when the current one expires.
+@app.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True)  # Requires the refresh token
+def refresh():
+    identity = get_jwt_identity()
+    new_access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=12))
+    return jsonify(access_token=new_access_token), 200
+
 
 #  # 4. Forgot Password
 
 import traceback
 
-@app.route('/forgot-password', methods=['POST'])
+@app.route('/api/forgot-password', methods=['POST'])
 def forgot_password():
     try:
         data = request.get_json()
@@ -675,7 +574,7 @@ def forgot_password():
 
 # 5. Reset password :
 
-@app.route('/reset-password', methods=['POST'])
+@app.route('/api/reset-password', methods=['POST'])
 def reset_password():
     try:
         data = request.get_json()
@@ -720,132 +619,111 @@ def reset_password():
  
 # ------------------------- With Bearer ------------------------------
 
-# v-2 : update profile photo :
+# v-2 
 
-import base64
+from flask import Flask, request, jsonify, send_from_directory, url_for
+from flask_jwt_extended import jwt_required, get_jwt_identity, JWTManager
 from werkzeug.utils import secure_filename
-from flask import send_from_directory
+from flask_mail import Mail, Message
+import base64
 
-# Directory to store profile photos
 PROFILE_PHOTOS_DIR = "local_data/profile_photos"
 
-from flask import url_for
-
-@app.route('/advisor_profile', methods=['POST', 'GET'])
+# ✅ GET/POST Advisor Profile Endpoint
+@app.route('/api/advisor_profile', methods=['POST', 'GET'])
+@jwt_required()  # Requires a valid JWT
 def advisor_profile():
-    if request.method == 'GET':
-        token = request.headers.get('Authorization')
+    try:
+        email = get_jwt_identity()  # Extract email from JWT Token
+        # Extract user details from the JWT token using the helper.
+        email, role, organization = get_user_details()
+        user_data = load_user_data(email)
+        if not user_data:
+            return jsonify({"message": "User not found"}), 404
 
-        if not token:
-            return jsonify({"message": "Token is missing"}), 401
+        url = request.args.get('url', 'http://wealth-management.mresult.net')
+        print(f"URL : {url}")
 
-        try:
-            token = token.split(" ")[1] if token.startswith("Bearer ") else None
-            if not token:
-                return jsonify({"message": "Invalid token format"}), 401
-
-            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            email = decoded_token.get('email')
-
-            user_data = load_user_data(email)
-            if not user_data:
-                return jsonify({"message": "User not found"}), 404
-
-            # Fetch client data count
-            client_data_url = 'http://localhost:5000/get-all-client-data'
-            response = requests.get(client_data_url)
+        # ✅ Handle GET Request (Retrieve Profile)
+        if request.method == 'GET':
+            # ✅ Fetch client data count (With Auth Token)
+            client_data_url = f'{url}/api/get-all-client-data'
+            token = request.headers.get("Authorization")  # Extract token from headers
+            
+            headers = {"Authorization": token}  # Attach token to request
+            response = requests.get(client_data_url, headers=headers)  # Make Authenticated Request
 
             client_count = 0
             if response.status_code == 200:
                 client_list = response.json().get('data', [])
                 client_count = len(client_list)
 
-            # Generate URL for profile photo
+            # ✅ Generate URL for profile photo
             filename = f"{email}_profile.jpeg"
             profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
 
+            if user_data["email"] == "wealth-mgmt-admin@mresult.net":
+                user_data["first_name"] = "Steve"
+                user_data["last_name"] =  "Morgan"
+            
             profile_data = {
                 "email": user_data["email"],
                 "first_name": user_data["first_name"],
                 "last_name": user_data["last_name"],
                 "client_count": client_count,
-                "profile_photo_url": profile_photo_url
+                "profile_photo_url": profile_photo_url,
+                "role": role,
+                "organization": organization
             }
 
             return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-        except Exception as e:
-            print(f"Error retrieving profile: {e}")
-            return jsonify({"message": "Internal server error"}), 500
-
-    if request.method == 'POST':
-        try:
-            token = request.headers.get('Authorization')
-
-            if not token:
-                return jsonify({"message": "Token is missing"}), 401
-
-            token = token.split(" ")[1] if token.startswith("Bearer ") else None
-            if not token:
-                return jsonify({"message": "Invalid token format"}), 401
-
-            decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            email = decoded_token.get('email')
-
-            user_data = load_user_data(email)
-            if not user_data:
-                return jsonify({"message": "User not found"}), 404
-
-            # Check if the request has the 'profile_photo' field
+        # ✅ Handle POST Request (Upload Profile Photo)
+        if request.method == 'POST':
             data = request.get_json()
             if not data or 'profile_photo' not in data:
                 return jsonify({"message": "Profile photo is missing"}), 400
 
-            # Decode the base64 image
+            # ✅ Decode the base64 image
             profile_photo = data['profile_photo']
-            file_extension = "jpg"  # Default file extension
+            file_extension = "jpg"
             if profile_photo.startswith("data:image/"):
                 file_extension = profile_photo.split(";")[0].split("/")[-1]
 
             image_data = profile_photo.split(",")[1]
             image_bytes = base64.b64decode(image_data)
 
-            # Save the file locally
+            # ✅ Save the file
             filename = f"{email}_profile.{file_extension}"
             file_path = os.path.join(PROFILE_PHOTOS_DIR, filename)
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
 
-            # Generate the profile photo URL
+            # ✅ Generate profile photo URL
             profile_photo_url = url_for('serve_profile_photo', filename=filename, _external=True)
 
-            # Update user's profile with the new image URL
+            # ✅ Update user data
             user_data["profile_photo_url"] = profile_photo_url
-            save_user_data(email, user_data)  # Save updated user data back to storage
+            if "role" in data:
+                user_data["role"] = data["role"]
+            else:
+                user_data["role"] = role 
+            if "organization" in data:
+                user_data["organization"] = data["organization"]
+            else:
+                user_data["organization"] = organization
+                
+            save_user_data(email, user_data)
 
-            return jsonify({
-                "message": "Profile photo uploaded successfully",
-                "profile_photo_url": profile_photo_url
-            }), 200
+            return jsonify({"message": "Profile photo uploaded successfully", "profile_photo_url": profile_photo_url}), 200
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-        except Exception as e:
-            print(f"Error uploading profile photo: {e}")
-            return jsonify({"message": "Internal server error"}), 500
+    except Exception as e:
+        print(f"Error processing request: {e}")
+        return jsonify({"message": "Internal server error"}), 500
 
-
-@app.route('/profile_photos/<filename>', methods=['GET'])
+# ✅ Serve Profile Photo
+@app.route('/api/profile_photos/<filename>', methods=['GET'])
 def serve_profile_photo(filename):
-    """
-    Serve profile photos from the local directory.
-    """
     try:
         return send_from_directory(PROFILE_PHOTOS_DIR, filename)
     except Exception as e:
@@ -853,62 +731,11 @@ def serve_profile_photo(filename):
         return jsonify({"message": "Error retrieving profile photo"}), 500
 
 
-
-
-# v-1 :
-import requests
- 
-# @app.route('/advisor_profile', methods=['GET'])
-# def advisor_profile():
-#     token = request.headers.get('Authorization')
-
-#     if not token:
-#         return jsonify({"message": "Token is missing"}), 401
-
-#     try:
-#         token = token.split(" ")[1] if token.startswith("Bearer ") else None
-#         if not token:
-#             return jsonify({"message": "Invalid token format"}), 401
-
-#         decoded_token = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-#         email = decoded_token.get('email')
-
-#         user_data = load_user_data(email)
-#         if not user_data:
-#             return jsonify({"message": "User not found"}), 404
-
-#         # Fetch client data count
-#         client_data_url = 'http://localhost:5000/get-all-client-data'
-#         response = requests.get(client_data_url)
-
-#         client_count = 0
-#         if response.status_code == 200:
-#             client_list = response.json().get('data', [])
-#             client_count = len(client_list)
-
-#         profile_data = {
-#             "email": user_data["email"],
-#             "first_name": user_data["first_name"],
-#             "last_name": user_data["last_name"],
-#             "client_count": client_count
-#         }
-
-#         return jsonify({"message": "Profile retrieved successfully", "profile": profile_data}), 200
-
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({"message": "Token has expired"}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({"message": "Invalid token"}), 401
-#     except Exception as e:
-#         print(f"Error retrieving profile: {e}")
-#         return jsonify({"message": "Internal server error"}), 500
-    
-     
 # -------------------------------------------
 
 #  Change Password for Profile
 
-@app.route('/change_password', methods=['POST'])
+@app.route('/api/change_password', methods=['POST'])
 def change_password():
     try:
         data = request.get_json()
@@ -2783,8 +2610,8 @@ def save_to_word_file(data, file_name):
     # Adding client details
     client_details = data.get('clientDetail', {})
     doc.add_paragraph(f"Client Name: {client_details.get('clientName', '')}")
-    doc.add_paragraph(f"Client Mobile: {client_details.get('clientMoNo', '')}")
-    doc.add_paragraph(f"Client Age: {client_details.get('clientAge', '')}")
+    doc.add_paragraph(f"Client Mobile: {client_details.get('clientMoNo', '') or client_details.get('clientContact','')}")
+    doc.add_paragraph(f"Client Age: {client_details.get('clientAge', '') or client_details.get('clientDob','')}")
     doc.add_paragraph(f"Co-Client Name: {client_details.get('coClientName', '')}")
     doc.add_paragraph(f"Co-Client Mobile: {client_details.get('coMobileNo', '')}")
     doc.add_paragraph(f"Co-Client Age: {client_details.get('coClientAge', '')}")
@@ -2889,88 +2716,89 @@ CLIENT_DATA_DIR = './client_data'
  
 # # store client data in aws :
  
-@app.route('/submit-client-data', methods=['POST'])
-def submit_client_data():
-    try:
-        # Parse JSON payload
-        data = request.get_json()
-        if not data:
-            return jsonify({'message': 'Invalid or missing request payload'}), 400
+# @app.route('/api/submit-client-data', methods=['POST'])
+# def submit_client_data():
+#     try:
+#         # Parse JSON payload
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({'message': 'Invalid or missing request payload'}), 400
  
-        # Extract client details
-        client_name = data.get('clientDetail', {}).get('clientName')
-        unique_id = data.get('uniqueId')
+#         # Extract client details
+#         client_name = data.get('clientDetail', {}).get('clientName')
+#         unique_id = data.get('uniqueId')
  
-        if not client_name or not unique_id:
-            return jsonify({'message': 'Client name and unique ID are required'}), 400
+#         if not client_name or not unique_id:
+#             return jsonify({'message': 'Client name and unique ID are required'}), 400
  
-        print(f"Processing data for client: {client_name}, ID: {unique_id}")
+#         print(f"Processing data for client: {client_name}, ID: {unique_id}")
  
-        if USE_AWS:
-            # AWS Logic
-            s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
-            try:
-                # Check if the client data already exists in S3
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-                existing_data = json.loads(response['Body'].read().decode('utf-8'))
-                is_update = True
-                print(f"Existing data found for unique ID: {unique_id}")
-            except s3.exceptions.NoSuchKey:
-                existing_data = {}
-                is_update = False
-                print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
+#         if USE_AWS:
+#             # AWS Logic
+#             s3_key = f"{client_summary_folder}client-data/{unique_id}.json"
+#             try:
+#                 # Check if the client data already exists in S3
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#                 print(f"Existing data found for unique ID: {unique_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 existing_data = {}
+#                 is_update = False
+#                 print(f"No existing data found for unique ID: {unique_id}. Creating new record.")
  
-            # Merge or replace the existing data
-            if is_update:
-                existing_data.update(data)
-                data_to_save = existing_data
-            else:
-                data_to_save = data
+#             # Merge or replace the existing data
+#             if is_update:
+#                 existing_data.update(data)
+#                 data_to_save = existing_data
+#             else:
+#                 data_to_save = data
  
-            # Save to S3
-            try:
-                s3.put_object(
-                    Bucket=S3_BUCKET_NAME,
-                    Key=s3_key,
-                    Body=json.dumps(data_to_save),
-                    ContentType="application/json"
-                )
-                action = "updated" if is_update else "created"
-                print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
-            except Exception as s3_error:
-                logging.error(f"Error uploading data to S3: {s3_error}")
-                return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
+#             # Save to S3
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=s3_key,
+#                     Body=json.dumps(data_to_save),
+#                     ContentType="application/json"
+#                 )
+#                 action = "updated" if is_update else "created"
+#                 print(f"Client data successfully {action} in S3 for unique ID: {unique_id}")
+#             except Exception as s3_error:
+#                 logging.error(f"Error uploading data to S3: {s3_error}")
+#                 return jsonify({'message': f"Error uploading data to S3: {s3_error}"}), 500
  
-        else:
-            # Local Storage Logic
-            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
+#         else:
+#             # Local Storage Logic
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
  
-            # Check if the client data already exists
-            if os.path.exists(file_path):
-                with open(file_path, 'r') as f:
-                    existing_data = json.load(f)
-                existing_data.update(data)  # Merge the new data
-                is_update = True
-            else:
-                existing_data = data  # New data
-                is_update = False
+#             # Check if the client data already exists
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 existing_data.update(data)  # Merge the new data
+#                 is_update = True
+#             else:
+#                 existing_data = data  # New data
+#                 is_update = False
  
-            # Save the data to local storage
-            with open(file_path, 'w') as f:
-                json.dump(existing_data, f, indent=4)
+#             # Save the data to local storage
+#             with open(file_path, 'w') as f:
+#                 json.dump(existing_data, f, indent=4)
  
-            action = "updated" if is_update else "created"
-            print(f"Client data successfully {action} for unique ID: {unique_id}")
+#             action = "updated" if is_update else "created"
+#             print(f"Client data successfully {action} for unique ID: {unique_id}")
  
-        # Return a success response
-        return jsonify({
-            'message': f'Client data successfully {action}.',
-            'uniqueId': unique_id
-        }), 200
+#         # Return a success response
+#         return jsonify({
+#             'message': f'Client data successfully {action}.',
+#             'uniqueId': unique_id
+#         }), 200
  
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-        return jsonify({'message': f"An error occurred: {e}"}), 500
+#     except Exception as e:
+#         logging.error(f"An error occurred: {e}")
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
+
  
 def process_is_new_client(client_data):
     """
@@ -2981,7 +2809,7 @@ def process_is_new_client(client_data):
  
     if client_id:
         try:
-            order_url = 'http://localhost:5000/show_order_list'  # Replace with actual endpoint
+            order_url = 'http://localhost:80/show_order_list'  # Replace with actual endpoint
             response = requests.post(order_url, json={'client_id': client_id})
  
             if response.status_code == 200:
@@ -2998,65 +2826,848 @@ def process_is_new_client(client_data):
 if not os.path.exists(CLIENT_DATA_DIR):
     os.makedirs(CLIENT_DATA_DIR)
  
-# Get client data by client ID
-@app.route('/get-client-data-by-id', methods=['GET'])
-def get_client_data():
-    try:
-        # Retrieve client_id from query parameters
-        client_id = request.args.get('client_id')
+# Get client data by client ID : 
+
+# prev 
+# @app.route('/api/get-client-data-by-id', methods=['GET'])
+# def get_client_data():
+#     try:
+#         # Retrieve client_id from query parameters
+#         client_id = request.args.get('client_id')
  
-        # Validate the client_id
-        if not client_id:
-            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
  
-        if USE_AWS:
-            # AWS Logic
-            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
-            try:
-                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-                client_data = json.loads(response['Body'].read().decode('utf-8'))
-                return jsonify({
-                    'message': 'Client data retrieved successfully.',
-                    'data': client_data
-                }), 200
-            except s3.exceptions.NoSuchKey:
-                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-            except Exception as e:
-                return jsonify({'message': f"Error retrieving data: {e}"}), 500
-        else:
-            # Local Storage Logic
-            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+#         if USE_AWS:
+#             # AWS Logic
+#             s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 return jsonify({
+#                     'message': 'Client data retrieved successfully.',
+#                     'data': client_data
+#                 }), 200
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+#             except Exception as e:
+#                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
+#         else:
+#             # Local Storage Logic
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
  
-            # Check if the file exists and retrieve the data
-            if not os.path.exists(file_path):
-                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+#             # Check if the file exists and retrieve the data
+#             if not os.path.exists(file_path):
+#                 return jsonify({'message': 'Client data not found for the given client_id.'}), 404
  
-            with open(file_path, 'r') as f:
-                client_data = json.load(f)
+#             with open(file_path, 'r') as f:
+#                 client_data = json.load(f)
  
-            return jsonify({
-                'message': 'Client data retrieved successfully.',
-                'data': client_data
-            }), 200
+#             return jsonify({
+#                 'message': 'Client data retrieved successfully.',
+#                 'data': client_data
+#             }), 200
  
-    except Exception as e:
-        return jsonify({'message': f"An error occurred: {e}"}), 500
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
   
  
 # # get all client data :
 
 # Local Folder Path
 LOCAL_CLIENT_DATA_FOLDER = './client_data/client_data'
- 
-# new version :
 
-@app.route('/get-all-client-data', methods=['GET'])
+# working code of Compartmentalization :
+
+# v-2 :
+
+from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity, get_jwt
+
+
+# ✅ JWT Configuration
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secure-secret-key")  # Secure secret key
+app.config['JWT_TOKEN_LOCATION'] = ['headers']  # Ensure tokens are read from headers
+app.config['JWT_HEADER_NAME'] = 'Authorization'  # Default is 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'  # Default is 'Bearer'
+
+# ✅ Initialize JWT Manager
+jwt = JWTManager(app)
+
+# 🔹 Define Super Admin Emails
+SUPER_ADMIN_EMAILS = ["wealth-mgmt-admin@mresult.net"]
+ORGANIZATION_ADMIN_EMAILS = []
+
+# ✅ Function to Extract User Details from JWT
+@jwt_required(optional=True)
+def get_user_details():
+    """
+    Extracts user's email, role, and organization from the JWT token.
+    First, it tries get_jwt_identity(); if that returns None,
+    it falls back to the "sub" field from get_jwt() claims.
+    """
+    # Try to get the identity from the JWT token.
+    identity = get_jwt_identity()
+    if not identity:
+        # Fallback: get the "sub" claim from the token.
+        claims = get_jwt() or {}
+        identity = claims.get("sub")
+    
+    # Ensure identity is a string.
+    if not identity:
+        identity = None
+
+    # Get all JWT claims.
+    claims = get_jwt() or {}
+    
+    if identity in SUPER_ADMIN_EMAILS:
+        role = "super_admin"
+        organization = "MResult"  # Super admin sees all data.
+    elif identity in ORGANIZATION_ADMIN_EMAILS:
+        organization = claims.get("organization", None)
+        role = f"{organization}_admin" if organization else "admin"
+    else:
+        role = claims.get("role", "user")  # Default to 'user'
+        organization = claims.get("organization", None)
+    
+    return identity, role, organization
+
+
+# new :
+
+@app.route('/api/get-client-data-by-id', methods=['GET'])
+@jwt_required()
+def get_client_data():
+    try:
+        # Retrieve client_id from query parameters
+        client_id = request.args.get('client_id')
+
+        # Validate the client_id
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+        # Get user details (email, role, organization)
+        email, role, organization = get_user_details()
+
+        print(f"User {email} with role {role} is requesting client data for {client_id}")
+
+        if USE_AWS:
+            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+
+                # Role-Based Access Control
+                if role == "super_admin":
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+                
+                if role == "admin" and client_data.get('organization') == organization:
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+
+                if role == "user" and client_data.get('submittedBy') == email:
+                    return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+                
+                return jsonify({'message': 'Unauthorized access to this client data.'}), 403
+
+            except s3.exceptions.NoSuchKey:
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            except Exception as e:
+                return jsonify({'message': f"Error retrieving data: {e}"}), 500
+        
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
+            
+            if not os.path.exists(file_path):
+                return jsonify({'message': 'Client data not found for the given client_id.'}), 404
+            
+            with open(file_path, 'r') as f:
+                client_data = json.load(f)
+            
+            # Role-Based Access Control
+            if role == "super_admin":
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+            
+            if role == "admin" and client_data.get('organization') == organization:
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+
+            if role == "user" and client_data.get('submittedBy') == email:
+                return jsonify({'message': 'Client data retrieved successfully.', 'data': client_data}), 200
+            
+            return jsonify({'message': 'Unauthorized access to this client data.'}), 403
+
+    except Exception as e:
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+    
+    
+# ✅ Submit Client Data (Super Admin & Admin Can Submit, Users Can Add Own)
+
+
+##########################################
+# Save-and-Next Endpoint: Save Progress
+##########################################
+
+# ##########################################
+# # Updated Submit Client Data Endpoint
+
+# ##########################################
+
+# ---------------- Save Progress Endpoint ----------------
+
+def deep_merge(d1, d2):
+    """
+    Recursively merge dictionary d2 into dictionary d1.
+    For keys that require complete replacement (e.g., "data"), d2's value overrides d1's.
+    """
+    for key, value in d2.items():
+        if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+            # For keys that should be fully replaced, do not merge recursively.
+            if key == "data":
+                d1[key] = value
+            else:
+                d1[key] = deep_merge(d1[key], value)
+        else:
+            d1[key] = value
+    return d1
+
+def deep_merge(d1, d2):
+    """
+    Recursively merge dictionary d2 into dictionary d1.
+    For the key "data", the new value completely overrides the old one.
+    """
+    for key, value in d2.items():
+        # For key "data", override completely instead of merging.
+        if key == "data":
+            d1[key] = value
+        elif key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
+            d1[key] = deep_merge(d1[key], value)
+        else:
+            d1[key] = value
+    return d1
+
+# ------------------- Save Progress Endpoint -------------------
+
+# modified date version :
+
+@app.route('/api/save-progress', methods=['POST'])
+def save_progress():
+    """
+    Save the current page’s progress for the client.
+    Expects a JSON payload containing the full client data.
+    The new payload will be deep merged with any previously saved data,
+    ensuring that keys (like "data") are not nested.
+    Additionally, it appends the "date" and "unique_id" fields.
+    """
+    try:
+        data = request.get_json()
+        # Retrieve client_id from a consistent field
+        client_id = request.json.get('client_id') or data.get('unique_id') or data.get('uniqueId')
+        # Get the date from payload if provided
+        date = request.json.get('date')
+        
+        print("Incoming payload:", data)
+        
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
+        # Ensure we are not nesting "data" inside another "data" field.
+        if "data" in data and isinstance(data["data"], dict):
+            data = data["data"]  # Extract inner data
+
+        # Load existing data if present.
+        if USE_AWS:
+            file_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                is_update = True
+            else:
+                existing_data = {}
+                is_update = False
+        
+        # Manage previous and last modified dates
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if 'last_modified_date' in existing_data:
+            data['previous_modified_date'] = existing_data['last_modified_date']
+        # if previous_modified_date and last_modified_date are not present in current data add it in the new data:
+        else: 
+            data['previous_modified_date'] = current_time
+        data['last_modified_date'] = current_time
+        
+        # Deep merge the incoming data into the existing data.
+        merged_data = deep_merge(existing_data, data)
+
+        # Append "date": if not present, use provided date (if any), else create one.
+        if "date" not in merged_data or not merged_data["date"]:
+            merged_data["date"] = date if date else datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+     
+        if "uniqueId" not in merged_data or "unique_id" not in merged_data or not merged_data["unique_id"] or not merged_data["uniqueId"]:
+            merged_data["uniqueId"] = client_id
+        
+        merged_data['is_submitted'] = False
+
+        # Save the merged data.
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(merged_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(merged_data, f, indent=4)
+
+        action = "updated" if is_update else "created"
+        print(f"Progress {action} successfully.")
+        return jsonify({"message": "Progress saved successfully."}), 200
+
+    except Exception as e:
+        logging.error(f"Error saving progress: {e}")
+        return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+    
+
+# ---------------- Submit Client Data Endpoint ----------------
+@app.route('/api/submit-client-data', methods=['POST'])
+@jwt_required()
+def submit_client_data():
+    """
+    Finalizes and submits client data.
+    Expects a JSON payload containing the complete client data.
+    Uses role and organization to assign the proper organization field.
+    Merges the incoming data with any existing data using deep_merge,
+    ensuring that keys such as "data" are replaced rather than nested.
+    """
+    try:
+        email, role, organization = get_user_details()
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'Invalid or missing request payload'}), 400
+
+        client_details = data.get("clientDetail", {})
+        client_id = request.json.get('unique_id') or request.json.get('uniqueId')
+        client_org = data.get('organization', organization)
+        
+        if not client_id:
+            client_id = data.get('unique_id') or data.get('uniqueId')
+            if not client_id:
+                return jsonify({"message": "Unique ID is required"}), 400
+
+        print(f"Processing data for client: {client_details.get('clientName')}, ID: {client_id}, submitted by {email}")
+
+        # Assign organization field based on role.
+        if role == "super_admin":
+            data['organization'] = client_org or "MResult"
+        else:
+            data['organization'] = organization
+        
+        data['submittedBy'] = email
+        data['is_submitted'] = True
+
+        # Load existing data if present.
+        if USE_AWS:
+            s3_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
+
+            # Manage previous and last modified dates
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if 'last_modified_date' in existing_data:
+                data['previous_modified_date'] = existing_data['last_modified_date']
+            # if previous_modified_date and last_modified_date are not present in current data add it in the new data:
+            else: 
+                data['previous_modified_date'] = current_time
+            data['last_modified_date'] = current_time
+            
+            # Merge using deep_merge so that the "data" key is replaced.
+            merged_data = deep_merge(existing_data, data)
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key,
+                          Body=json.dumps(merged_data, indent=4),
+                          ContentType="application/json")
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                is_update = True
+            else:
+                existing_data = {}
+                is_update = False
+                
+            # Manage previous and last modified dates
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if 'last_modified_date' in existing_data:
+                data['previous_modified_date'] = existing_data['last_modified_date']
+            data['last_modified_date'] = current_time
+
+            merged_data = deep_merge(existing_data, data)
+            with open(file_path, 'w') as f:
+                json.dump(merged_data, f, indent=4)
+
+        action = "updated" if is_update else "created"
+        
+        return jsonify({'message': f'Client data successfully {action}.',
+                        'client_id': client_id}), 200
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+# Previous Complete Working Code :
+
+# @app.route('/api/save-progress', methods=['POST'])
+# def save_progress():
+#     """
+#     Save the current page’s progress for the client.
+#     Expects a JSON payload containing the full client data.
+#     The new payload will be deep merged with any previously saved data,
+#     ensuring that keys (like "data") are not nested.
+#     Additionally, it appends the "date" and "unique_id" fields.
+#     """
+#     try:
+#         data = request.get_json()
+#         # Retrieve client_id from a consistent field
+#         client_id = request.json.get('client_id') or data.get('unique_id') or data.get('uniqueId')
+#         # Get the date from payload if provided
+#         date = request.json.get('date')
+        
+#         print("Incoming payload:", data)
+        
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Ensure we are not nesting "data" inside another "data" field.
+#         if "data" in data and isinstance(data["data"], dict):
+#             data = data["data"]  # Extract inner data
+
+#         # Load existing data if present.
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 existing_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 is_update = True
+#             except Exception:
+#                 existing_data = {}
+#                 is_update = False
+#         else:
+#             file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if os.path.exists(file_path):
+#                 with open(file_path, 'r') as f:
+#                     existing_data = json.load(f)
+#                 is_update = True
+#             else:
+#                 existing_data = {}
+#                 is_update = False
+
+#         # Deep merge the incoming data into the existing data.
+#         merged_data = deep_merge(existing_data, data)
+
+#         # Append "date": if not present, use provided date (if any), else create one.
+#         if "date" not in merged_data or not merged_data["date"]:
+#             merged_data["date"] = date if date else datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+     
+#         if "uniqueId" not in merged_data or "unique_id" not in merged_data or not merged_data["unique_id"] or not merged_data["uniqueId"]:
+#             merged_data["uniqueId"] = client_id
+        
+#         merged_data['is_submitted'] = False
+
+#         # Save the merged data.
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=file_key,
+#                 Body=json.dumps(merged_data, indent=4),
+#                 ContentType="application/json"
+#             )
+#         else:
+#             with open(file_path, 'w') as f:
+#                 json.dump(merged_data, f, indent=4)
+
+#         action = "updated" if is_update else "created"
+#         print(f"Progress {action} successfully.")
+#         return jsonify({"message": "Progress saved successfully."}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error saving progress: {e}")
+#         return jsonify({"message": f"Error saving progress: {str(e)}"}), 500
+    
+
+
+# Example endpoint to load progress (for testing)
+@app.route('/api/load-progress', methods=['GET'])
+def load_progress():
+    try:
+        client_id = request.args.get('unique_id')
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+        
+        if USE_AWS:
+            file_key = f"{client_summary_folder}client-data/{client_id}.json"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+            data = json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+        return jsonify(data), 200
+    except Exception as e:
+        logging.error(f"Error loading progress: {e}")
+        return jsonify({"message": f"Error loading progress: {str(e)}"}), 500
+
+##########################################
+# # Personal Details :
+
+# Save the personal details submitted by the user in one step.
+# Stores the JSON data as <client_id>_personal_data.json under the personal_data folder.
+
+# Constants (move these to config if preferred)
+PERSONAL_DATA_FOLDER = os.getenv('PERSONAL_DATA_FOLDER','personal_data')  #"personal_data"
+
+def get_personal_data_filename(client_id): return f"{client_id}_personal_data.json"
+
+# v-2 :
+def save_key_points_for_client(client_id, client_name, client_email, client_contact, last_action_date, last_action_type):
+    try:
+        key_points = key_talking_points_using_genai(client_id, client_name, client_email, client_contact, last_action_date, last_action_type)
+        key_points_data = {
+            "key_points": key_points,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=key_file,
+                Body=json.dumps(key_points_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            os.makedirs(folder_path, exist_ok=True)
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            with open(key_file, 'w') as f:
+                json.dump(key_points_data, f, indent=4)
+
+        logging.info(f"Key points saved successfully for client {client_id}")
+    except Exception as e:
+        logging.error(f"Error saving key points for {client_id}: {e}")
+
+
+def save_key_points_for_client(client_id, client_name, client_email, client_contact, last_action_date, last_action_type):
+    try:
+        key_points = key_talking_points_using_genai(client_id, client_name, client_email, client_contact, last_action_date, last_action_type)
+        key_points_data = {
+            "key_points": key_points,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=key_file,
+                Body=json.dumps(key_points_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            os.makedirs(folder_path, exist_ok=True)
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            with open(key_file, 'w') as f:
+                json.dump(key_points_data, f, indent=4)
+
+        logging.info(f"Key points saved successfully for client {client_id}")
+    except Exception as e:
+        logging.error(f"Error saving key points for {client_id}: {e}")
+
+
+# v-1 :
+# updated save personal details data api :
+@app.route('/api/save-personal-details', methods=['POST'])
+@jwt_required()
+def save_personal_details():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid or missing request payload"}), 400
+
+        # Get client ID
+        client_id = data.get("client_id") or data.get("uniqueId") or data.get("unique_id")
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
+        filename = get_personal_data_filename(client_id)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        data["last_modified_date"] = current_time
+        data["uniqueId"] = client_id
+
+        # Load existing data if present
+        if USE_AWS:
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                existing_data = json.loads(response['Body'].read().decode('utf-8'))
+                is_update = True
+            except Exception:
+                existing_data = {}
+                is_update = False
+        else:
+            folder_path = os.path.join(PERSONAL_DATA_FOLDER)
+            os.makedirs(folder_path, exist_ok=True)
+            file_path = os.path.join(folder_path, filename)
+
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+                is_update = True
+            else:
+                existing_data = {}
+                is_update = False
+
+        # Deep merge incoming data into existing data (replace keys properly)
+        merged_data = deep_merge(existing_data, data)
+
+        # Save merged data
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=file_key,
+                Body=json.dumps(merged_data, indent=4),
+                ContentType="application/json"
+            )
+        else:
+            with open(file_path, 'w') as f:
+                json.dump(merged_data, f, indent=4)
+
+        action = "updated" if is_update else "created"
+        return jsonify({"message": f"Personal details successfully {action} for client ID: {client_id}"}), 200
+
+    except Exception as e:
+        logging.error(f"Error saving personal details: {e}")
+        return jsonify({"message": f"Error saving personal details: {str(e)}"}), 500
+
+def load_personal_data(uniqueId):
+    try:
+        # filename = f"{uniqueId}.json"
+        filename = get_personal_data_filename(uniqueId)
+        
+        if USE_AWS:
+            file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            # file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+            print(f"Found Personal Data of : {uniqueId}")
+            return json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    return json.load(f)
+    except Exception as e:
+        logging.warning(f"No personal data found for {uniqueId}: {e}")
+    return {}
+
+
+# new personal details :
+@app.route('/api/get-personal-details', methods=['GET'])
+@jwt_required()
+def get_personal_details():
+    try:
+        client_id = request.args.get('client_id')
+        if not client_id:
+            return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+        email, role, organization = get_user_details()
+        print(f"User {email} with role {role} is requesting personal details for {client_id}")
+
+        filename = get_personal_data_filename(client_id)
+
+        personal_data = {}  # initialize empty
+        client_data = {}    # initialize empty
+
+        if USE_AWS:
+            # Try to load personal_data
+            try:
+                file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                personal_data = json.loads(response['Body'].read().decode('utf-8'))
+            except s3.exceptions.NoSuchKey:
+                print(f"No personal details found for client_id: {client_id}, continuing without it.")
+            except Exception as e:
+                print(f"Error retrieving personal details: {e}")
+
+            # Always try to load client-data
+            try:
+                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return jsonify({'message': f"Error retrieving client data: {str(e)}"}), 500
+
+        else:
+            # Try to load personal_data
+            file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    personal_data = json.load(f)
+            else:
+                print(f"No personal details found locally for client_id: {client_id}, continuing without it.")
+
+            # Always try to load client-data
+            client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({'message': f"No client data found for client ID: {client_id}"}), 404
+
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+
+        # 🛠 FIX NESTING if exists
+        if "data" in personal_data and isinstance(personal_data["data"], dict):
+            inner_data = personal_data.pop("data")
+            personal_data.update(inner_data)
+
+        # 🛠 Merge additional fields from client form
+        client_details = client_data.get("clientDetail", {})
+        additional_info = {
+            "clientName": client_details.get("clientName"),
+            "city": client_details.get("city"),
+            "state": client_details.get("state"),
+            "clientEmail": client_details.get("clientEmail"),
+            "clientDob": client_details.get("clientDob"),
+            "clientContact": client_details.get("clientContact"),
+            "maritalStatus": client_details.get("maritalStatus")
+        }
+        personal_data.update({k: v for k, v in additional_info.items() if v is not None})
+
+        # ✅ Now, even if personal_data was empty, you will get the important info!
+
+        # Role-Based Access Control
+        if role == "super_admin":
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+        if role == "admin" and personal_data.get('organization') == organization:
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+        if role == "user" and personal_data.get('submittedBy') == email:
+            return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+        return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+
+    except Exception as e:
+        return jsonify({'message': f"An error occurred: {e}"}), 500
+
+
+# previous :
+# @app.route('/api/get-personal-details', methods=['GET'])
+# @jwt_required()
+# def get_personal_details():
+#     try:
+#         client_id = request.args.get('client_id')
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
+
+#         email, role, organization = get_user_details()
+#         print(f"User {email} with role {role} is requesting personal details for {client_id}")
+
+#         filename = get_personal_data_filename(client_id)
+
+#         if USE_AWS:
+#             file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                 personal_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+#             except Exception as e:
+#                 return jsonify({'message': f"Error retrieving data: {e}"}), 500
+
+#             # Load client form data
+#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 logging.error(f"Error retrieving client data from AWS: {e}")
+#                 return jsonify({'message': f"Error retrieving client data: {str(e)}"}), 500
+
+#         else:
+#             file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+#             if not os.path.exists(file_path):
+#                 return jsonify({'message': 'Personal details not found for the given client_id.'}), 404
+
+#             with open(file_path, 'r') as f:
+#                 personal_data = json.load(f)
+
+#             client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+#             if not os.path.exists(client_data_file_path):
+#                 return jsonify({'message': f"No client data found for client ID: {client_id}"}), 404
+
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+
+#         # 🛠 FIX NESTING if exists
+#         if "data" in personal_data and isinstance(personal_data["data"], dict):
+#             inner_data = personal_data.pop("data")
+#             personal_data.update(inner_data)
+
+#         # Extract additional fields from client form
+#         client_details = client_data.get("clientDetail", {})
+#         additional_info = {
+#             "clientName": client_details.get("clientName"),
+#             "city": client_details.get("city"),
+#             "state": client_details.get("state"),
+#             "clientEmail": client_details.get("clientEmail"),
+#             "clientDob": client_details.get("clientDob"),
+#             "clientContact": client_details.get("clientContact"),
+#             "maritalStatus": client_details.get("maritalStatus")
+#         }
+
+#         personal_data.update(additional_info)
+
+#         # Role-Based Access Control
+#         if role == "super_admin":
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+#         if role == "admin" and personal_data.get('organization') == organization:
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+#         if role == "user" and personal_data.get('submittedBy') == email:
+#             return jsonify({'message': 'Personal details retrieved successfully.', 'data': personal_data}), 200
+
+#         return jsonify({'message': 'Unauthorized access to this personal data.'}), 403
+
+#     except Exception as e:
+#         return jsonify({'message': f"An error occurred: {e}"}), 500
+
+################################################################################################
+
+
+# ✅ Get All Client Data Based on Role
+@app.route('/api/get-all-client-data', methods=['GET'])
+@jwt_required()
 def get_all_client_data():
     try:
+        email, role, organization = get_user_details()
         all_data = []
- 
+
         if USE_AWS:
-            # AWS Logic
             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
             if 'Contents' in response:
                 for obj in response['Contents']:
@@ -3065,126 +3676,52 @@ def get_all_client_data():
                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
                         file_data = file_response['Body'].read().decode('utf-8')
                         data_json = json.loads(file_data)
- 
+                        
                         # Do not overwrite isNewClient flag if updated elsewhere
                         if 'isNewClient' not in data_json:
                             data_json['isNewClient'] = True  # Default to True if missing
-                       
-                        all_data.append(data_json)
+
+                        # 🔹 Super Admin: Access All Data
+                        if role == "super_admin":
+                            all_data.append(data_json)
+
+                        # 🔹 Admin: Access Data Only for Their Organization
+                        elif role == "admin" and data_json.get('organization') == organization:
+                            all_data.append(data_json)
+
+                        # 🔹 User: Access Only Their Submitted Data
+                        elif role == "user" and data_json.get('submittedBy') == email:
+                            all_data.append(data_json)
+
                     except Exception as e:
                         print(f"Error reading file {obj['Key']}: {e}")
                         continue
-            else:
-                return jsonify({'message': 'No client data found in S3 bucket.'}), 404
- 
         else:
-            # Local Storage Logic
-            for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+            for filename in os.listdir(CLIENT_DATA_DIR):
                 if filename.endswith(".json"):
-                    file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
                     with open(file_path, 'r') as f:
                         client_data = json.load(f)
- 
-                        # Do not overwrite isNewClient flag if updated elsewhere
-                        if 'isNewClient' not in client_data:
-                            client_data['isNewClient'] = True  # Default to True if missing
-                       
-                        all_data.append(client_data)
- 
-            if not all_data:
-                return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-        # Return combined data
-        return jsonify({
-            'message': 'All client data retrieved successfully.',
-            'data': all_data
-        }), 200
- 
+
+                        if role == "super_admin":
+                            all_data.append(client_data)
+
+                        elif role == "admin" and client_data.get('organization') == organization:
+                            all_data.append(client_data)
+
+                        elif role == "user" and client_data.get('submittedBy') == email:
+                            all_data.append(client_data)
+
+        if not all_data:
+            return jsonify({'message': 'No client data found for this user.'}), 404
+
+        return jsonify({'message': 'Client data retrieved successfully.', 'data': all_data}), 200
+
     except Exception as e:
         print(f"Error occurred while retrieving data: {e}")
         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-  
- 
-# prev -version: 
-# @app.route('/get-all-client-data', methods=['GET'])
-# def get_all_client_data():
-#     try:
-#         all_data = []
- 
-#         if USE_AWS:
-#             # AWS Logic
-#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
-#             if 'Contents' in response:
-#                 for obj in response['Contents']:
-#                     try:
-#                         file_key = obj['Key']
-#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
-#                         file_data = file_response['Body'].read().decode('utf-8')
-#                         data_json = json.loads(file_data)
- 
-#                         # Add isNewClient flag
-#                         # process_is_new_client(data_json)
-#                         all_data.append(data_json)
-#                     except Exception as e:
-#                         print(f"Error reading file {obj['Key']}: {e}")
-#                         continue
-#             else:
-#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
- 
-#         else:
-#             # Local Storage Logic
-#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
-#                 if filename.endswith(".json"):
-#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
-#                     with open(file_path, 'r') as f:
-#                         client_data = json.load(f)
-#                         # process_is_new_client(client_data)
-#                         all_data.append(client_data)
- 
-#             if not all_data:
-#                 return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-#         # Return combined data
-#         return jsonify({
-#             'message': 'All client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
- 
-#     except Exception as e:
-#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
-    
-    # old version:
-# # get client data by client id :
-# @app.route('/get-client-data-by-id', methods=['GET'])
-# def get_client_data():
-#     try:
-#         # Retrieve client_id from query parameters
-#         client_id = request.args.get('client_id')
-        
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
 
-#         # Define the S3 key for the object
-#         s3_key = f"{client_summary_folder}client-data/{client_id}.json"
 
-#         # Retrieve the object from S3
-#         try:
-#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-#             # Decode and parse the JSON data
-#             client_data = json.loads(response['Body'].read().decode('utf-8'))
-            
-#             return jsonify({
-#                 'message': 'Client data retrieved successfully.',
-#                 'data': client_data
-#             }), 200
-#         except s3.exceptions.NoSuchKey:
-#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-#         except Exception as e:
-#             return jsonify({'message': f"Error retrieving data: {e}"}), 500
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
 
 #################################################################################################################################
 # storing client data using local storage :
@@ -3194,148 +3731,6 @@ CLIENT_DATA_DIR = os.path.join(LOCAL_STORAGE_DIR, "client_data")
 # Ensure directories exist
 os.makedirs(CLIENT_DATA_DIR, exist_ok=True)
 
-
-# @app.route('/submit-client-data', methods=['POST'])
-# def submit_client_data():
-#     try:
-#         # Parse JSON payload
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({'message': 'Invalid or missing request payload'}), 400
-
-#         # Extract client details
-#         client_name = data.get('clientDetail', {}).get('clientName')
-#         unique_id = data.get('uniqueId')
-
-#         if not client_name or not unique_id:
-#             return jsonify({'message': 'Client name and unique ID are required'}), 400
-
-#         print(f"Processing data for client: {client_name}, ID: {unique_id}")
-
-#         # Define the file path for local storage
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{unique_id}.json")
-
-#         # Check if the client data already exists
-#         if os.path.exists(file_path):
-#             with open(file_path, 'r') as f:
-#                 existing_data = json.load(f)
-#             existing_data.update(data)  # Merge the new data
-#             is_update = True
-#         else:
-#             existing_data = data  # New data
-#             is_update = False
-
-#         # Save the data to local storage
-#         with open(file_path, 'w') as f:
-#             json.dump(existing_data, f, indent=4)
-
-#         action = "updated" if is_update else "created"
-#         print(f"Client data successfully {action} for unique ID: {unique_id}")
-
-#         return jsonify({
-#             'message': f'Client data successfully {action}.',
-#             'uniqueId': unique_id
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
-
-# # Define the directory where client data is stored
-# CLIENT_DATA_DIR = './client_data/'
-# CLIENT_SUMMARY_DIR = os.path.join(CLIENT_DATA_DIR, "client_data")
-
-# # Ensure the directory exists
-# if not os.path.exists(CLIENT_DATA_DIR):
-#     os.makedirs(CLIENT_DATA_DIR)
-
-# # Get client data by client ID
-# @app.route('/get-client-data-by-id', methods=['GET'])
-# def get_client_data():
-#     try:
-#         # Retrieve client_id from query parameters
-#         client_id = request.args.get('client_id')
-
-#         # Validate the client_id
-#         if not client_id:
-#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
-
-#         # Define the file path for the client data
-#         file_path = os.path.join(CLIENT_DATA_DIR, f"client_data/{client_id}.json")
-
-#         # Check if the file exists and retrieve the data
-#         if not os.path.exists(file_path):
-#             return jsonify({'message': 'Client data not found for the given client_id.'}), 404
-
-#         with open(file_path, 'r') as f:
-#             client_data = json.load(f)
-
-#         return jsonify({
-#             'message': 'Client data retrieved successfully.',
-#             'data': client_data
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred: {e}"}), 500
-
-
-# import os
-# import json
-# from flask import Flask, jsonify
-# import requests  # This is for calling the show_order_list API
- 
- 
-# @app.route('/get-all-client-data', methods=['GET'])
-# def get_all_client_data():
-#     try:
-#         all_data = []
-#         client_data_folder = './client_data/client_data'
- 
-#         # Iterate over all JSON files in the client data folder
-#         for filename in os.listdir(client_data_folder):
-#             if filename.endswith(".json"):
-#                 file_path = os.path.join(client_data_folder, filename)
-               
-#                 # Load client data
-#                 with open(file_path, 'r') as f:
-#                     client_data = json.load(f)
-#                     client_id = client_data.get("uniqueId")
- 
-#                     # Default value for isNewClient
-#                     client_data["isNewClient"] = True
- 
-#                     # Check if the client has orders by calling /show_order_list API
-#                     if client_id:
-#                         # Make a request to /show_order_list API to check if orders exist
-#                         order_url = f'http://localhost:5000/show_order_list'  # Adjust to your actual endpoint
-#                         response = requests.post(order_url, json={'client_id': client_id})
- 
-#                         if response.status_code == 200:
-#                             orders = response.json().get("transaction_data", [])
-#                             # If orders exist, set isNewClient to False
-#                             if len(orders) > 0:
-#                                 client_data["isNewClient"] = False
-#                         else:
-#                             # If no orders, set isNewClient to True
-#                             client_data["isNewClient"] = True
- 
-#                     # Append the client data to the result list
-#                     all_data.append(client_data)
- 
-#         # Handle case when no client data is found
-#         if not all_data:
-#             return jsonify({'message': 'No client data found in local storage.'}), 404
- 
-#         # Return all client data
-#         return jsonify({
-#             'message': 'All client data retrieved successfully.',
-#             'data': all_data
-#         }), 200
- 
-#     except Exception as e:
-#         return jsonify({'message': f"An error occurred while retrieving data: {e}"}), 500
-    
-# investment assessment using Local Storage :
 
 import os
 import json
@@ -3354,7 +3749,7 @@ os.makedirs(PERSONALITY_ASSESSMENT_DIR, exist_ok=True)
 # Personality Assessment using AWS and  Local Storage :
 
 
-@app.route('/get-personality-assessment', methods=['POST'])
+@app.route('/api/get-personality-assessment', methods=['POST'])
 def get_personality_assessment():
     try:
         # Parse incoming request data
@@ -3424,7 +3819,7 @@ def get_personality_assessment():
  
  
  
-# @app.route('/get-personality-assessment', methods=['POST'])
+# @app.route('/api/get-personality-assessment', methods=['POST'])
 # def get_client_data_by_id():
 #     try:
 #         # Parse incoming request data
@@ -3455,7 +3850,7 @@ def get_personality_assessment():
 
 # # api for generating suggestions with client id using AWS :  
 
-@app.route('/investor-personality-assessment', methods=['POST'])
+@app.route('/api/investor-personality-assessment', methods=['POST'])
 def investor_personality_assessment():
     try:
         # Parse incoming request data
@@ -3612,7 +4007,7 @@ def handle_local_storage(client_id, assessment_data, personality):
  
  
 
-# @app.route('/investor-personality-assessment', methods=['POST'])
+# @app.route('/api/investor-personality-assessment', methods=['POST'])
 # def investor_personality_assessment():
 #     try:
 #         # Parse incoming data
@@ -3679,7 +4074,7 @@ def handle_local_storage(client_id, assessment_data, personality):
 
 ##############################################################################################################
  
-# @app.route('/personality-assessment', methods=['POST'])
+# @app.route('/api/personality-assessment', methods=['POST'])
 # def personality_selected():
 #     try:
 #         # Parse incoming data
@@ -4724,7 +5119,7 @@ def extract_visualization_data_from_text(text):
 
 # # api for generating suggestions with client id :
 
-@app.route('/personality-assessment', methods=['POST'])
+@app.route('/api/personality-assessment', methods=['POST'])
 def personality_selected():
     try:
         data = request.json
@@ -4842,7 +5237,7 @@ def save_file_to_folder(file_storage, destination_folder):
 
 # #Working for both the methods :
 # generate_suggestions by taking files as i/p :
-@app.route('/generate-investment-suggestions', methods=['POST'])
+@app.route('/api/generate-investment-suggestions', methods=['POST'])
 def generate_investment_suggestions():
     try:
         assessment_file = request.files['assessmentFile']
@@ -5251,7 +5646,7 @@ from flask import jsonify, send_file, make_response
 
 
 
-@app.route('/analyze_stock', methods=['POST'])
+@app.route('/api/analyze_stock', methods=['POST'])
 def analyze_stock():
     """
     Generate thorough stock analysis using LLM based on company details, market news, and performance.
@@ -5507,7 +5902,7 @@ def get_default_market_conditions():
 ################################################################################
 # v-1 :
 
-# @app.route('/analyze_stock', methods=['POST'])
+# @app.route('/api/analyze_stock', methods=['POST'])
 # def analyze_stock():
 #     try:
 #         ticker = request.json.get('ticker')
@@ -5744,23 +6139,66 @@ def save_to_aws_with_timestamp(data, filename):
 
 ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
+# Helper functions for local/AWS storage
+def load_from_local(filepath):
+    try:
+        if not os.path.exists(filepath):
+            return None
+        with open(filepath, 'r') as file:
+            return json.load(file)
+    except Exception as e:
+        print(f"Error loading file: {e}")
+        return None
+
+def save_to_local(data, filepath):
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, 'w') as file:
+            json.dump(data, file, indent=4)
+        print(f"Data saved at {filepath}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+        raise
+
+def save_to_aws_with_timestamp(data, filename):
+    try:
+        serialized_data = json.dumps(data, default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else obj)
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=filename,
+            Body=serialized_data,
+            ContentType='application/json'
+        )
+        print(f"Data saved to AWS at {filename}")
+    except Exception as e:
+        print(f"Error saving to AWS: {e}")
+        raise
+
+def load_from_aws(filename):
+    try:
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        print(f"Error loading from AWS: {e}")
+        return None
+
+
+# updated code :
+
 import requests
-
-# Fetch Stocks for NASDAQ,NYSE,S&P500 and DOW JONES :
-
-# # V-3 :
-
-# prev : working :
-# Updated :
+import csv
+from io import StringIO
+from bs4 import BeautifulSoup
 
 def fetch_all_assets_by_preference(market_name, preference=None):
     """
     Fetch assets for a given market and filter by type if preference is provided.
-    Handles NASDAQ, NYSE, S&P500, and Dow Jones dynamically.
-    Preferences: "stocks", "etfs", "bonds", "commodities", "mutual funds".
+    Handles NASDAQ, NYSE, and S&P500 dynamically.
+    Preferences: "stocks", "etfs".
     """
     try:
         market_name = market_name.lower()
+        # market_name = "dow_jones"
         preference = preference.lower() if preference else None
         assets = []
 
@@ -5769,43 +6207,51 @@ def fetch_all_assets_by_preference(market_name, preference=None):
             exchange_code = "NASDAQ" if market_name == "nasdaq" else "NYSE"
             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
             response = requests.get(url)
-            print(response)
             if response.status_code == 200:
-                stocks = response.text.splitlines()  # Alpha Vantage returns CSV data
-                print(stocks)
-                for row in stocks[1:]:  # Skip header row
-                    data = row.split(",")
-                    if len(data) > 2 and data[2].strip() == exchange_code:
-                        symbol = data[0]
-                        name = data[1]
-
-                        # Filter based on preference
-                        # Determine asset type (heuristics for ETF or stock)
-                        asset_type = "stock"
-                        if "ETF" in name.upper() or "TRUST" in name.upper() or symbol.endswith("O"):
-                            asset_type = "etf"
-                            assets.append({"name": name, "symbol": symbol, "type": "ETF"})
-                            
-                        # Filter based on preference
-                        # if not preference or preference == asset_type:
-                        elif preference:
-                            assets.append({"name": name, "symbol": symbol, "type": preference})
-                            
-                        # if preference:  # Assuming preference is handled externally
-                        #     assets.append({"name": name, "symbol": symbol, "type": preference})
-                        
-                print(f"Assets in {market_name} :\n{assets}")
+                decoded_content = response.content.decode('utf-8')
+                print("Successfully decoded response content :\n\n",decoded_content)
+                csv_reader = csv.reader(decoded_content.splitlines(), delimiter=',')
+                next(csv_reader)  # Skip the header row
+                for row in csv_reader:
+                    symbol, name, exchange, asset_type = row[0], row[1], row[2], row[3]
+                    if exchange.upper() == exchange_code.upper():
+                        asset_type = 'stock' if asset_type.lower() == 'stock' or asset_type.lower() == 'stocks' else 'ETF'
+                        # if preference == ''
+                        assets.append({"symbol": symbol, "name": name, "type": asset_type})
                 return assets
             else:
                 print(f"Alpha Vantage API error: {response.status_code}")
                 return []
 
+        elif market_name.lower() == "dow_jones":
+            url = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+            response = requests.get(url)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                table = soup.find("table", {"id": "constituents"})
+                if table:
+                    rows = table.find_all("tr")[1:]  # Skip header row
+                    for row in rows:
+                        cols = row.find_all("td")
+                        name = row.text.strip().splitlines()[0]
+                        # name = row.splitlines()[0]
+                        symbol = cols[1].text.strip()
+                        category = cols[2].text.strip()  # Industry/Category
+                        assets.append({"symbol": symbol, "name": name, "type": "stock", "category": category})
+                    return assets
+                else:
+                    print("Constituents table not found on the Wikipedia page.")
+                    return []
+                
+            else:
+                print(f"Failed to fetch Dow Jones data from Wikipedia: {response.status_code}")
+                
         # Fetch for S&P500 using Wikipedia
+        
         elif market_name == "s&p500":
             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
             response = requests.get(url)
             if response.status_code == 200:
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.content, "html.parser")
                 table = soup.find("table", {"id": "constituents"})
                 rows = table.find_all("tr")[1:]  # Skip header row
@@ -5813,13 +6259,24 @@ def fetch_all_assets_by_preference(market_name, preference=None):
                     cols = row.find_all("td")
                     symbol = cols[0].text.strip()
                     name = cols[1].text.strip()
-                    if not preference or preference == "stocks":
-                        assets.append({"name": name, "symbol": symbol, "type": "stock"})
+                    if not preference or preference == "stock" or preference == "stocks":
+                        assets.append({
+                            "name": name,
+                            "symbol": symbol,
+                            "type": "stock"
+                        })
+                    elif preference == "ETF":
+                        assets.append({
+                            "name": name,
+                            "symbol": symbol,
+                            "type": "ETF"
+                        })
+                print("Returning S&P500 Stocks")
                 return assets
             else:
                 print(f"Failed to fetch S&P500 data from Wikipedia: {response.status_code}")
                 return []
-            
+
         # If no matching market is found
         return []
 
@@ -5828,12 +6285,12 @@ def fetch_all_assets_by_preference(market_name, preference=None):
         return []
 
 
-
-@app.route('/market-assets', methods=['POST'])
+@app.route('/api/market-assets', methods=['POST'])
 def market_assets():
     try:
         data = request.get_json()
         market_name = data.get("market_name")
+        # market_name = "dow_jones"
         preference = data.get("preference")
         print(market_name)
         print(preference)
@@ -5867,7 +6324,7 @@ def market_assets():
             message = "Assets list updated successfully"
         else:
             message = "Assets list is up-to-date"
-
+        
         print(f"\nUpdated Assets :\n{updated_assets}")
         
         return jsonify({
@@ -5883,10 +6340,9 @@ def market_assets():
 
 ################################################ Fetch Bonds from Categories #################################################
 
-
 # # Api to fetch bonds :
 
-@app.route('/get-bonds', methods=['POST'])
+@app.route('/api/get-bonds', methods=['POST'])
 def get_bonds():
     """
     Fetches the List of Bonds for various categories
@@ -5906,65 +6362,198 @@ def get_bonds():
             {"name":"PGIM High Yield R6","symbol":"PHYQX"},
             {"name":"Federated Hermes Instl High Yield Bd IS","symbol":"FIHBX"}
         ]
+        municipal_bonds = [
+            {"name": "iShares National Muni Bond ETF", "symbol": "MUB"},
+            {"name": "Vanguard Tax-Exempt Bond ETF", "symbol": "VTEB"},
+            {"name": "SPDR Nuveen Bloomberg Municipal Bond ETF", "symbol": "TFI"},
+            {"name": "Invesco BulletShares 2025 Municipal Bond ETF", "symbol": "BSMP"}
+        ]
+            # {"name": "iShares iBonds Dec 2025 Term Muni Bond ETF", "symbol": "IBML"} # relegated 
+
+        government_bonds = [
+            {"name": "iShares 7-10 Year Treasury Bond ETF", "symbol": "IEF"},
+            {"name": "Vanguard Total Bond Market ETF", "symbol": "BND"},
+            {"name": "SPDR Bloomberg 1-3 Month T-Bill ETF", "symbol": "BIL"},
+            {"name": "Schwab U.S. TIPS ETF", "symbol": "SCHP"}
+        ]
+
         if category == "treasury":
             return jsonify({"bonds":treasury_bonds}), 200
         elif category == "corporate":
             return jsonify({"bonds":corporate_bonds}), 200
+        elif category == "municipal":
+            return jsonify({"bonds":municipal_bonds}), 200
+        elif category == "government":
+            return jsonify({"bonds": government_bonds}), 200
         else:
             return jsonify({"message": "Invalid category. Choose between 'treasury' or 'corporate'."}), 400
             
     except Exception as e:
         print(f"Error in get-bonds API: {e}")
         return jsonify({"message": f"Error in get-bonds API: {e}"}), 500
+    
 
+# new fallback mechanism :
+import yfinance as yf
+from alpha_vantage.timeseries import TimeSeries
+from flask import request, jsonify
+import os, time, pickle, logging
+from datetime import datetime
 
-@app.route('/fetch-bonds', methods=['POST'])
+# Replace this with your real key
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY1')
+BOND_CACHE_DIR = "cache_bonds"
+os.makedirs(BOND_CACHE_DIR, exist_ok=True)
+
+def get_cached_bond_price(ticker):
+    cache_path = os.path.join(BOND_CACHE_DIR, f"{ticker}_price.pkl")
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            cached = pickle.load(f)
+            if cached["date"] == time.strftime('%Y-%m-%d'):
+                return cached["price"]
+    return None
+
+def cache_bond_price(ticker, price):
+    with open(os.path.join(BOND_CACHE_DIR, f"{ticker}_price.pkl"), "wb") as f:
+        pickle.dump({"date": time.strftime('%Y-%m-%d'), "price": price}, f)
+
+def fetch_bond_price_yfinance(ticker, retries=3, delay=5):
+    for attempt in range(retries):
+        try:
+            df = yf.download(ticker, period="1mo", interval="1d", progress=False)
+            if not df.empty:
+                return round(float(df['Close'].iloc[-1]), 2)
+            raise ValueError("Empty DataFrame")
+        except Exception as e:
+            logging.warning(f"[yfinance Retry {attempt+1}] for {ticker}: {e}")
+            time.sleep(delay)
+    return None
+
+def fetch_bond_price_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        df, _ = ts.get_daily(symbol=ticker, outputsize='compact')
+        df.rename(columns={
+            '1. open': 'Open',
+            '2. high': 'High',
+            '3. low': 'Low',
+            '4. close': 'Close',
+            '5. volume': 'Volume'
+        }, inplace=True)
+        if not df.empty:
+            return round(float(df['Close'].iloc[0]), 2)
+    except Exception as e:
+        logging.error(f"Alpha Vantage failed for {ticker}: {e}")
+    return None
+
+@app.route('/api/fetch-bonds', methods=['POST'])
 def fetch_bonds():
-    """
-    Fetches the price of a specific bond using the ticker provided in the request payload.
-    """
     try:
         data = request.get_json()
-        category = data.get("category", "").lower()
+        selected_ticker = data.get("ticker", "")
+        if not selected_ticker:
+            return jsonify({"message": "Ticker not provided", "price": "N/A"}), 400
 
-        if not category:
+        # Step 1: yfinance attempt
+        price = fetch_bond_price_yfinance(selected_ticker)
+        if price is not None:
+            cache_bond_price(selected_ticker, price)  # update cache with fresh value
             return jsonify({
-                "message": "Ticker not provided in the request.",
-                "price": "N/A"
-            }), 400
-            
-        selected_ticker = data.get("ticker")
+                "message": f"Price for {selected_ticker} fetched from yfinance.",
+                "ticker": selected_ticker,
+                "price": price
+            }), 200
 
-        # testing mutual funds :
-        fetch_MutualFunds()
-        
-        # Function to fetch the latest closing price
-        def fetch_price(ticker):
-            try:
-                # Fetch historical data for the bond
-                data = yf.download(ticker, period="1mo", interval="1d")
-                if not data.empty:
-                    # Get the latest closing price
-                    return round(data['Close'].iloc[-1], 2)
-                else:
-                    return "Price not available"
-            except Exception as e:
-                print(f"Error fetching data for ticker {ticker}: {e}")
-                return "Price not available"
+        # Step 2: Alpha Vantage attempt
+        price = fetch_bond_price_alpha_vantage(selected_ticker)
+        if price is not None:
+            cache_bond_price(selected_ticker, price)
+            return jsonify({
+                "message": f"Price for {selected_ticker} fetched from Alpha Vantage.",
+                "ticker": selected_ticker,
+                "price": price
+            }), 200
 
-        # Fetch price for the selected Bond
-        price = fetch_price(selected_ticker)
-        print(f"Bond price for {selected_ticker}:\n{price}")
+        # Step 3: Fallback to cache
+        cached = get_cached_bond_price(selected_ticker)
+        if cached is not None:
+            return jsonify({
+                "message": f"Price for {selected_ticker} fetched from cache (stale fallback).",
+                "ticker": selected_ticker,
+                "price": cached
+            }), 200
 
+        # Step 4: Final fallback if all sources fail
         return jsonify({
-            "message": f"Price for {selected_ticker} fetched successfully",
+            "message": f"Price for {selected_ticker} is not available from any source.",
             "ticker": selected_ticker,
-            "price": price
-        }), 200
+            "price": 0.0
+        }), 500
 
     except Exception as e:
-        print(f"Error fetching bond prices: {e}")
+        logging.error(f"Error fetching bond prices: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+
+
+    
+
+# previous :
+# @app.route('/api/fetch-bonds', methods=['POST'])
+# def fetch_bonds():
+#     """
+#     Fetches the price of a specific bond using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         category = data.get("category", "").lower()
+
+#         if not category:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+            
+#         selected_ticker = data.get("ticker")
+
+#         # testing mutual funds : (Assuming fetch_MutualFunds() is defined elsewhere)
+#         # fetch_MutualFunds()
+        
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the bond without using any custom session.
+#                 data = yf.download(ticker, period="1mo", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price and convert it to float.
+#                     price = data['Close'].iloc[-1]
+#                     return round(float(price), 2)
+#                 else:
+#                     return None
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return None
+
+#         # Fetch price for the selected Bond
+#         price = fetch_price(selected_ticker)
+#         print(f"Bond price for {selected_ticker}:\n{price}")
+#         if not price :
+#             return jsonify({
+#                 "message": f"Price for {selected_ticker}  is not available.",
+#                 "ticker": selected_ticker,
+#                 "price": 0.0
+#             }), 404
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "ticker": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching bond prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
+
 
 
 ##############################################################################
@@ -6019,7 +6608,7 @@ def fetch_bonds():
 #         return []
 
 # # Flask API Route
-# # @app.route('/fetch-global-currencies', methods=['GET'])
+# # @app.route('/api/fetch-global-currencies', methods=['GET'])
 # def fetch_global_currencies():
 #     """
 #     API to fetch all global currencies and their exchange rates.
@@ -6062,160 +6651,228 @@ def fetch_bonds():
 
 # API to Fetch commodity data :
 
-# #V2 : working properly 
-@app.route('/fetch-commodities', methods=['POST'])
+# v-2 :
+
+ALPHA_FALLBACK_SYMBOLS = {
+    "GC=F": "GOLD",        # Gold Futures
+    "SI=F": "SILVER",      # Silver Futures
+    "CL=F": "WTI",         # Crude Oil WTI Futures
+    "BZ=F": "BRENT",       # Brent Crude Oil
+    "NG=F": "NATGAS"       # Natural Gas
+}
+
+def fetch_price_yfinance(ticker):
+    try:
+        df = yf.download(ticker, period="1d", interval="1d", progress=False)
+        if not df.empty and 'Close' in df:
+            return round(float(df['Close'].iloc[-1]), 2)
+    except Exception as e:
+        logging.warning(f"YFinance fetch failed for {ticker}: {e}")
+    return None
+
+def fetch_price_alpha_vantage(ticker):
+    try:
+        mapped = ALPHA_FALLBACK_SYMBOLS.get(ticker)
+        if not mapped:
+            return None
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=mapped, outputsize='compact')
+        if not data.empty:
+            data.columns = [col.split('. ')[1] for col in data.columns]
+            price = float(data['close'].iloc[-1])
+            return round(price, 2)
+    except Exception as e:
+        logging.warning(f"Alpha Vantage fallback failed for {ticker}: {e}")
+    return None
+
+@app.route('/api/fetch-commodities', methods=['POST'])
 def fetch_commodities():
-    """
-    Fetches the price of a specific commodity using the ticker provided in the request payload.
-    """
     try:
         data = request.get_json()
-        selected_ticker = data.get("commodities")  
+        ticker = data.get("commodities")
+        if not ticker:
+            return jsonify({"message": "Commodity ticker not provided.", "price": "N/A"}), 400
 
-        if not selected_ticker:
+        # Try yfinance first
+        price = fetch_price_yfinance(ticker)
+
+        # Fallback to Alpha Vantage if needed
+        if price is None:
+            price = fetch_price_alpha_vantage(ticker)
+
+        if price is None:
             return jsonify({
-                "message": "Ticker not provided in the request.",
+                "message": f"Price for {ticker} is not available.",
+                "symbol": ticker,
                 "price": "N/A"
-            }), 400
-
-        # Function to fetch the latest closing price
-        def fetch_price(ticker):
-            try:
-                # Fetch historical data for the commodity
-                data = yf.download(ticker, period="1d", interval="1d")
-                if not data.empty:
-                    # Get the latest closing price
-                    return round(data['Close'].iloc[-1], 2)
-                else:
-                    return "Price not available"
-            except Exception as e:
-                print(f"Error fetching data for ticker {ticker}: {e}")
-                return "Price not available"
-
-        # Fetch price for the selected commodity
-        price = fetch_price(selected_ticker)
-        print(f"Commodity price for {selected_ticker}:\n{price}")
+            }), 404
 
         return jsonify({
-            "message": f"Price for {selected_ticker} fetched successfully",
-            "symbol": selected_ticker,
+            "message": f"Price for {ticker} fetched successfully",
+            "symbol": ticker,
             "price": price
         }), 200
 
     except Exception as e:
-        print(f"Error fetching commodity prices: {e}")
+        logging.error(f"Error in fetch_commodities: {e}")
         return jsonify({"message": f"Internal server error: {e}"}), 500
+    
+    
 
+# #V1 :was working properly 
+# @app.route('/api/fetch-commodities', methods=['POST'])
+# def fetch_commodities():
+#     """
+#     Fetches the price of a specific commodity using the ticker provided in the request payload.
+#     """
+#     try:
+#         data = request.get_json()
+#         selected_ticker = data.get("commodities")
+
+#         if not selected_ticker:
+#             return jsonify({
+#                 "message": "Ticker not provided in the request.",
+#                 "price": "N/A"
+#             }), 400
+
+#         # Function to fetch the latest closing price
+#         def fetch_price(ticker):
+#             try:
+#                 # Fetch historical data for the commodity
+#                 data = yf.download(ticker, period="1d", interval="1d")
+#                 if not data.empty:
+#                     # Get the latest closing price and convert it to a float
+#                     price_value = data['Close'].iloc[-1]
+#                     return round(float(price_value), 2)
+#                 else:
+#                     return "Price not available"
+#             except Exception as e:
+#                 print(f"Error fetching data for ticker {ticker}: {e}")
+#                 return "Price not available"
+
+#         # Fetch price for the selected commodity
+#         price = fetch_price(selected_ticker)
+#         print(f"Commodity price for {selected_ticker}:\n{price}")
+
+#         return jsonify({
+#             "message": f"Price for {selected_ticker} fetched successfully",
+#             "symbol": selected_ticker,
+#             "price": price
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error fetching commodity prices: {e}")
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ##################################################### Fetch Cryptocurrencies from Exchanges ####################################
 
-# v-2 :
-@app.route('/crypto-assets', methods=['POST'])
-def fetch_cryptos_from_exchange():
-    """
-    Fetch the list of cryptocurrencies available on a given exchange.
-    Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
-    """
-    try:
-        data = request.get_json()
-        exchange_name = data.get("exchange_name", "").lower()
-        cryptos = []
-        #test reits :
-        fetch_reits()
-        if exchange_name == "coingecko":
-            # Fetch data from CoinGecko
-            url = "https://api.coingecko.com/api/v3/coins/markets"
-            params = {
-                "vs_currency": "usd",
-                "order": "market_cap_desc",
-                "per_page": 250,
-                "page": 1,
-            }
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
-                data = response.json()
-                for coin in data:
-                    symbol = coin["symbol"].upper()
-                    cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+# v-2 : # now not in use anymore :
+# @app.route('/api/crypto-assets', methods=['POST'])
+# def fetch_cryptos_from_exchange():
+#     """
+#     Fetch the list of cryptocurrencies available on a given exchange.
+#     Supported exchanges: CoinGecko, Binance, Binance.US, Coincheck.
+#     """
+#     try:
+#         data = request.get_json()
+#         exchange_name = data.get("exchange_name", "").lower()
+#         cryptos = []
+#         #test reits :
+#         fetch_reits()
+#         if exchange_name == "coingecko":
+#             # Fetch data from CoinGecko
+#             url = "https://api.coingecko.com/api/v3/coins/markets"
+#             params = {
+#                 "vs_currency": "usd",
+#                 "order": "market_cap_desc",
+#                 "per_page": 250,
+#                 "page": 1,
+#             }
+#             response = requests.get(url, params=params)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for coin in data:
+#                     symbol = coin["symbol"].upper()
+#                     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
                     
-                    # if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
-                    #     symbol = coin["symbol"].upper()
-                    #     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
-                    # else:
-                    #     cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
-            else:
-                return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
+#                     # if coin["name"] == "Bitcoin" or coin["name"] == "Ethereum":
+#                     #     symbol = coin["symbol"].upper()
+#                     #     cryptos.append({"name": coin["name"], "symbol": f"{symbol}-USD" })
+#                     # else:
+#                     #     cryptos.append({"name": coin["name"], "symbol": coin["symbol"].upper()})
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from CoinGecko: {response.status_code}"}), 500
 
-        elif exchange_name == "binance":
-            # Fetch data from Binance
-            url = "https://api.binance.com/api/v3/exchangeInfo"
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                for symbol_info in data["symbol"]:
-                    base_asset = symbol_info["baseAsset"]
-                    quote_asset = symbol_info["quoteAsset"]
+#         elif exchange_name == "binance":
+#             # Fetch data from Binance
+#             url = "https://api.binance.com/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol_info in data["symbol"]:
+#                     base_asset = symbol_info["baseAsset"]
+#                     quote_asset = symbol_info["quoteAsset"]
                     
-                    # if base_asset == 'ETH' or base_asset == 'BTC':
-                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
-                        cryptos.append({
-                            "symbol": f"{base_asset}-USD",
-                            "name": f"{base_asset}"
-                        })
-                    elif base_asset == 'ALGO':
-                        cryptos.append({
-                            "symbol": f"{base_asset}-INR",
-                            "name": f"{base_asset}"
-                        })
-                    else:
-                        cryptos.append({
-                            "symbol": base_asset,
-                            "name": f"{base_asset}"
-                        })
-            else:
-                return jsonify({"message": f"Failed to fetch data from Binance: {response.status_code}"}), 500
+#                     # if base_asset == 'ETH' or base_asset == 'BTC':
+#                     if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-USD",
+#                             "name": f"{base_asset}"
+#                         })
+#                     elif base_asset == 'ALGO':
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-INR",
+#                             "name": f"{base_asset}"
+#                         })
+#                     else:
+#                         cryptos.append({
+#                             "symbol": base_asset,
+#                             "name": f"{base_asset}"
+#                         })
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from Binance: {response.status_code}"}), 500
 
-        elif exchange_name == "binance.us":
-            # Fetch data from Binance.US
-            url = "https://api.binance.us/api/v3/exchangeInfo"
-            response = requests.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                for symbol_info in data["symbol"]:
-                    base_asset = symbol_info["baseAsset"]
-                    quote_asset = symbol_info["quoteAsset"]
+#         elif exchange_name == "binance.us":
+#             # Fetch data from Binance.US
+#             url = "https://api.binance.us/api/v3/exchangeInfo"
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 for symbol_info in data["symbol"]:
+#                     base_asset = symbol_info["baseAsset"]
+#                     quote_asset = symbol_info["quoteAsset"]
                     
-                    if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
-                        cryptos.append({
-                            "symbol": f"{base_asset}-USD",
-                            "name": f"{base_asset}"
-                        })
-                    elif base_asset == 'ALGO':
-                        cryptos.append({
-                            "symbol": f"{base_asset}-INR",
-                            "name": f"{base_asset}"
-                        })
-                    else:
-                        cryptos.append({
-                            "symbol": base_asset,
-                            "name": f"{base_asset}"
-                        })
-            else:
-                return jsonify({"message": f"Failed to fetch data from Binance.US: {response.status_code}"}), 500
+#                     if base_asset == 'ETH' or base_asset == 'BTC' or base_asset == 'XRP' or base_asset == 'USDT' or 'BNB' :
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-USD",
+#                             "name": f"{base_asset}"
+#                         })
+#                     elif base_asset == 'ALGO':
+#                         cryptos.append({
+#                             "symbol": f"{base_asset}-INR",
+#                             "name": f"{base_asset}"
+#                         })
+#                     else:
+#                         cryptos.append({
+#                             "symbol": base_asset,
+#                             "name": f"{base_asset}"
+#                         })
+#             else:
+#                 return jsonify({"message": f"Failed to fetch data from Binance.US: {response.status_code}"}), 500
 
-        else:
-            return jsonify({"message": "Exchange not supported."}), 404
+#         else:
+#             return jsonify({"message": "Exchange not supported."}), 404
 
-        # Return the list of cryptos
-        return jsonify({
-            "message": "Cryptos list fetched successfully.",
-            "exchange_name": exchange_name,
-            "cryptos": cryptos
-        }), 200
+#         # Return the list of cryptos
+#         return jsonify({
+#             "message": "Cryptos list fetched successfully.",
+#             "exchange_name": exchange_name,
+#             "cryptos": cryptos
+#         }), 200
 
-    except Exception as e:
-        return jsonify({"message": f"Internal server error: {e}"}), 500
+#     except Exception as e:
+#         return jsonify({"message": f"Internal server error: {e}"}), 500
 
 
 ####################################################################################
@@ -6227,7 +6884,129 @@ FINNHUB_API_KEY = os.getenv('FINNHUB_API_KEY')
 
 # v-2 :best version
 
-@app.route("/fetch-reits", methods=['POST'])
+
+def get_with_retries(url, retries=3, delay=5, headers=None):
+    """
+    Makes a GET request to the specified URL with retries.
+    Returns the response object (even if status_code != 200 after retries).
+    """
+    attempts = 0
+    while attempts < retries:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response
+        else:
+            logging.info(f"Request to {url} failed with status {response.status_code}. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            attempts += 1
+    return response
+
+# # updated version :
+# @app.route("/api/fetch-reits", methods=['POST'])
+# def fetch_reits():
+#     try:
+#         asset_category = request.json.get("asset_category")
+#         if asset_category == "reits":
+#             # AWS key for the REIT list
+#             reit_list_key = "reits/reit_list.json"
+
+#             # Check if the REIT list already exists in AWS
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
+#                 reit_list = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info("REIT list loaded from AWS.")
+#                 return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
+#             except s3.exceptions.NoSuchKey:
+#                 logging.info("REIT list not found in AWS. Fetching from Finnhub.")
+
+#             # Fetch the list of US stocks from Finnhub with retries
+#             url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#             response = get_with_retries(url, retries=3, delay=5)
+#             if response.status_code != 200:
+#                 return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+#             data = response.json()
+#             valid_reits = []
+
+#             # Filter REITs / Real Estate funds and fetch prices in a single loop
+#             for item in data:
+#                 description = item.get("description", "")
+#                 if "REIT" in description.upper() or "REAL ESTATE" in description.upper():
+#                     symbol = item["symbol"]
+#                     name = description
+#                     # Determine type based on whether "GROWTH" is present in description.
+#                     if "GROWTH" in description.upper():
+#                         asset_type = "real estate growth fund"
+#                     else:
+#                         asset_type = "reit"
+
+#                     # Fetch the current price for the asset
+#                     price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+#                     price_response = get_with_retries(price_url, retries=3, delay=5)
+#                     if price_response.status_code == 200:
+#                         price_data = price_response.json()
+#                         price = price_data.get("c", 0)  # "c" is the current price key
+#                         if price > 0:
+#                             valid_reits.append({
+#                                 "symbol": symbol,
+#                                 "name": name,
+#                                 "price": price,
+#                                 "type": asset_type
+#                             })
+
+#             # Save the valid REITs list to AWS (or locally)
+#             if USE_AWS:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=reit_list_key,
+#                     Body=json.dumps(valid_reits),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info("REIT list saved to AWS.")
+#             else:
+#                 filepath = os.path.join(LOCAL_STORAGE_PATH, "reits", "reit_list.json")
+#                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
+#                 with open(filepath, "w") as f:
+#                     json.dump(valid_reits, f, indent=4)
+#                 logging.info("REIT list saved locally.")
+        
+#         elif asset_category == "real_estate_mf":
+            
+#             url = f"https://www.alphavantage.co/query?function=LISTING_STATUS&apikey={ALPHA_VANTAGE_API_KEY}"
+#             response = requests.get(url)
+#             assets = []
+            
+#             if response.status_code == 200:
+#                 csv_text = response.content.decode('utf-8')
+#                 reader = csv.DictReader(StringIO(csv_text))
+#                 for row in reader:
+#                     asset_type = row.get('assetType', '').lower()  # e.g., 'etf' or 'mutual fund'
+#                     name = row.get('name', '')
+#                     symbol = row.get('symbol')
+#                     # For mutual funds, if you want exclusively real estate mutual funds, then check for 'real estate' in the name.
+#                     if asset_type == 'mutual fund' and "real estate" in name.lower():
+#                         assets.append({
+#                             "symbol": symbol,
+#                             "name": name,
+#                             "type": "real estate mutual fund"
+#                         })
+#                 print("Real Estate Mutual funds :\n", assets)
+#                 valid_reits = assets
+#             else:
+#                 print(f"Alpha Vantage API error: {response.status_code}")
+#                 valid_reits = []
+
+#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REITs from Finnhub: {e}")
+#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500\
+
+# Previous Version :
+
+# Fetch REITs and Real Estate Growth Funds using Finnhub
+
+@app.route("/api/fetch-reits", methods=['POST'])
 def fetch_reits():
     try:
         # AWS key for the REIT list
@@ -6238,46 +7017,62 @@ def fetch_reits():
             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
             reit_list = json.loads(response['Body'].read().decode('utf-8'))
             logging.info("REIT list loaded from AWS.")
+            # print(reit_list)
+            # fetch_real_estate_growth_funds()
             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
         except s3.exceptions.NoSuchKey:
             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
 
-        # Fetch the list of US stocks from Finnhub
+        # Fetch the list of US stocks from Finnhub with retries
         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
-        response = requests.get(url)
-
+        response = get_with_retries(url, retries=3, delay=5)
         if response.status_code != 200:
             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
 
         data = response.json()
         valid_reits = []
 
-        # Filter REITs and fetch prices in a single loop
+        # Filter REITs / Real Estate funds and fetch prices in a single loop
         for item in data:
-            if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+            description = item.get("description", "")
+            if "REIT" in description.upper() or "REAL ESTATE" in description.upper():
                 symbol = item["symbol"]
-                name = item["description"]
+                name = description
+                # Determine type based on whether "GROWTH" is present in description.
+                if "GROWTH" in description.upper():
+                    asset_type = "real estate growth fund"
+                else:
+                    asset_type = "reit"
 
-                # Fetch the price for the current REIT
+                # Fetch the current price for the asset
                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-                price_response = requests.get(price_url)
-
+                price_response = get_with_retries(price_url, retries=3, delay=5)
                 if price_response.status_code == 200:
                     price_data = price_response.json()
                     price = price_data.get("c", 0)  # "c" is the current price key
-
-                    # Only add to the list if the price is greater than 0
                     if price > 0:
-                        valid_reits.append({"symbol": symbol, "name": name, "price": price})
+                        valid_reits.append({
+                            "symbol": symbol,
+                            "name": name,
+                            "price": price,
+                            "type": asset_type
+                        })
 
-        # Save the valid REITs list to AWS
-        s3.put_object(
-            Bucket=S3_BUCKET_NAME,
-            Key=reit_list_key,
-            Body=json.dumps(valid_reits),
-            ContentType='application/json'
-        )
-        logging.info("REIT list saved to AWS.")
+        # Save the valid REITs list to AWS (or locally)
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=reit_list_key,
+                Body=json.dumps(valid_reits),
+                ContentType='application/json'
+            )
+            logging.info("REIT list saved to AWS.")
+        else:
+            filepath = os.path.join(LOCAL_STORAGE_PATH, "reits", "reit_list.json")
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, "w") as f:
+                json.dump(valid_reits, f, indent=4)
+            logging.info("REIT list saved locally.")
 
         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
 
@@ -6285,7 +7080,66 @@ def fetch_reits():
         logging.error(f"Error fetching REITs from Finnhub: {e}")
         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
 
-@app.route("/get-reit-price", methods=['POST'])
+ 
+
+# previous working logic :
+# @app.route("/api/fetch-reits", methods=['POST'])
+# def fetch_reits():
+#     try:
+#         # AWS key for the REIT list
+#         reit_list_key = "reits/reit_list.json"
+
+#         # Check if the REIT list already exists in AWS
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reit_list_key)
+#             reit_list = json.loads(response['Body'].read().decode('utf-8'))
+#             logging.info("REIT list loaded from AWS.")
+#             return jsonify({"message": "REITs loaded from AWS successfully", "data": reit_list}), 200
+#         except s3.exceptions.NoSuchKey:
+#             logging.info("REIT list not found in AWS. Fetching from Finnhub.")
+
+#         # Fetch the list of US stocks from Finnhub with retries
+#         url = f"https://finnhub.io/api/v1/stock/symbol?exchange=US&token={FINNHUB_API_KEY}"
+#         response = get_with_retries(url, retries=3, delay=5)
+#         if response.status_code != 200:
+#             return jsonify({"message": "Failed to fetch REITs from Finnhub", "status_code": response.status_code}), 500
+
+#         data = response.json()
+#         valid_reits = []
+
+#         # Filter REITs and fetch prices in a single loop
+#         for item in data:
+#             if "REIT" in item.get("description", "") or "Real Estate" in item.get("description", ""):
+#                 symbol = item["symbol"]
+#                 name = item["description"]
+
+#                 # Fetch the price for the current REIT using retries
+#                 price_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+#                 price_response = get_with_retries(price_url, retries=3, delay=5)
+#                 if price_response.status_code == 200:
+#                     price_data = price_response.json()
+#                     price = price_data.get("c", 0)  # "c" is the current price key
+
+#                     # Only add to the list if the price is greater than 0
+#                     if price > 0:
+#                         valid_reits.append({"symbol": symbol, "name": name, "price": price})
+
+#         # Save the valid REITs list to AWS
+#         s3.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=reit_list_key,
+#             Body=json.dumps(valid_reits),
+#             ContentType='application/json'
+#         )
+#         logging.info("REIT list saved to AWS.")
+
+#         return jsonify({"message": "REITs fetched and saved successfully", "data": valid_reits}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching REITs from Finnhub: {e}")
+#         return jsonify({"message": "An error occurred while fetching REITs", "error": str(e)}), 500
+
+@app.route("/api/get-reit-price", methods=['POST'])
 def get_reit_price():
     try:
         # Ensure Content-Type is application/json
@@ -6308,15 +7162,14 @@ def get_reit_price():
         if not reit:
             return jsonify({"message": f"Symbol {symbol} is not a valid REIT."}), 400
 
-        # Fetch yield for the REIT
+        # Fetch yield for the REIT with retry
         yield_url = f"https://finnhub.io/api/v1/stock/metric?symbol={symbol}&metric=dividends&token={FINNHUB_API_KEY}"
-        yield_response = requests.get(yield_url)
-
+        yield_response = get_with_retries(yield_url, retries=3, delay=5)
         if yield_response.status_code == 200:
             yield_data = yield_response.json()
             dividend_yield = yield_data.get("metric", {}).get("dividendYieldIndicatedAnnual", 5)
         else:
-            dividend_yield = 5 # default value
+            dividend_yield = 5  # default value
 
         # Return the REIT information
         return jsonify({
@@ -6328,114 +7181,167 @@ def get_reit_price():
         logging.error(f"Error fetching REIT prices: {e}")
         return jsonify({"message": "An error occurred while fetching REIT prices", "error": str(e)}), 500
 
+
+
 ####################################################################################
 
 
 # Fetch Mutual Funds :
-# V-2 : best version fetches all the list and prices
 
-# Function to fetch the latest price
-def fetch_price(ticker):
-    """
-    Fetch the latest price of a mutual fund using Yahoo Finance.
-    :param ticker: The symbol of the mutual fund.
-    :return: The latest closing price or "Price not available".
-    """
+# updated version :
+
+# v-2 :
+
+# Static fallback list of US mutual funds (symbols)
+FALLBACK_MUTUAL_FUNDS = [
+    {"symbol": "VFIAX", "name": "Vanguard 500 Index Fund Admiral Shares"},
+    {"symbol": "SWPPX", "name": "Schwab S&P 500 Index Fund"},
+    {"symbol": "FXAIX", "name": "Fidelity 500 Index Fund"},
+    {"symbol": "VTSAX", "name": "Vanguard Total Stock Market Index Fund Admiral Shares"},
+    {"symbol": "VWELX", "name": "Vanguard Wellington Fund Investor Shares"}
+]
+
+# Get price from Alpha Vantage
+def fetch_price_from_alphavantage(symbol):
     try:
-        # Fetch data for the mutual fund with valid period and interval
-        data = yf.download(ticker, period="1mo", interval="1d")
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=symbol, outputsize='compact')
         if not data.empty:
-            # Get the latest closing price
-            return round(data['Close'].iloc[-1], 2)
-        else:
-            return "Price not available"
+            last_close = data['4. close'].iloc[-1]
+            return round(float(last_close), 2)
     except Exception as e:
-        print(f"Error fetching data for ticker {ticker}: {e}")
-        return "Price not available"
+        logging.warning(f"Alpha Vantage error for {symbol}: {e}")
+    return "Price not available"
 
+# Try Yahoo first, then fallback to Alpha Vantage
+def fetch_price(ticker):
+    try:
+        data = yf.download(ticker, period="1mo", interval="1d", progress=False)
+        if not data.empty:
+            return round(float(data['Close'].iloc[-1]), 2)
+    except Exception as e:
+        logging.warning(f"Yahoo Finance error for {ticker}: {e}")
+
+    # fallback
+    return fetch_price_from_alphavantage(ticker)
+
+# Try scraping from Yahoo, fallback to static + AlphaVantage
 def fetch_mutual_funds_from_yahoo():
-    """
-    Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
-    :return: List of mutual funds with symbol, name, and price.
-    """
     try:
         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
-        response = requests.get(url)
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
-            print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
-            return []
+            raise Exception("Failed to fetch page")
 
         soup = BeautifulSoup(response.content, "html.parser")
-        table = soup.find("table")  # Locate the main table with mutual fund data
-
+        table = soup.find("table")
         if not table:
-            print("No table found on the Yahoo Finance page.")
-            return []
+            raise Exception("No table found")
 
-        rows = table.find_all("tr")[1:]  # Skip the header row
+        rows = table.find_all("tr")[1:]
         mutual_funds = []
 
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) < 3:  # Ensure required columns are present
+            if len(cols) < 2:
                 continue
-
             symbol = cols[0].text.strip()
             name = cols[1].text.strip()
-            price = fetch_price(symbol)  # Fetch the price dynamically
+            price = fetch_price(symbol)
+            if price != "Price not available":
+                mutual_funds.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "price": price
+                })
 
-            # Skip mutual funds where the price is not available
-            if price == "Price not available":
-                continue
-
-            mutual_funds.append({
-                "symbol": symbol,
-                "name": name,
-                "price": price
-            })
+        # fallback if list is empty
+        if not mutual_funds:
+            raise Exception("No data found from Yahoo")
 
         return mutual_funds
 
     except Exception as e:
-        print(f"Error fetching mutual funds from Yahoo Finance: {e}")
-        return []
+        logging.warning(f"Yahoo scraping failed: {e}")
+        fallback_funds = []
+        for fund in FALLBACK_MUTUAL_FUNDS:
+            price = fetch_price(fund['symbol'])
+            if price != "Price not available":
+                fallback_funds.append({
+                    "symbol": fund['symbol'],
+                    "name": fund['name'],
+                    "price": price
+                })
+        return fallback_funds
 
-# Endpoint to fetch mutual funds
-@app.route('/fetch-MutualFunds', methods=['POST'])
+# API endpoint
+@app.route('/api/fetch-MutualFunds', methods=['POST'])
 def fetch_MutualFunds():
-    """
-    Fetch and return mutual funds and their details.
-    """
     try:
         mutual_funds = fetch_mutual_funds_from_yahoo()
-
-        print(f"Mutual funds: {mutual_funds}")
         return jsonify({
             "message": "Mutual funds fetched successfully.",
             "mutual_funds": mutual_funds
         }), 200
-
     except Exception as e:
-        print(f"Failed to fetch mutual funds: {e}")
-        return jsonify({"error": "Failed to fetch mutual funds"}), 500
+        return jsonify({"error": f"Failed to fetch mutual funds: {e}"}), 500
+    
 
+# V-1 : best version fetches all the list and prices, now stopped working 
 
-# v-1 : fetched list but not price
+# # Function to fetch the latest price
+# def fetch_price(ticker):
+#     """
+#     Fetch the latest price of a mutual fund using Yahoo Finance.
+#     :param ticker: The symbol of the mutual fund.
+#     :return: The latest closing price or "Price not available".
+#     """
+#     try:
+#         # Fetch data for the mutual fund with valid period and interval
+#         data = yf.download(ticker, period="1mo", interval="1d")
+#         if not data.empty:
+#             # Get the latest closing price and convert it to float
+#             price_value = data['Close'].iloc[-1]
+#             return round(float(price_value), 2)
+#         else:
+#             return "Price not available"
+#     except Exception as e:
+#         print(f"Error fetching data for ticker {ticker}: {e}")
+#         return "Price not available"
 
 # def fetch_mutual_funds_from_yahoo():
 #     """
 #     Fetch a list of mutual funds and their prices from Yahoo Finance's Mutual Funds Gainers page.
+#     :return: List of mutual funds with symbol, name, and price.
 #     """
 #     try:
 #         url = "https://finance.yahoo.com/markets/mutualfunds/gainers/"
-#         response = requests.get(url)
-#         if response.status_code != 200:
-#             print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+#         headers = {
+#             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+#                           "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+#             "Accept-Language": "en-US,en;q=0.9"
+#         }
+#         max_attempts = 3
+#         attempts = 0
+#         response = None
+#         while attempts < max_attempts:
+#             response = requests.get(url, headers=headers, timeout=10)
+#             if response.status_code == 200:
+#                 break
+#             else:
+#                 print(f"Failed to fetch Yahoo Finance page. Status code: {response.status_code}")
+#                 attempts += 1
+#                 time.sleep(5)
+#         if not response or response.status_code != 200:
 #             return []
 
 #         soup = BeautifulSoup(response.content, "html.parser")
 #         table = soup.find("table")  # Locate the main table with mutual fund data
-
 #         if not table:
 #             print("No table found on the Yahoo Finance page.")
 #             return []
@@ -6450,7 +7356,11 @@ def fetch_MutualFunds():
 
 #             symbol = cols[0].text.strip()
 #             name = cols[1].text.strip()
-#             price = cols[2].text.strip()
+#             price = fetch_price(symbol)  # Fetch the price dynamically
+
+#             # Skip mutual funds where the price is not available
+#             if price == "Price not available":
+#                 continue
 
 #             mutual_funds.append({
 #                 "symbol": symbol,
@@ -6464,89 +7374,158 @@ def fetch_MutualFunds():
 #         print(f"Error fetching mutual funds from Yahoo Finance: {e}")
 #         return []
 
-# def fetch_mutual_fund_details(symbol):
-#     """
-#     Fetch detailed information about a mutual fund using yfinance.
-#     :param symbol: Mutual fund symbol (e.g., "VASGX").
-#     :return: Detailed mutual fund information.
-#     """
-#     try:
-#         mutual_fund = yf.Ticker(symbol)
-#         info = mutual_fund.info
-#         return {
-#             "symbol": symbol,
-#             "name": info.get("shortName", "N/A"),
-#             "price": info.get("regularMarketPrice", "Price not available"),
-#             "category": info.get("category", "N/A"),
-#             "fundFamily": info.get("fundFamily", "N/A")
-#         }
-#     except Exception as e:
-#         print(f"Error fetching data for ticker {symbol}: {e}")
-#         return {}
-
 # # Endpoint to fetch mutual funds
-# # @app.route('/fetch-MutualFunds', methods=['GET'])
+# @app.route('/api/fetch-MutualFunds', methods=['POST'])
 # def fetch_MutualFunds():
 #     """
 #     Fetch and return mutual funds and their details.
 #     """
 #     try:
 #         mutual_funds = fetch_mutual_funds_from_yahoo()
-#         detailed_mutual_funds = []
-
-#         for fund in mutual_funds:
-#             print(f"Fetching details for {fund['symbol']}...")
-#             details = fetch_mutual_fund_details(fund["symbol"])
-#             if details:
-#                 detailed_mutual_funds.append(details)
-                
-#         print(f"Mutual funds {detailed_mutual_funds}")
-#         # return jsonify({
-#         #     "message": "Mutual funds fetched successfully.",
-#         #     "mutual_funds": detailed_mutual_funds
-#         # }), 200
+#         print(f"Mutual funds: {mutual_funds}")
+#         return jsonify({
+#             "message": "Mutual funds fetched successfully.",
+#             "mutual_funds": mutual_funds
+#         }), 200
 
 #     except Exception as e:
 #         print(f"Failed to fetch mutual funds: {e}")
-#         return jsonify({"error": "Failed to fetch mutual funds"}), 500
+#         return jsonify({"error": f"Failed to fetch mutual funds: {e}"}), 500
 
 
 ####################################################################################
 # Fetch Current Stock Price :
+# shifted above
+# import time
+# import yfinance as yf
+# import requests_cache
+# from flask import Flask, jsonify, request
 
-@app.route('/current_stock_price', methods=['POST'])
-def current_stock_price():
-    try:
-        ticker = request.json.get('ticker')
-        stock = yf.Ticker(ticker)
-        # Fetch the current stock price using the 'regularMarketPrice' field
-        current_price = stock.info.get('regularMarketPrice')
+
+# def clear_yfinance_cache():
+#     # This is the default cache folder; adjust if you use a custom location.
+#     cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "py-yfinance")
+#     if os.path.exists(cache_dir):
+#         shutil.rmtree(cache_dir)
+#         print(f"Cleared yfinance cache at {cache_dir}")
+
+# # Call clear_yfinance_cache() on startup (or before making requests)
+# clear_yfinance_cache()
+
+########################################################################################################
+
+# previous : 
+# def get_stock_price(ticker, retries=3, delay=5):
+#     """
+#     Attempts to fetch the current stock price for the given ticker.
+#     It first uses the regularMarketPrice from the ticker.info dictionary.
+#     If that returns None or raises an exception (e.g. due to rate limiting),
+#     it falls back to retrieving the latest closing price from historical data.
+#     Retries up to 'retries' times with a 'delay' between attempts.
+#     """
+#     attempt = 0
+#     while attempt < retries:
+#         try:
+#             # Create a Ticker object without passing a custom session.
+#             stock = yf.Ticker(ticker)
+            
+#             # Primary method: use the info field.
+#             price = stock.info.get('regularMarketPrice')
+#             if price is not None:
+#                 return price
+            
+#             # Fallback: use historical data for the last day.
+#             hist = stock.history(period='1d')
+#             if not hist.empty:
+#                 return hist['Close'].iloc[-1]
+            
+#             raise ValueError("No valid price data found.")
+#         except Exception as e:
+#             attempt += 1
+#             print(f"Attempt {attempt} for {ticker} failed: {e}")
+#             time.sleep(delay)
+    
+#     # Final fallback: try once more using default Ticker.
+#     stock = yf.Ticker(ticker)
+#     current_price = stock.info.get('regularMarketPrice')
+#     if not current_price:
+#         print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
+#         current_price = stock.history(period='1d')['Close'].iloc[-1]
+#         return current_price
+    
+#     if current_price is None:
+#         # Check for mutual fund-specific fields.
+#         print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
+#         fund_close_price = stock.history(period="1d")['Close']
+#         if len(fund_close_price) > 0:
+#             current_price = fund_close_price.iloc[-1]
+#         return current_price
         
+#     raise Exception(f"Failed to retrieve price for {ticker} after {retries} attempts.")
+
+def get_price_from_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_quote_endpoint(symbol=ticker)
+        if not data.empty:
+            return float(data['05. price'].iloc[0])
+    except Exception as e:
+        logging.error(f"Alpha Vantage failed for {ticker}: {e}")
+    return None
+
+def get_stock_price(ticker, retries=3, delay=5):
+    """
+    Attempts to get the stock price using yfinance.
+    Falls back to Alpha Vantage if all attempts fail.
+    """
+    for attempt in range(retries):
+        try:
+            stock = yf.Ticker(ticker)
+            price = stock.info.get('regularMarketPrice')
+            if price is not None:
+                return price
+
+            hist = stock.history(period='1d')
+            if not hist.empty:
+                return hist['Close'].iloc[-1]
+        except Exception as e:
+            logging.warning(f"yfinance Attempt {attempt + 1} failed for {ticker}: {e}")
+            time.sleep(delay)
+
+    logging.warning(f"yfinance failed for {ticker}. Trying Alpha Vantage...")
+    return get_price_from_alpha_vantage(ticker)
+
+
+@app.route('/api/current_stock_price', methods=['POST'])
+def current_stock_price():
+    data = request.get_json()
+    ticker = data.get('ticker')
+    if not ticker:
+        return jsonify({'error': 'Ticker not provided'}), 400
+    try:
+        price = get_stock_price(ticker)
+        return jsonify({"ticker": ticker, "current_price": price})
+    except Exception as e:
+        # Final fallback attempt inside the error handler.
+        stock = yf.Ticker(ticker)
+        current_price = stock.info.get('regularMarketPrice')
         if not current_price:
             print(f"Failed to retrieve the current price for {ticker}.\nExtracting closing Price of the Stock")
             current_price = stock.history(period='1d')['Close'].iloc[-1]
-            return jsonify({"current_price":current_price})
+            return jsonify({"current_price": current_price})
         
         if current_price is None:
-            # If still None, check for mutual fund-specific fields
             print(f"Attempting to retrieve price for Mutual Fund {ticker}...")
             fund_close_price = stock.history(period="1d")['Close']
             if len(fund_close_price) > 0:
-                current_price = fund_close_price.iloc[-1]  # Last available closing price
-            return jsonify({"current_price":current_price})
-
-        # If everything fails, raise an error
-        if current_price is None:
-            raise ValueError(f"Unable to retrieve price for {ticker}.")
-
-        return jsonify({"current_price":current_price})
-    
-    except Exception as e:
-        print(f"Failed to retrieve the current price for {ticker} : {e}")
-        return jsonify({"error": f"Failed to retrieve the current price for {ticker}"}), 500
+                current_price = fund_close_price.iloc[-1]
+            return jsonify({"current_price": current_price})
+        
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/dividend_yield', methods=['POST'])
+
+@app.route('/api/dividend_yield', methods=['POST'])
 def dividend_yield():
     
     ticker_name = request.json.get('ticker')
@@ -6616,7 +7595,7 @@ def calculate_direct_property_ownership(vacancy_rate, capex, cap_rate, market_va
 
 LOCAL_STORAGE_PATH = "data/orders/"
 
-# @app.route('/order_placed', methods=['POST'])
+# @app.route('/api/order_placed', methods=['POST'])
 # def order_placed():
 #     try:
 #         # Extract data from the request
@@ -6693,6 +7672,9 @@ LOCAL_STORAGE_PATH = "data/orders/"
 #     except Exception as e:
 #         print(f"Error occurred while placing order: {e}")
 #         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+
+###############################################################################################################################    
 
 
 # Using AWS to Place Order :
@@ -6774,27 +7756,58 @@ def save_data_to_local(client_id, client_transactions, order_file_path, order_da
 # Local storage path (if USE_AWS is False)
 LOCAL_STORAGE_PATH = "data/orders/"
 
-# new version :
+# added available funds and realized gains/losses :
 
-@app.route('/order_placed', methods=['POST'])
+import json
+import os
+import logging
+import datetime
+from flask import jsonify, request
+
+# Helper function to parse date strings (assumes format "MM/DD/YYYY, HH:MM:SS")
+def parse_date(date_str):
+    try:
+        return datetime.strptime(date_str, "%m/%d/%Y, %H:%M:%S")
+    except Exception as e:
+        logging.error(f"Error parsing date '{date_str}': {e}")
+        return datetime.min
+
+# New Version : For new Funds Field :
+# v-2 : corrected logical mistakes :
+@app.route('/api/order_placed', methods=['POST'])
 def order_placed():
     try:
         # Extract data from the request
-        order_data = request.json.get('order_data')
-        client_name = request.json.get('client_name', 'Rohit Sharma')  # Default client name
-        client_id = request.json.get('client_id', 'RS4603')  # Default client ID if not provided
-        funds = request.json.get('funds')  # Example extra data if needed
-        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {funds}")
- 
-        # Check whether to use AWS or local storage
+        order_data = request.json.get('order_data', {})
+        client_name = request.json.get('client_name', None)
+        client_id = request.json.get('client_id', None)
+        funds = request.json.get('funds') or request.json.get('investmentAmount')
+        action = (order_data.get("buy_or_sell") or order_data.get("Action", "")).lower()
+        assetClass = order_data.get("assetClass", "").strip().lower()
+        market = order_data.get("market", "").strip().lower()  # For reits this might be used; for mutual funds, may be empty.
+        ownership = order_data.get("ownership", "").strip().lower()  # e.g., "reit/fund" for REITs
+        try:
+            available_funds = float(request.json.get("available_funds", funds))
+            print("current availablefunds: ", available_funds)
+        except (ValueError, TypeError):
+            available_funds = 0.0
+            print("current availablefunds: ", available_funds)
+        try:
+            realized_gains_losses = float(request.json.get("realized_gains_losses", 0))
+        except (ValueError, TypeError):
+            realized_gains_losses = 0.0
+        try:
+            transactionAmount = float(order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0))
+        except (ValueError, TypeError):
+            transactionAmount = 0.0
+
+        print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+        print("Asset Class:", assetClass, "Ownership:", ownership)
+
+        # Load existing transactions from storage
         if USE_AWS:
-            # AWS S3 file key for the order list
             order_list_key = f"{order_list_folder}{client_id}_orders.json"
-            # client_summary_key = f"{client_summary_folder}{client_id}_summary.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
-           
-           
-            # Load existing transactions
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
@@ -6802,60 +7815,735 @@ def order_placed():
             except s3.exceptions.NoSuchKey:
                 client_transactions = []
                 print(f"No existing transactions for client {client_id}. Initializing new list.")
-           
-            # Save new order
-            save_data_to_aws(client_id, client_transactions, order_list_key, order_data)
- 
-            # Update client summary file to set isNewClient to False
-            print(f"summary_file_path keys {client_summary_key}")
-            try:
-                summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
-                client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
-                print(f"summary_file_path {client_summary}")
-                client_summary['isNewClient'] = False  # Set isNewClient to False
-                s3.put_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key, Body=json.dumps(client_summary))
-                print(f"Updated client summary for {client_id} to set isNewClient as False in S3")
-            except s3.exceptions.NoSuchKey:
-                print(f"No summary file found for client {client_id} in S3.")
- 
         else:
-            # Local storage paths
             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
-           
-            # Load existing transactions
             if os.path.exists(order_file_path):
                 with open(order_file_path, 'r') as file:
                     client_transactions = json.load(file)
                 print(f"Loaded existing transactions for client {client_id} from local storage")
             else:
                 client_transactions = []
-                print(f"No existing transactions for client {client_id}. Initializing new list.")
- 
-            # Save new order
-            save_data_to_local(client_id, client_transactions, order_file_path, order_data)
- 
-            # Update client summary file to set isNewClient to False
+
+        print("client transactions:", client_transactions)
+
+        # Load client summary data (which contains investmentEntries)
+        if USE_AWS:
+            client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+                print(f"Loaded client data for client {client_id} from S3")
+            except s3.exceptions.NoSuchKey:
+                client_data = {}
+                print(f"No client data for client {client_id}. Initializing new data.")
+        else:
+            summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+            if os.path.exists(summary_file_path):
+                with open(summary_file_path, 'r') as file:
+                    client_data = json.load(file)
+                print(f"Loaded client data for client {client_id} from local storage")
+            else:
+                client_data = {}
+
+        print("client data:", client_data)
+
+        # Retrieve investment entries from client data
+        client_investment_entries = client_data.get('investmentEntries', [])
+        if not isinstance(client_investment_entries, list):
+            client_investment_entries = []
+
+        # Process Buy/Sell order logic
+        if action == "sell":
+            print("Processing sell order")
+            sell_symbol = order_data.get("symbol") or order_data.get("Symbol")
+            sell_units = float(order_data.get("units", 0))
+            sell_market = order_data.get("market") or order_data.get("Market")
+            sell_price = float(order_data.get("unit_price") or order_data.get("UnitPrice", 0))
+            print(f"Sell order: {sell_symbol}, units: {sell_units}, market: {sell_market}, price: {sell_price}")
+
+            # Find matching orders for FIFO calculation (using both symbol and market)
+            matching_orders = [
+                order for order in client_transactions
+                if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+                   (order.get("market") or order.get("Market")) == sell_market
+            ]
+            print("Matching orders for sell:", matching_orders)
+
+            total_units_bought = sum(float(order.get("units", order.get("Units", 0))) for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+            total_units_sold = sum(float(order.get("units", order.get("Units", 0))) for order in matching_orders if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+            available_units = total_units_bought - total_units_sold
+            print(f"Total units bought: {total_units_bought}, sold: {total_units_sold}, available: {available_units}")
+
+            if total_units_bought == 0 or sell_units > available_units:
+                return jsonify({"message": f"Invalid sell order for {sell_symbol}. Insufficient units."}), 400
+            
+            # Update investment entry for sell: add transaction amount to available_asset_funds.
+            found_entry = False
+            # For REITs/mutual funds, we do not segregate by market if not applicable.
+            for entry in client_investment_entries:
+                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
+                    entry.get("selectedFund", "").strip().lower() == market):
+                    try:
+                        print("selectedAsset :",assetClass," and selectedFund :",market)
+                        current_asset_funds = float(entry.get("available_asset_funds", 0))
+                        if current_asset_funds == 0:
+                            current_asset_funds = float(entry.get("asset_funds", 0)) # incase available_asset_funds is not available 
+                            if current_asset_funds == 0:
+                                current_asset_funds = float(entry.get("investmentAmount", 0)) # incase available_asset_funds is not available 
+                                print("Considering asset funds same as investment amount",current_asset_funds)
+                        print("current_asset_funds : ",current_asset_funds)
+                    except (ValueError, TypeError):
+                        current_asset_funds = 0.0
+                    entry["available_asset_funds"] = current_asset_funds + transactionAmount
+                    found_entry = True
+                    break
+            if not found_entry:
+                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
+
+            # Update available funds for sell (add transaction amount)
+            available_funds += transactionAmount
+            print(f"New available funds after sell: {available_funds}")
+
+            # Calculate realized gains/losses using FIFO
+            buy_orders = sorted(
+                [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+                key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+            )
+            print("FIFO buy orders:", buy_orders)
+            units_to_sell = sell_units
+            fifo_profit = 0.0
+            for buy in buy_orders:
+                buy_units = float(buy.get("units", buy.get("Units", 0)))
+                if units_to_sell <= 0:
+                    break
+                allocation_units = min(buy_units, units_to_sell)
+                cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+                profit = allocation_units * (sell_price - cost_basis)
+                fifo_profit += profit
+                units_to_sell -= allocation_units
+            print("fifo_profit", fifo_profit)
+            print(f"Realized profit/loss for sell: {fifo_profit}")
+            realized_gains_losses += fifo_profit
+            print(f"Updated realized gains/losses: {realized_gains_losses}")
+
+        else:  # Buy order
+            print("Processing buy order")
+            if transactionAmount > available_funds:
+                return jsonify({"message": f"Insufficient funds. Available funds: {available_funds}."}), 400
+            
+            # Update investment entry for buy: subtract transaction amount from available_asset_funds.
+            found_entry = False
+            for entry in client_investment_entries:
+                # For mutual funds or reits, we ignore market segregation if not provided
+                if (entry.get("selectedAsset", "").strip().lower() == assetClass and 
+                    entry.get("selectedFund", "").strip().lower() == market):
+                    try:
+                        print("selectedAsset :",assetClass," and selectedFund :",market)
+                        current_asset_funds = float(entry.get("investmentAmount", 0))
+                        print("current_asset_funds : ",current_asset_funds)
+                    except (ValueError, TypeError):
+                        current_asset_funds = 0.0
+                    if transactionAmount > current_asset_funds:
+                        return jsonify({"message": f"Insufficient asset funds. Current asset funds: {current_asset_funds}."}), 400
+                    entry["available_asset_funds"] = current_asset_funds - transactionAmount
+                    found_entry = True
+                    break
+            if not found_entry:
+                return jsonify({"message": f"Investment entry not found for asset {assetClass} and market {market}."}), 404
+            
+            # Update available funds for buy (deduct transaction amount)
+            available_funds -= transactionAmount
+            print(f"New available funds after buy: {available_funds}")
+
+
+        # Standardize order fields for saving
+        formatted_order = {
+            "Action": (order_data.get("buy_or_sell") or order_data.get("Action", "")).lower(),
+            "Date": order_data.get("date") or order_data.get("Date", ""),
+            "TransactionAmount": transactionAmount,
+            "Name": order_data.get("name") or order_data.get("Name", ""),
+            "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+            "Market": order_data.get("market") or order_data.get("Market", ""),
+            "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+            "UnitPrice": float(order_data.get("unit_price") or order_data.get("UnitPrice", 0)),
+            "Units": float(order_data.get("units") or order_data.get("Units", 0))
+        }
+        
+        client_transactions.append(formatted_order)
+        
+        # Update client data with modified investment entries
+        client_data['investmentEntries'] = client_investment_entries
+        
+        # Save updated transactions and client summary
+        if USE_AWS:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=order_list_key,
+                Body=json.dumps(client_transactions, indent=4),
+                ContentType="application/json"
+            )
+            print(f"Saved updated transactions for client {client_id} in S3.")
+            try:
+                summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+                client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+                client_summary['available_funds'] = available_funds
+                client_summary['realized_gains_losses'] = realized_gains_losses
+                client_summary['isNewClient'] = False
+                client_summary['investmentEntries'] = client_investment_entries
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=client_summary_key,
+                    Body=json.dumps(client_summary, indent=4),
+                    ContentType="application/json"
+                )
+                print(f"Updated client summary for {client_id} in S3.")
+            except s3.exceptions.NoSuchKey:
+                print(f"No summary file found for client {client_id} in S3.")
+        else:
+            with open(order_file_path, 'w') as file:
+                json.dump(client_transactions, file, indent=4)
+            print(f"Saved updated transactions for client {client_id} in local storage.")
             if os.path.exists(summary_file_path):
                 with open(summary_file_path, 'r+') as summary_file:
                     client_summary = json.load(summary_file)
                     client_summary['isNewClient'] = False
+                    client_summary['available_funds'] = available_funds
+                    client_summary['realized_gains_losses'] = realized_gains_losses
+                    client_summary['investmentEntries'] = client_investment_entries
                     summary_file.seek(0)
-                    summary_file.write(json.dumps(client_summary))
+                    summary_file.write(json.dumps(client_summary, indent=4))
                     summary_file.truncate()
-                print(f"Updated client summary for {client_id} to set isNewClient as False in local storage")
+                print(f"Updated client summary for {client_id} in local storage")
             else:
                 print(f"No summary file found for client {client_id} in local storage.")
- 
-        return jsonify({"message": "Order placed successfully", "status": 200})
- 
+        
+        return jsonify({
+            "message": "Order placed successfully",
+            "status": 200,
+            "available_funds": available_funds,
+            "realized_gains_losses": realized_gains_losses
+        }), 200
+    
     except Exception as e:
         print(f"Error occurred while placing order: {e}")
         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
- 
+
+
+
+# v-1 
+# @app.route('/api/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract data from the request
+#         order_data = request.json.get('order_data', {})
+#         client_name = request.json.get('client_name',None)  # Default client name
+#         client_id = request.json.get('client_id', None)  # Default client ID
+#         funds = request.json.get('funds') or request.json.get('investmentAmount')
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+#         assetClass = order_data.get("assetClass","").lower()
+#         market = order_data.get("market","").lower() # order_data.get("selectedFund","").lower()
+#         available_asset_funds = order_data.get("available_asset_funds","").lower() # to get allocated asset funds
+#         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
+#         realized_gains_losses = request.json.get("realized_gains_losses", 0)
+        
+#         print("assetClass : ", assetClass)
+        
+#         try:
+#             available_funds = float(available_funds)
+#         except (ValueError, TypeError):
+#             available_funds = 0.0
+#         try:
+#             realized_gains_losses = float(realized_gains_losses)
+#         except (ValueError, TypeError):
+#             realized_gains_losses = 0.0
+        
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+#         print("Available Funds:", available_funds)
+#         print("Realized Gains/Losses:", realized_gains_losses)
+        
+#         # Load existing transactions from JSON file (AWS/local)
+#         if USE_AWS:
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing transactions for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+#         else:
+#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+#             if os.path.exists(order_file_path):
+#                 with open(order_file_path, 'r') as file:
+#                     client_transactions = json.load(file)
+#                 print(f"Loaded existing transactions for client {client_id} from local storage")
+#             else:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+        
+#         print("client transactions:", client_transactions)
+        
+#         # Load Allocated Funds from Financial Form :
+        
+#         if USE_AWS:
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing client data for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_data = []
+#                 print(f"No existing client data for client {client_id}. Initializing new list.")
+#         else:
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r') as file:
+#                     client_data = json.load(file)
+#                 print(f"Loaded existing client data for client {client_id} from local storage")
+#             else:
+#                 client_data = []
+#                 print(f"No existing client data for client {client_id}. Initializing new list.")
+        
+#         print("client data :", client_data)
+        
+#         # #Load Investment Entries to get data of all the funds for each assets 
+#         client_investment_entries = client_data['investmentEntries']
+        
+#         # check asset class whether it is Mutual Funds or REITs/real estate as it doesnt have a market
+        
+            
+#         # Sell Order Validation and FIFO Realized Gain/Loss Calculation
+#         if action == "sell":
+#             print("Sell Order Validation")
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
+#             sell_units = order_data.get("units", 0)
+#             sell_market = order_data.get("market") or order_data.get("Market")
+#             sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            
+#             # Find all matching orders (for this symbol and market)
+#             if assetClass == "stock" and assetClass == "etf":
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+#                     (order.get("market") or order.get("Market")) == sell_market
+#                 ]
+#             else:
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol
+#                 ]
+                
+#             print("Matching orders for sell:", matching_orders)
+            
+#             # Calculate total available units
+#             total_units_bought = sum(order.get("units", order.get("Units", 0))
+#                                      for order in matching_orders
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+#             total_units_sold = sum(order.get("units", order.get("Units", 0))
+#                                    for order in matching_orders
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+#             available_units = total_units_bought - total_units_sold
+#             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
+            
+#             if total_units_bought == 0:
+#                 return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
+#             if sell_units > available_units:
+#                 return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
+            
+#             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+            
+#             # Check if TransactionAmount is greater than available funds : no need to check while selling 
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+            
+#             # if transactionAmount > available_funds: no need to check while selling
+#             #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            
+#             # Iterate through investment entries to find a matching entry (for sell order)
+#             found_entry = False
+#             for entry in client_investment_entries:
+#                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
+#                     # Get current allocated funds; default to 0 if not present.
+#                     try:
+#                         available_asset_funds = float(entry.get("available_asset_funds", 0))
+#                         available_asset_funds = available_asset_funds + transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     except ValueError:
+#                         available_asset_funds = available_asset_funds + transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     # Update the entry with the new asset funds 
+#                     entry["available_asset_funds"] = available_asset_funds      
+#                     found_entry = True
+#                     break
+            
+#             # If no matching entry is found, give error message of entry not found.
+#             if not found_entry:
+#                 return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+            
+#             # Update available funds
+#             available_funds = available_funds + transactionAmount
+#             print(f"New available funds: {available_funds}")
+            
+#             # Calculate realized gains/losses using FIFO
+#             # Get all buy orders (for the asset in this market) and sort them in FIFO order
+#             buy_orders = sorted(
+#                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+#                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+#             )
+#             print("FIFO buy orders:", buy_orders)
+            
+#             units_to_sell = sell_units
+#             fifo_profit = 0.0
+#             for buy in buy_orders:
+#                 # Available units in this buy order
+#                 buy_units = float(buy.get("units", buy.get("Units", 0)))
+#                 # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
+#                 # For now, assume the buy order's full units are available in FIFO order.
+#                 if units_to_sell <= 0:
+#                     break
+#                 allocation_units = min(buy_units, units_to_sell)
+#                 cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+#                 profit = allocation_units * (sell_price - cost_basis)
+#                 fifo_profit += profit
+#                 units_to_sell -= allocation_units
+#             print(f"Realized profit/loss for this sell order: {fifo_profit}")
+            
+#             realized_gains_losses = realized_gains_losses + fifo_profit
+#             print(f"New realized gains/losses: {realized_gains_losses}")
+        
+#         else: # for buy :
+            
+#             # Check if TransactionAmount is greater than available funds
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             if transactionAmount > available_funds:
+#                 return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+            
+#             # Iterate through investment entries to find a matching entry (for buy order)
+#             found_entry = False
+#             for entry in client_investment_entries:
+#                 if entry.get("selectedAsset", "").strip().lower() == assetClass.strip().lower() and entry.get("selectedFund", "").strip().lower() == market.strip().lower():
+#                     # Get current allocated funds; default to 0 if not present.
+#                     try:
+#                         available_asset_funds = float(entry.get("available_asset_funds", 0))
+#                         available_asset_funds = available_asset_funds - transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                        
+#                     except ValueError:
+#                         available_asset_funds = available_asset_funds - transactionAmount
+#                         print(f"Updated asset funds: {available_funds}")
+                    
+#                     # Check if transaction amount > available_asset_funds :
+#                     if transactionAmount > available_asset_funds:
+#                         return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","available_asset_funds":available_asset_funds}), 400
+                        
+#                     # Update the entry with the new asset funds 
+#                     entry["available_asset_funds"] = available_asset_funds   
+#                     found_entry = True
+#                     break
+            
+#             # If no matching entry is found, give error message of entry not found.
+#             if not found_entry:
+#                 return jsonify({"message": f"Entry not found for asset {assetClass} and market {market}."}), 404
+            
+#             # # Check if transaction amount > available_asset_funds :
+#             # if transactionAmount > available_asset_funds:
+#             #     return jsonify({"message": f"You have Insufficient Asset Funds to place Orders.","available_asset_funds":available_asset_funds}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds - transactionAmount
+#             print(f"New available funds: {available_funds}")
+        
+#         # Standardize field names before saving the order
+#         formatted_order = {
+#             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+#             "Date": order_data.get("date") or order_data.get("Date", ""),
+#             "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+#             "Name": order_data.get("name") or order_data.get("Name", ""),
+#             "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+#             "Market": order_data.get("market") or order_data.get("Market", ""),
+#             "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+#             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
+#             "Units": order_data.get("units") or order_data.get("Units", 0)
+#         }
+        
+#         # Append the formatted order to the transaction list
+#         client_transactions.append(formatted_order)
+        
+#         # Update client data with modified investment entries
+#         client_data['investmentEntries'] = client_investment_entries
+        
+#         # Save updated transactions
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=order_list_key,
+#                 Body=json.dumps(client_transactions, indent=4),
+#                 ContentType="application/json"
+#             )
+#             print(f"✅ Saved updated transactions for client {client_id} in S3.")
+            
+#             try:
+#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+#                 client_summary['available_funds'] = available_funds # update/create available funds
+#                 client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
+#                 client_summary['isNewClient'] = False
+#                 client_summary['investmentEntries'] = client_investment_entries
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=client_summary_key,
+#                     Body=json.dumps(client_summary, indent=4),
+#                     ContentType="application/json"
+#                 )
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+#             except s3.exceptions.NoSuchKey:
+#                 print(f"No summary file found for client {client_id} in S3.")
+#         else:
+#             with open(order_file_path, 'w') as file:
+#                 json.dump(client_transactions, file, indent=4)
+#             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+            
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r+') as summary_file:
+#                     client_summary = json.load(summary_file)
+#                     client_summary['isNewClient'] = False
+#                     summary_file.seek(0)
+#                     summary_file.write(json.dumps(client_summary, indent=4))
+#                     summary_file.truncate()
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
+#             else:
+#                 print(f"No summary file found for client {client_id} in local storage.")
+        
+#         return jsonify({"message": "✅ Order placed successfully",
+#                         "status": 200,
+#                         "available_funds": available_funds,
+#                         "realized_gains_losses": realized_gains_losses}), 200
+    
+#     except Exception as e:
+#         print(f"❌ Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
+
+# Previous Version : adding available funds and managing it through order placement 
+
+# @app.route('/api/order_placed', methods=['POST'])
+# def order_placed():
+#     try:
+#         # Extract data from the request
+#         order_data = request.json.get('order_data', {})
+#         client_name = request.json.get('client_name',None)  # Default client name
+#         client_id = request.json.get('client_id', None)  # Default client ID
+#         funds = request.json.get('funds')
+#         action = order_data.get("buy_or_sell", "").lower() or order_data.get("Action", "").lower()  # Get action from request
+#         assetClass = order_data.get("assetClass","").lower()
+#         available_funds = request.json.get("available_funds", funds)  # Use available_funds if provided; otherwise, use funds
+#         realized_gains_losses = request.json.get("realized_gains_losses", 0)
+        
+#         print("assetClass : ", assetClass)
+        
+#         try:
+#             available_funds = float(available_funds)
+#         except (ValueError, TypeError):
+#             available_funds = 0.0
+#         try:
+#             realized_gains_losses = float(realized_gains_losses)
+#         except (ValueError, TypeError):
+#             realized_gains_losses = 0.0
+        
+#         print(f"Received order for client: {client_name} ({client_id}), Available Funds: {available_funds}, Action: {action}")
+#         print("Available Funds:", available_funds)
+#         print("Realized Gains/Losses:", realized_gains_losses)
+        
+#         # Load existing transactions from JSON file (AWS/local)
+#         if USE_AWS:
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_transactions = json.loads(response['Body'].read().decode('utf-8'))
+#                 print(f"Loaded existing transactions for client {client_id} from S3")
+#             except s3.exceptions.NoSuchKey:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+#         else:
+#             order_file_path = os.path.join(LOCAL_STORAGE_PATH, f"{client_id}_orders.json")
+#             summary_file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, f"{client_id}_summary.json")
+#             if os.path.exists(order_file_path):
+#                 with open(order_file_path, 'r') as file:
+#                     client_transactions = json.load(file)
+#                 print(f"Loaded existing transactions for client {client_id} from local storage")
+#             else:
+#                 client_transactions = []
+#                 print(f"No existing transactions for client {client_id}. Initializing new list.")
+        
+#         print("client transactions:", client_transactions)
+        
+#         # Sell Order Validation and FIFO Realized Gain/Loss Calculation
+#         if action == "sell":
+#             print("Sell Order Validation")
+#             sell_symbol = order_data.get("symbol") or order_data.get("Symbol")  # Handle inconsistent casing
+#             sell_units = order_data.get("units", 0)
+#             sell_market = order_data.get("market") or order_data.get("Market")
+#             sell_price = order_data.get("unit_price") or order_data.get("UnitPrice", 0)
+#             print(f"Order symbol: {sell_symbol}, Sell units: {sell_units}, Sell market: {sell_market}, Sell price: {sell_price}")
+            
+#             # Find all matching orders (for this symbol and market)
+#             if assetClass == "stock" and assetClass == "etf":
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol and
+#                     (order.get("market") or order.get("Market")) == sell_market
+#                 ]
+#             else:
+#                 matching_orders = [
+#                     order for order in client_transactions
+#                     if (order.get("symbol") or order.get("Symbol")) == sell_symbol
+#                 ]
+                
+#             print("Matching orders for sell:", matching_orders)
+            
+#             # Calculate total available units
+#             total_units_bought = sum(order.get("units", order.get("Units", 0))
+#                                      for order in matching_orders
+#                                      if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy"))
+#             total_units_sold = sum(order.get("units", order.get("Units", 0))
+#                                    for order in matching_orders
+#                                    if (order.get("buy_or_sell", "").lower() == "sell" or order.get("Action", "").lower() == "sell"))
+#             available_units = total_units_bought - total_units_sold
+#             print(f"Total units bought: {total_units_bought}, Total units sold: {total_units_sold}, Available units: {available_units}")
+            
+#             if total_units_bought == 0:
+#                 return jsonify({"message": f"Cannot sell {sell_symbol}. You never bought this asset in {sell_market} market."}), 400
+#             if sell_units > available_units:
+#                 return jsonify({"message": f"Cannot sell {sell_units} units of {sell_symbol}. You only have {available_units}."}), 400
+            
+#             print(f"✅ Sell order validated for {sell_units} units of {sell_symbol} in market {sell_market}. Available units: {available_units}")
+            
+#             # Check if TransactionAmount is greater than available funds : no need to check while selling 
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             # if transactionAmount > available_funds:
+#             #     return jsonify({"message": f"❌ Insufficient funds to make this transaction. Available funds: {available_funds}."}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds + transactionAmount
+#             print(f"New available funds: {available_funds}")
+            
+#             # Calculate realized gains/losses using FIFO
+#             # Get all buy orders (for the asset in this market) and sort them in FIFO order
+#             buy_orders = sorted(
+#                 [order for order in matching_orders if (order.get("buy_or_sell", "").lower() == "buy" or order.get("Action", "").lower() == "buy")],
+#                 key=lambda o: parse_date(o.get("date") or o.get("Date", ""))
+#             )
+#             print("FIFO buy orders:", buy_orders)
+            
+#             units_to_sell = sell_units
+#             fifo_profit = 0.0
+#             for buy in buy_orders:
+#                 # Available units in this buy order
+#                 buy_units = float(buy.get("units", buy.get("Units", 0)))
+#                 # (Optional) If you maintained partial allocations, subtract units already sold from this buy order.
+#                 # For now, assume the buy order's full units are available in FIFO order.
+#                 if units_to_sell <= 0:
+#                     break
+#                 allocation_units = min(buy_units, units_to_sell)
+#                 cost_basis = float(buy.get("unit_price") or buy.get("UnitPrice", 0))
+#                 profit = allocation_units * (sell_price - cost_basis)
+#                 fifo_profit += profit
+#                 units_to_sell -= allocation_units
+#             print(f"Realized profit/loss for this sell order: {fifo_profit}")
+            
+#             realized_gains_losses = realized_gains_losses + fifo_profit
+#             print(f"New realized gains/losses: {realized_gains_losses}")
+        
+#         else: # for buy :
+            
+#             # Check if TransactionAmount is greater than available funds
+#             transactionAmount = order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0)
+#             print(f"Transaction amount: {transactionAmount}")
+#             if transactionAmount > available_funds:
+#                 return jsonify({"message": f"You have Insufficient Funds to place Orders.","available_funds":available_funds}), 400
+            
+#             # Update available funds
+#             available_funds = available_funds - transactionAmount
+#             print(f"New available funds: {available_funds}")
+        
+#         # Standardize field names before saving the order
+#         formatted_order = {
+#             "Action": order_data.get("buy_or_sell") or order_data.get("Action", "").lower(),
+#             "Date": order_data.get("date") or order_data.get("Date", ""),
+#             "TransactionAmount": order_data.get("transactionAmount") or order_data.get("TransactionAmount", 0),
+#             "Name": order_data.get("name") or order_data.get("Name", ""),
+#             "Symbol": order_data.get("symbol") or order_data.get("Symbol", ""),
+#             "Market": order_data.get("market") or order_data.get("Market", ""),
+#             "AssetClass": order_data.get("assetClass") or order_data.get("AssetClass", ""),
+#             "UnitPrice": order_data.get("unit_price") or order_data.get("UnitPrice", 0),
+#             "Units": order_data.get("units") or order_data.get("Units", 0)
+#         }
+        
+#         # Append the formatted order to the transaction list
+#         client_transactions.append(formatted_order)
+        
+#         # Save updated transactions
+#         if USE_AWS:
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=order_list_key,
+#                 Body=json.dumps(client_transactions, indent=4),
+#                 ContentType="application/json"
+#             )
+#             print(f"✅ Saved updated transactions for client {client_id} in S3.")
+            
+#             try:
+#                 summary_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_summary_key)
+#                 client_summary = json.loads(summary_response['Body'].read().decode('utf-8'))
+#                 client_summary['available_funds'] = available_funds # update/create available funds
+#                 client_summary['realized_gains_losses'] = realized_gains_losses # update/create realized gains/losses if sold any asset else same.
+#                 client_summary['isNewClient'] = False
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=client_summary_key,
+#                     Body=json.dumps(client_summary, indent=4),
+#                     ContentType="application/json"
+#                 )
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in S3")
+#             except s3.exceptions.NoSuchKey:
+#                 print(f"No summary file found for client {client_id} in S3.")
+#         else:
+#             with open(order_file_path, 'w') as file:
+#                 json.dump(client_transactions, file, indent=4)
+#             print(f"✅ Saved updated transactions for client {client_id} in local storage.")
+            
+#             if os.path.exists(summary_file_path):
+#                 with open(summary_file_path, 'r+') as summary_file:
+#                     client_summary = json.load(summary_file)
+#                     client_summary['isNewClient'] = False
+#                     summary_file.seek(0)
+#                     summary_file.write(json.dumps(client_summary, indent=4))
+#                     summary_file.truncate()
+#                 print(f"✅ Updated client summary for {client_id} to set isNewClient as False in local storage")
+#             else:
+#                 print(f"No summary file found for client {client_id} in local storage.")
+        
+#         return jsonify({"message": "✅ Order placed successfully",
+#                         "status": 200,
+#                         "available_funds": available_funds,
+#                         "realized_gains_losses": realized_gains_losses}), 200
+    
+#     except Exception as e:
+#         print(f"❌ Error occurred while placing order: {e}")
+#         return jsonify({"message": f"Error occurred while placing order: {str(e)}"}), 500
+
 
 # ## Using AWS to Show Order :
-@app.route('/show_order_list', methods=['POST'])
+@app.route('/api/show_order_list', methods=['POST'])
 def show_order_list():
     try:
         # Get client_id from the request
@@ -6908,11 +8596,11 @@ def show_order_list():
         print(f"Error occurred while retrieving the order list: {e}")
         return jsonify({"message": f"Error occurred while retrieving order list: {str(e)}"}), 500
     
-    
+###############################################################################################################################    
     
 # Updated Show Order List for Local Storage :
 
-# @app.route('/show_order_list', methods=['POST'])
+# @app.route('/api/show_order_list', methods=['POST'])
 # def show_order_list():
 #     try:
 #         # Get client_id from the request
@@ -6953,12 +8641,369 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-@app.route('/portfolio', methods=['POST'])
+###########################################################################################################
+# Automatic Daily Portfolio Data Updation Code
+
+# from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, time, timedelta
+import pytz
+import logging
+
+# Scheduler configuration
+# scheduler = BackgroundScheduler(timezone="US/Eastern")  # 4 PM US Eastern time
+# logging.basicConfig(level=logging.INFO)
+
+# def fetch_all_client_ids():
+#     try:
+#         client_ids = []
+
+#         if USE_AWS:
+#             # Fetch client IDs from AWS S3
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     file_key = obj['Key']
+#                     if file_key.endswith(".json"):
+#                         client_id = file_key.split('/')[-1].replace(".json", "")  # Extract client ID
+#                         client_ids.append(client_id)
+#         else:
+#             # Fetch client IDs from local storage
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     client_id = filename.replace(".json", "")  # Extract client ID
+#                     client_ids.append(client_id)
+
+#         return client_ids
+
+#     except Exception as e:
+#         logging.error(f"Error occurred while retrieving client IDs: {e}")
+#         return []
+
+
+# # prev :
+# def fetch_all_client_ids():
+#     try:
+#         all_data = []
+ 
+#         if USE_AWS:
+#             # AWS Logic
+#             response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+#             if 'Contents' in response:
+#                 for obj in response['Contents']:
+#                     try:
+#                         file_key = obj['Key']
+#                         file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                         file_data = file_response['Body'].read().decode('utf-8')
+#                         data_json = json.loads(file_data)
+ 
+#                         # Do not overwrite isNewClient flag if updated elsewhere
+#                         if 'isNewClient' not in data_json:
+#                             data_json['isNewClient'] = True  # Default to True if missing
+                       
+#                         all_data.append(data_json)
+#                     except Exception as e:
+#                         print(f"Error reading file {obj['Key']}: {e}")
+#                         continue
+#             else:
+#                 return jsonify({'message': 'No client data found in S3 bucket.'}), 404
+ 
+#         else:
+#             # Local Storage Logic
+#             for filename in os.listdir(LOCAL_CLIENT_DATA_FOLDER):
+#                 if filename.endswith(".json"):
+#                     file_path = os.path.join(LOCAL_CLIENT_DATA_FOLDER, filename)
+#                     with open(file_path, 'r') as f:
+#                         client_data = json.load(f)
+ 
+#                         # Do not overwrite isNewClient flag if updated elsewhere
+#                         if 'isNewClient' not in client_data:
+#                             client_data['isNewClient'] = True  # Default to True if missing
+                       
+#                         all_data.append(client_data)
+ 
+#             if not all_data:
+#                 return jsonify({'message': 'No client data found in local storage.'}), 404
+ 
+#         # Return combined data
+#         return all_data
+ 
+#     except Exception as e:
+#         print(f"Error occurred while retrieving data: {e}")
+#         return jsonify({'message': f"Error occurred while retrieving data: {e}"}), 500
+
+# # Reusable function to fetch and process portfolios
+# def update_portfolio_and_changes():
+#     try:
+#         logging.info("Running scheduled portfolio update...")
+
+#         # Get all client IDs
+#         all_client_ids = fetch_all_client_ids()
+#         logging.info(f"Fetched {len(all_client_ids)} client IDs for portfolio updates.")
+
+#         for client_data in all_client_ids:
+#             client_id = client_data.get("uniqueId")
+#             if not client_id:
+#                 logging.warning(f"Skipping client without uniqueId: {client_data}")
+#                 continue
+
+#             logging.info(f"Processing portfolio for client_id: {client_id}")
+#             client_portfolio_response = portfolio_update_logic(client_id)
+
+#             if client_portfolio_response["status"] == "success":
+#                 logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#             else:
+#                 logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+#     except Exception as e:
+#         logging.error(f"Error during scheduled portfolio update: {e}")
+
+# def update_portfolio_and_changes():
+#     try:
+#         logging.info("Running scheduled portfolio update...")
+
+#         # Get a list of client IDs (assuming a function or database fetch)
+#         all_client_ids = fetch_all_client_ids()  # Implement this based on your database or file storage
+
+#         for client_id in all_client_ids:
+#             logging.info(f"Processing portfolio for client_id: {client_id}")
+
+#             # Reuse the portfolio function logic
+#             client_portfolio_response = portfolio_update_logic(client_id)
+
+#             if client_portfolio_response["status"] == "success":
+#                 logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#             else:
+#                 logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+#     except Exception as e:
+#         logging.error(f"Error during scheduled portfolio update: {e}")
+
+# Function to encapsulate the portfolio update logic (extracted from the API)
+# def portfolio_update_logic(client_id):
+#     try:
+#         logging.info(f"Starting portfolio update for client_id: {client_id}")
+#         # Extract client ID and current date
+#         curr_date = datetime.now().strftime('%Y-%m-%d')
+#         logging.info(f"Current Date: {curr_date}")
+
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load client orders
+#         if USE_AWS:
+#             # Load orders from AWS S3
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info(f"Fetched orders for client_id: {client_id}")
+#                 logging.info(f"Fetched {len(client_orders)} orders for client_id: {client_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             except Exception as e:
+#                 logging.error(f"Error fetching orders from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching orders: {e}"}), 500
+#         else:
+#             # Load orders from local storage
+#             order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+#             if not os.path.exists(order_file_path):
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             with open(order_file_path, 'r') as file:
+#                 client_orders = json.load(file)
+
+#         # Log portfolio metrics
+#         logging.info(f"Updating portfolio for {len(client_orders)} orders.")
+        
+#         # Initialize portfolio data and 
+#         portfolio_data = []
+#         portfolio_current_value = 0
+#         portfolio_daily_change = 0
+#         portfolio_investment_gain_loss = 0
+
+#         # Load or initialize daily changes
+#         if USE_AWS:
+#             daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 daily_changes = {}
+#             except Exception as e:
+#                 logging.error(f"Error fetching daily changes from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+#         else:
+#             daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     daily_changes = json.load(file)
+#             else:
+#                 daily_changes = {}
+
+#         # Process client orders
+#         for order in client_orders:
+#             asset_class = order.get('AssetClass', 'N/A')
+#             name = order.get('Name', 'N/A')
+#             symbol = order.get('Symbol', 'N/A')
+#             units = order.get('Units', 0)
+#             bought_price = order.get('UnitPrice', 0)
+#             transaction_amount = order.get('TransactionAmount', 0)
+
+#             # Fetch current stock price
+#             def fetch_current_stock_price(ticker):
+#                 stock = yf.Ticker(ticker)
+#                 try:
+#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
+#                     return current_price
+#                 except Exception as e:
+#                     logging.error(f"Error fetching stock price for {ticker}: {e}")
+#                     return 0
+
+#             current_price = fetch_current_stock_price(symbol)
+#             diff_price = current_price - bought_price
+#             daily_price_change = diff_price
+#             daily_value_change = daily_price_change * units
+#             current_value = current_price * units
+
+#             # Calculate investment gain/loss and other metrics
+#             investment_gain_loss = diff_price * units
+#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+
+#             # Append data to portfolio
+#             portfolio_data.append({
+#                 "assetClass": asset_class,
+#                 "name": name,
+#                 "symbol": symbol,
+#                 "Quantity": units,
+#                 "Delayed_Price": current_price,
+#                 "current_value": current_value,
+#                 "Daily_Price_Change": daily_price_change,
+#                 "Daily_Value_Change": daily_value_change,
+#                 "Amount_Invested_per_Unit": bought_price,
+#                 "Amount_Invested": transaction_amount,
+#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+#                 "Investment_Gain_or_Loss": investment_gain_loss,
+#                 "Time_Held": order.get('Date', 'N/A'),
+#             })
+
+#             # Update portfolio metrics
+#             portfolio_current_value += current_value
+#             portfolio_daily_change += daily_price_change
+#             portfolio_investment_gain_loss += investment_gain_loss
+
+#         # Calculate daily change percentages
+#         portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+
+#         # Update daily changes for the current date
+#         daily_changes[curr_date] = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#         }
+
+#         # Save daily changes and portfolio data
+#         if USE_AWS:
+#             # Save daily changes to AWS
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=daily_changes_key,
+#                     Body=json.dumps(daily_changes),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving daily changes to AWS: {e}")
+#                 return jsonify({"message": f"Error saving daily changes: {e}"}), 500
+
+#             # Save portfolio data to AWS
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=portfolio_key,
+#                     Body=json.dumps(portfolio_data),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving portfolio data to AWS: {e}")
+#                 return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+#         else:
+#             # Save daily changes locally
+#             with open(daily_changes_file, 'w') as file:
+#                 json.dump(daily_changes, file, indent=4)
+
+#             # Save portfolio data locally
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             with open(portfolio_file_path, 'w') as file:
+#                 json.dump(portfolio_data, file, indent=4)
+
+#         # Response data
+#         portfolio_response = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#             "daily_changes": daily_changes,
+#             "portfolio_data": portfolio_data,
+#         }
+        
+#         return {"status": "success", 
+#                 "message": "Portfolio updated successfully",
+#                 "portfolio_response":portfolio_response,
+#                 "daily_changes":daily_changes,
+#                 }
+#         # return jsonify(portfolio_response), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+# # Schedule the task at 4 PM US time daily
+# # scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0)  # 4 PM US Eastern Time
+# scheduler.add_job(update_portfolio_and_changes, 'cron', hour=16, minute=0, id="daily_portfolio_update")
+# logging.info("Scheduler started. Portfolio updates scheduled at 4 PM US Eastern Time.")
+# scheduler.start()
+
+# # Flask app for manual API calls
+# @app.route('/api/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         client_id = request.json.get('client_id')
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         client_portfolio_response = portfolio_update_logic(client_id)
+
+#         if client_portfolio_response["status"] == "success":
+#             logging.info(f"Successfully updated portfolio for client_id: {client_id}")
+#         else:
+#             logging.warning(f"Failed to update portfolio for client_id: {client_id}. Error: {client_portfolio_response['message']}")
+
+#         return jsonify(client_portfolio_response["portfolio_response"]),200
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
+
+###########################################################################################################
+
+# updated logic : with handling done for sell :
+
+
+@app.route('/api/portfolio', methods=['POST'])
 def portfolio():
     try:
         # Extract client ID and current date
         client_id = request.json.get('client_id')
         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+        realized_gains_losses = request.json.get("realized_gains_losses", 0)
 
         if not client_id:
             return jsonify({"message": "Client ID is required"}), 400
@@ -6987,7 +9032,7 @@ def portfolio():
         # Initialize portfolio data and metrics
         portfolio_data = []
         portfolio_current_value = 0
-        porfolio_daily_change = 0
+        portfolio_daily_change  = 0
         portfolio_investment_gain_loss = 0
 
         # Load or initialize daily changes
@@ -7008,69 +9053,104 @@ def portfolio():
                     daily_changes = json.load(file)
             else:
                 daily_changes = {}
+                
+        # Fetch current stock price (needed only for "buy" actions)
+        def fetch_current_stock_price(ticker):
+            stock = yf.Ticker(ticker)
+            try:
+                current_price = stock.history(period='1d')['Close'].iloc[-1]
+                return current_price
+            except Exception as e:
+                logging.error(f"Error fetching stock price for {ticker}: {e}")
+                return 0
 
-        # Process client orders
+        # Process client orders:
         for order in client_orders:
+            
+            try :
+                action = order.get('Action', 'buy').lower() or order.get('buy_or_sell','buy')
+                if not action :
+                    action = "buy" # failsafe so as to not throw error
+            except Exception as e:
+                logging.error(f"Error processing order for action: {e}")
+                action = "buy" # failsafe so as to not throw error
+            
             asset_class = order.get('AssetClass', 'N/A')
             name = order.get('Name', 'N/A')
             symbol = order.get('Symbol', 'N/A')
             units = order.get('Units', 0)
-            bought_price = order.get('UnitPrice', 0)
+            transaction_price = order.get('UnitPrice', 0)
             transaction_amount = order.get('TransactionAmount', 0)
 
-            # Fetch current stock price
-            def fetch_current_stock_price(ticker):
-                stock = yf.Ticker(ticker)
-                try:
-                    current_price = stock.history(period='1d')['Close'].iloc[-1]
-                    return current_price
-                except Exception as e:
-                    logging.error(f"Error fetching stock price for {ticker}: {e}")
-                    return 0
+            # Find the asset in portfolio_data (if exists)
+            existing_asset = next((item for item in portfolio_data if item["symbol"] == symbol), None)
 
-            current_price = fetch_current_stock_price(symbol)
-            diff_price = current_price - bought_price
-            daily_price_change = diff_price
-            daily_value_change = daily_price_change * units
-            current_value = current_price * units
+            if action == "buy":
+                current_price = fetch_current_stock_price(symbol)
+                diff_price = current_price - transaction_price
+                daily_price_change = diff_price
+                daily_value_change = daily_price_change * units
+                current_value = current_price * units
 
-            # Calculate investment gain/loss and other metrics
-            investment_gain_loss = diff_price * units
-            investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+                investment_gain_loss = diff_price * units
+                investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
 
-            # Append data to portfolio
-            portfolio_data.append({
-                "assetClass": asset_class,
-                "name": name,
-                "symbol": symbol,
-                "Quantity": units,
-                "Delayed_Price": current_price,
-                "current_value": current_value,
-                "Daily_Price_Change": daily_price_change,
-                "Daily_Value_Change": daily_value_change,
-                "Amount_Invested_per_Unit": bought_price,
-                "Amount_Invested": transaction_amount,
-                "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
-                "Investment_Gain_or_Loss": investment_gain_loss,
-                "Time_Held": order.get('Date', 'N/A'),
-            })
+                if existing_asset:
+                    existing_asset["Quantity"] += units
+                    existing_asset["Amount_Invested"] += transaction_amount
+                    existing_asset["current_value"] += current_value
+                else:
+                    portfolio_data.append({
+                        "assetClass": asset_class,
+                        "name": name,
+                        "symbol": symbol,
+                        "Quantity": units,
+                        "Delayed_Price": current_price,
+                        "current_value": current_value,
+                        "Daily_Price_Change": daily_price_change,
+                        "Daily_Value_Change": daily_value_change,
+                        "Amount_Invested_per_Unit": transaction_price,
+                        "Amount_Invested": transaction_amount,
+                        "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+                        "Investment_Gain_or_Loss": investment_gain_loss,
+                        "Time_Held": order.get('Date', 'N/A'),
+                    })
 
-            # Update portfolio metrics
-            portfolio_current_value += current_value
-            porfolio_daily_change += daily_price_change
-            portfolio_investment_gain_loss += investment_gain_loss
+                portfolio_current_value += current_value
+                portfolio_daily_change += daily_price_change
+                portfolio_investment_gain_loss += investment_gain_loss
+
+            elif action == "sell":
+                if not existing_asset or existing_asset["Quantity"] < units:
+                    logging.warning(f"Tried to sell {units} of {symbol}, but only {existing_asset['Quantity'] if existing_asset else 0} available.")
+                    continue
+
+                remaining_units = existing_asset["Quantity"] - units
+                total_investment_sold = (existing_asset["Amount_Invested"] / existing_asset["Quantity"]) * units if existing_asset["Quantity"] > 0 else 0
+                profit_or_loss = (transaction_price - (existing_asset["Amount_Invested"] / existing_asset["Quantity"])) * units if existing_asset["Quantity"] > 0 else 0
+                profit_or_loss_perc = round((profit_or_loss / total_investment_sold) * 100, 2) if total_investment_sold > 0 else 0
+
+                if remaining_units > 0:
+                    existing_asset["Quantity"] = remaining_units
+                    existing_asset["Amount_Invested"] -= total_investment_sold
+                else:
+                    portfolio_data.remove(existing_asset)  # ✅ Remove asset if all units are sold
+
+                portfolio_current_value -= total_investment_sold
+                portfolio_investment_gain_loss += profit_or_loss
 
         # Calculate daily change percentages
-        portfolio_daily_change_perc = round((porfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+        portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
 
         # Update daily changes for the current date
         daily_changes[curr_date] = {
             "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change": portfolio_daily_change,
             "portfolio_daily_change_perc": portfolio_daily_change_perc,
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+            "realized_gains_losses":realized_gains_losses,
         }
 
         # Save daily changes and portfolio data
@@ -7114,14 +9194,15 @@ def portfolio():
         # Response data
         portfolio_response = {
             "portfolio_current_value": portfolio_current_value,
-            "porfolio_daily_change": porfolio_daily_change,
+            "portfolio_daily_change": portfolio_daily_change,
             "portfolio_daily_change_perc": portfolio_daily_change_perc,
             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
             "daily_changes": daily_changes,
+            "realized_gains_losses":realized_gains_losses,
             "portfolio_data": portfolio_data,
         }
-        
+        print("Portfolio:\n\n",portfolio_response)
         return jsonify(portfolio_response), 200
 
     except Exception as e:
@@ -7129,8 +9210,188 @@ def portfolio():
         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
 
 
+
+
+# previous logic :
+
+# @app.route('/api/portfolio', methods=['POST'])
+# def portfolio():
+#     try:
+#         # Extract client ID and current date
+#         client_id = request.json.get('client_id')
+#         curr_date = request.json.get('curr_date', datetime.now().strftime('%Y-%m-%d'))
+
+#         if not client_id:
+#             return jsonify({"message": "Client ID is required"}), 400
+
+#         # Load client orders
+#         if USE_AWS:
+#             # Load orders from AWS S3
+#             order_list_key = f"{order_list_folder}{client_id}_orders.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=order_list_key)
+#                 client_orders = json.loads(response['Body'].read().decode('utf-8'))
+#                 logging.info(f"Fetched orders for client_id: {client_id}")
+#             except s3.exceptions.NoSuchKey:
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             except Exception as e:
+#                 logging.error(f"Error fetching orders from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching orders: {e}"}), 500
+#         else:
+#             # Load orders from local storage
+#             order_file_path = os.path.join(ORDER_LIST_PATH, f"{client_id}_orders.json")
+#             if not os.path.exists(order_file_path):
+#                 return jsonify({"message": f"No orders found for client_id: {client_id}"}), 404
+#             with open(order_file_path, 'r') as file:
+#                 client_orders = json.load(file)
+
+        # # Initialize portfolio data and metrics
+        # portfolio_data = []
+        # portfolio_current_value = 0
+        # portfolio_daily_change = 0
+        # portfolio_investment_gain_loss = 0
+
+#         # Load or initialize daily changes
+#         if USE_AWS:
+#             daily_changes_key = f"{daily_changes_folder}/{client_id}_daily_changes.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=daily_changes_key)
+#                 daily_changes = json.loads(response['Body'].read().decode('utf-8'))
+#             except s3.exceptions.NoSuchKey:
+#                 daily_changes = {}
+#             except Exception as e:
+#                 logging.error(f"Error fetching daily changes from AWS: {e}")
+#                 return jsonify({"message": f"Error fetching daily changes: {e}"}), 500
+#         else:
+#             daily_changes_file = os.path.join(DAILY_CHANGES_PATH, f"{client_id}_daily_changes.json")
+#             if os.path.exists(daily_changes_file):
+#                 with open(daily_changes_file, 'r') as file:
+#                     daily_changes = json.load(file)
+#             else:
+#                 daily_changes = {}
+
+#         # Process client orders
+#         for order in client_orders:
+#             asset_class = order.get('AssetClass', 'N/A')
+#             name = order.get('Name', 'N/A')
+#             symbol = order.get('Symbol', 'N/A')
+#             units = order.get('Units', 0)
+#             bought_price = order.get('UnitPrice', 0)
+#             transaction_amount = order.get('TransactionAmount', 0)
+
+#             # Fetch current stock price
+#             def fetch_current_stock_price(ticker):
+#                 stock = yf.Ticker(ticker)
+#                 try:
+#                     current_price = stock.history(period='1d')['Close'].iloc[-1]
+#                     return current_price
+#                 except Exception as e:
+#                     logging.error(f"Error fetching stock price for {ticker}: {e}")
+#                     return 0
+
+#             current_price = fetch_current_stock_price(symbol)
+#             diff_price = current_price - bought_price
+#             daily_price_change = diff_price
+#             daily_value_change = daily_price_change * units
+#             current_value = current_price * units
+
+#             # Calculate investment gain/loss and other metrics
+#             investment_gain_loss = diff_price * units
+#             investment_gain_loss_per = round((investment_gain_loss / transaction_amount) * 100, 2) if transaction_amount > 0 else 0
+
+#             # Append data to portfolio
+#             portfolio_data.append({
+#                 "assetClass": asset_class,
+#                 "name": name,
+#                 "symbol": symbol,
+#                 "Quantity": units,
+#                 "Delayed_Price": current_price,
+#                 "current_value": current_value,
+#                 "Daily_Price_Change": daily_price_change,
+#                 "Daily_Value_Change": daily_value_change,
+#                 "Amount_Invested_per_Unit": bought_price,
+#                 "Amount_Invested": transaction_amount,
+#                 "Investment_Gain_or_Loss_percentage": investment_gain_loss_per,
+#                 "Investment_Gain_or_Loss": investment_gain_loss,
+#                 "Time_Held": order.get('Date', 'N/A'),
+#             })
+
+#             # Update portfolio metrics
+#             portfolio_current_value += current_value
+#             portfolio_daily_change += daily_price_change
+#             portfolio_investment_gain_loss += investment_gain_loss
+
+#         # Calculate daily change percentages
+#         portfolio_daily_change_perc = round((portfolio_daily_change / portfolio_current_value) * 100, 2) if portfolio_current_value > 0 else 0
+#         portfolio_investment_gain_loss_perc = round((portfolio_investment_gain_loss / portfolio_current_value) * 100, 4) if portfolio_current_value > 0 else 0
+
+#         # Update daily changes for the current date
+#         daily_changes[curr_date] = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#         }
+
+#         # Save daily changes and portfolio data
+#         if USE_AWS:
+#             # Save daily changes to AWS
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=daily_changes_key,
+#                     Body=json.dumps(daily_changes),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Updated daily changes for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving daily changes to AWS: {e}")
+#                 return jsonify({"message": f"Error saving daily changes: {e}"}), 500
+
+#             # Save portfolio data to AWS
+#             portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#             try:
+#                 s3.put_object(
+#                     Bucket=S3_BUCKET_NAME,
+#                     Key=portfolio_key,
+#                     Body=json.dumps(portfolio_data),
+#                     ContentType='application/json'
+#                 )
+#                 logging.info(f"Saved portfolio data for client_id: {client_id} in AWS.")
+#             except Exception as e:
+#                 logging.error(f"Error saving portfolio data to AWS: {e}")
+#                 return jsonify({"message": f"Error saving portfolio data: {e}"}), 500
+#         else:
+#             # Save daily changes locally
+#             with open(daily_changes_file, 'w') as file:
+#                 json.dump(daily_changes, file, indent=4)
+
+#             # Save portfolio data locally
+#             portfolio_file_path = os.path.join(PORTFOLIO_PATH, f"portfolio_{client_id}.json")
+#             with open(portfolio_file_path, 'w') as file:
+#                 json.dump(portfolio_data, file, indent=4)
+
+#         # Response data
+#         portfolio_response = {
+#             "portfolio_current_value": portfolio_current_value,
+#             "portfolio_daily_change": portfolio_daily_change,
+#             "portfolio_daily_change_perc": portfolio_daily_change_perc,
+#             "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#             "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#             "daily_changes": daily_changes,
+#             "portfolio_data": portfolio_data,
+#         }
+        
+#         return jsonify(portfolio_response), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in portfolio: {e}")
+#         return jsonify({"message": f"Error occurred: {str(e)}"}), 500
+
+
 # Updated Portfolio List using Local Storage :
-@app.route('/download_excel', methods=['GET'])
+@app.route('/api/download_excel', methods=['GET'])
 def download_excel():
     file_path = request.args.get('file_path')
     if os.path.exists(file_path):
@@ -7195,7 +9456,7 @@ os.makedirs(ORDER_LIST_PATH, exist_ok=True)
 os.makedirs(DAILY_CHANGES_PATH, exist_ok=True)
 os.makedirs(PORTFOLIO_PATH, exist_ok=True)
 
-@app.route('/analyze_portfolio', methods=['POST'])
+@app.route('/api/analyze_portfolio', methods=['POST'])
 def analyze_portfolio():
     try:
         # Retrieve the requested asset type and other input data
@@ -7343,10 +9604,9 @@ def analyze_portfolio():
 #######################################################################################################################
 
 # generate riskometer data :
-    
-@app.route('/client_riskometer_data',methods =['POST'])
+
+@app.route('/api/client_riskometer_data', methods=['POST'])
 def generate_client_riskometer_data():
-   
     try:
         client_id = request.json.get('client_id')
         
@@ -7354,9 +9614,9 @@ def generate_client_riskometer_data():
         if not client_id:
             return jsonify({'message': 'client_id is required as a query parameter'}), 400
         
-         # Load client financial data (from AWS or local based on USE_AWS)
-        
+        # Load client financial data (from AWS or local based on USE_AWS)
         if USE_AWS:
+            # client_data_key = f"{client_summary_folder}/client-data/{client_id}.json"
             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
@@ -7371,40 +9631,52 @@ def generate_client_riskometer_data():
             with open(client_data_file_path, 'r') as f:
                 client_data = json.load(f)
         
-        
+        # Extract basic client details
         client_name = client_data.get("clientDetail", {}).get("clientName", "Unknown Client")
-
-        # Calculate essential metrics
-        funds = float(client_data.get("investmentAmount", 0) or 0)
-        assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
-        liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+        
+        # FUND: use investmentAmount or available_funds if provided
+        funds = float(client_data.get("investmentAmount", 0) or client_data.get("available_funds", 0))
+        
+        # ASSETS: parse assetsDatasets -> datasets[0]["data"]
+        asset_values = client_data["assetsDatasets"]["datasets"][0]["data"]
+        assets = sum(float(val) for val in asset_values)
+        
+        # LIABILITIES: parse liabilityDatasets -> datasets[0]["data"]
+        liability_values = client_data["liabilityDatasets"]["datasets"][0]["data"]
+        liabilities = sum(float(val) for val in liability_values)
+        
         net_worth = assets - liabilities
 
-        # Calculate savings rate
-        annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+        # Annual income from incomeFields
+        annual_income = sum(float(inc.get("amountIncome", 0)) for inc in client_data.get("incomeFields", []))
         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
 
-        # Calculate emergency fund coverage and liquidity metrics
-        monthly_expenses = sum(
-            float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
-        ) + sum(
-            float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
-        )
-        assets_labels = client_data["assetsDatasets"]["labels"]
-        assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
-
-        # Liquid assets for emergency funds
-        liquid_asset_categories = [
+        # Calculate monthly expenses from myLiabilities: sum any field ending in 'Monthly'
+        monthly_expenses = 0
+        for key, liab in client_data.get("myLiabilities", {}).items():
+            for k, v in liab.items():
+                if k.lower().endswith("monthly") and v:
+                    try:
+                        # Remove commas and convert to float
+                        monthly_expenses += float(str(v).replace(",", ""))
+                    except Exception as ex:
+                        logging.error(f"Error converting {v} to float for liability {key}: {ex}")
+        
+        # Liquid assets: from assetsDatasets, use only specified liquid categories.
+        liquid_categories = [
             "Cash/bank accounts",
             "Brokerage/non-qualified accounts",
             "529 Plans",
             "Roth IRA, Roth 401(k)"
         ]
-        liquid_assets = sum(
-            float(assets_data[i] or 0)
-            for i, label in enumerate(assets_labels)
-            if label in liquid_asset_categories
-        )
+        assets_labels = client_data["assetsDatasets"]["labels"]
+        liquid_assets = 0
+        for i, label in enumerate(assets_labels):
+            if label in liquid_categories:
+                try:
+                    liquid_assets += float(asset_values[i])
+                except Exception as ex:
+                    logging.error(f"Error converting asset value {asset_values[i]} for label {label}: {ex}")
         
         liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
         emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
@@ -7412,10 +9684,15 @@ def generate_client_riskometer_data():
         # Debt-to-Asset Ratio
         debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
 
-        # Determine risk level (example categorization logic)
-        risk_level = "High Risk" if debt_to_asset_ratio > 75 else "Moderate Risk" if debt_to_asset_ratio > 50 else "Low Risk"
+        # Determine risk level (example logic)
+        if debt_to_asset_ratio > 75:
+            risk_level = "High Risk"
+        elif debt_to_asset_ratio > 50:
+            risk_level = "Moderate Risk"
+        else:
+            risk_level = "Low Risk"
 
-        # Prepare data for frontend visualization
+        # Prepare riskometer data for frontend visualization
         riskometer_data = {
             "client_name": client_name,
             "net_worth": net_worth,
@@ -7426,20 +9703,112 @@ def generate_client_riskometer_data():
             "risk_level": risk_level,
         }
 
-        return jsonify({"message": f"generated riskometer data",
-                        "riskometer_data":riskometer_data}), 200
-        
-        
+        return jsonify({
+            "message": "Generated riskometer data successfully.",
+            "riskometer_data": riskometer_data
+        }), 200
+
     except Exception as e:
-        print(f"Error generating riskometer data: {e}")
-        return {"error": f"Error generating riskometer data: {e}"}
+        logging.error(f"Error generating riskometer data: {e}")
+        return jsonify({"error": f"Error generating riskometer data: {e}"}), 500
+
+    
+# @app.route('/api/client_riskometer_data',methods =['POST'])
+# def generate_client_riskometer_data():
+   
+#     try:
+#         client_id = request.json.get('client_id')
+        
+#         # Validate the client_id
+#         if not client_id:
+#             return jsonify({'message': 'client_id is required as a query parameter'}), 400
+        
+#          # Load client financial data (from AWS or local based on USE_AWS)
+        
+#         if USE_AWS:
+#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                 return jsonify({'message': f'Error occurred while retrieving client data from S3: {e}'}), 500
+#         else:
+#             client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#             if not os.path.exists(client_data_file_path):
+#                 return jsonify({"message": f"No client data found for client ID: {client_id}"}), 404
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+        
+        
+#         client_name = client_data.get("clientDetail", {}).get("clientName", "Unknown Client")
+
+#         # Calculate essential metrics
+#         funds = float(client_data.get("investmentAmount", 0) or 0)
+#         assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#         liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#         net_worth = assets - liabilities
+
+#         # Calculate savings rate
+#         annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+
+#         # Calculate emergency fund coverage and liquidity metrics
+#         monthly_expenses = sum(
+#             float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
+#         ) + sum(
+#             float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
+#         )
+#         assets_labels = client_data["assetsDatasets"]["labels"]
+#         assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+
+#         # Liquid assets for emergency funds
+#         liquid_asset_categories = [
+#             "Cash/bank accounts",
+#             "Brokerage/non-qualified accounts",
+#             "529 Plans",
+#             "Roth IRA, Roth 401(k)"
+#         ]
+#         liquid_assets = sum(
+#             float(assets_data[i] or 0)
+#             for i, label in enumerate(assets_labels)
+#             if label in liquid_asset_categories
+#         )
+        
+#         liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
+#         emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#         # Debt-to-Asset Ratio
+#         debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#         # Determine risk level (example categorization logic)
+#         risk_level = "High Risk" if debt_to_asset_ratio > 75 else "Moderate Risk" if debt_to_asset_ratio > 50 else "Low Risk"
+
+#         # Prepare data for frontend visualization
+#         riskometer_data = {
+#             "client_name": client_name,
+#             "net_worth": net_worth,
+#             "savings_rate": savings_rate,
+#             "liquidity_ratio": liquidity_ratio,
+#             "emergency_fund_coverage": emergency_fund_coverage,
+#             "debt_to_asset_ratio": debt_to_asset_ratio,
+#             "risk_level": risk_level,
+#         }
+
+#         return jsonify({"message": f"generated riskometer data",
+#                         "riskometer_data":riskometer_data}), 200
+        
+        
+#     except Exception as e:
+#         print(f"Error generating riskometer data: {e}")
+#         return {"error": f"Error generating riskometer data: {e}"}
 
 ##################################################################################################################
 
 
 #    #Analyze the client's portfolio to calculate a risk ratio based on asset class distribution.
 
-@app.route('/calculate_portfolio_risk_ratio',methods=['POST'])
+@app.route('/api/calculate_portfolio_risk_ratio',methods=['POST'])
 def calculate_portfolio_risk_ratio():
     
     try:
@@ -7684,7 +10053,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 
 # test version :
 
-# @app.route('/actual_vs_predicted', methods=['POST'])
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
 # def actual_vs_predicted():
 #     try:
 #         # Retrieve client ID and current portfolio daily change
@@ -7799,7 +10168,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 #                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
 #                 # Safely get the correct daily change value
-#                 value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+#                 value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
 #                 # Append if the value is not zero and is after or on the start date
 #                 if value != 0 and date >= start_date:
@@ -7839,7 +10208,7 @@ def save_predictions(client_id, current_quarter, refined_line_chart_data):
 # v-2 : Very Fast and Also checks changes in Portfolio :
 # Best Version of actual_vs_predicted
 
-@app.route('/actual_vs_predicted', methods=['POST'])
+@app.route('/api/actual_vs_predicted', methods=['POST'])
 def actual_vs_predicted():
     try:
         # Retrieve client ID and current portfolio daily change
@@ -7939,6 +10308,10 @@ def actual_vs_predicted():
                 return jsonify({"message": "No daily changes data found."}), 404
 
         # Process daily changes data for only current quarter :
+        if not raw_daily_changes_data:
+            logging.warning(f"No daily changes reflected yet for this client.Please refresh or check the daily changes tomorrow")
+            return jsonify({"message": "No daily changes reflected yet for this client.Please refresh or check the daily changes tomorrow"}), 400
+        
         daily_changes_data = []
         current_quarter_date = get_current_quarter_dates()
         start_date = current_quarter_date[0] #"2025-01-01"  # Define the starting date for actual data
@@ -7950,7 +10323,7 @@ def actual_vs_predicted():
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -7986,9 +10359,112 @@ def actual_vs_predicted():
         print(f"Error generating comparison: {e}")
         return jsonify({"message": f"Error generating comparison: {e}"}), 500
 
+
+# new version : currently not wiorking
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
+# def actual_vs_predicted():
+#     try:
+#         client_id = request.json.get('client_id')
+#         client_name = request.json.get("client_name")
+#         funds = request.json.get("funds")
+#         investor_personality = request.json.get("investor_personality", "Aggressive Investor Personality")
+#         current_date = datetime.now().strftime("%Y-%m-%d")
+
+#         current_quarter = get_current_quarter()
+#         quarter_start = get_current_quarter_dates()
+#         # quarter_start, quarter_end = get_current_quarter_dates()
+
+#         # File Paths
+#         predicted_file_path = os.path.join(PREDICTIONS_DIR, f"{client_id}_{current_quarter}_line_chart.json")
+#         predicted_s3_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_line_chart.json"
+#         portfolio_predictions_key = f"{PREDICTIONS_FOLDER}/{client_id}_{current_quarter}_portfolio.json"
+#         portfolio_file = os.path.join(PORTFOLIO_DIR, f"portfolio_{client_id}.json")
+
+#         # Load Predictions
+#         predicted_line_chart_data = load_from_file(predicted_file_path)
+#         if not predicted_line_chart_data:
+#             predicted_line_chart_data = create_current_prediction_line_chart(client_id, client_name, funds, investor_personality)
+#             save_to_file(predicted_file_path, predicted_line_chart_data)
+
+#         # Load Portfolio
+#         current_portfolio_data = load_from_file(portfolio_file)
+#         if not current_portfolio_data:
+#             return jsonify({"message": f"No portfolio data found for client ID: {client_id}"}), 404
+
+#         # Load Daily Changes
+#         daily_changes_file = os.path.join(PORTFOLIO_DIR, f"{client_id}_daily_changes.json")
+#         raw_daily_changes_data = {}
+#         if os.path.exists(daily_changes_file):
+#             with open(daily_changes_file, 'r') as f:
+#                 raw_daily_changes_data = json.load(f)
+
+#         # Build asset-level actual return data
+#         portfolio_assets = current_portfolio_data.get("portfolio", [])
+#         today = datetime.today().strftime('%Y-%m-%d')
+#         date_label = datetime.today().strftime('%m/%d/%Y')
+
+#         total_change = 0
+#         for asset in portfolio_assets:
+#             ticker = asset.get("ticker")
+#             quantity = asset.get("quantity", 0)
+#             buy_price = float(asset.get("buy_price", 0))
+#             buy_date = asset.get("buy_date") or quarter_start
+
+#             if not ticker or not buy_price or not quantity:
+#                 continue
+
+#             data = yf.download(ticker, start=buy_date, end=today, interval='1d', auto_adjust=False)
+#             print(ticker," data :\n",data)
+#             if data.empty or 'Close' not in data.columns:
+#                 continue
+
+#             latest_close = data['Close'].iloc[-1]
+#             gain = (latest_close - buy_price) * quantity
+#             total_change += gain
+            
+#         print("Total Change Value : ",total_change)
+        
+#         # Save to daily changes file if new
+#         if date_label not in raw_daily_changes_data:
+#             raw_daily_changes_data[date_label + ', ' + current_date] = {
+#                 "portfolio_daily_change": round(total_change, 2)
+#             }
+#             with open(daily_changes_file, 'w') as f:
+#                 json.dump(raw_daily_changes_data, f, indent=4)
+
+#         # Filter current quarter data
+#         daily_changes_data = []
+#         for timestamp, details in raw_daily_changes_data.items():
+#             try:
+#                 date_str = timestamp.split(',')[0].strip()
+#                 date = datetime.strptime(date_str, "%m/%d/%Y").strftime("%Y-%m-%d")
+#                 if date >= quarter_start:
+#                     daily_changes_data.append({"date": date, "value": details.get("portfolio_daily_change", 0)})
+#             except Exception as e:
+#                 logging.warning(f"Skipping malformed entry {timestamp}: {e}")
+
+#         unique_daily_changes = {entry["date"]: entry["value"] for entry in daily_changes_data}
+#         sorted_actual_dates = sorted(unique_daily_changes.keys())
+#         actual_line_chart_data = [unique_daily_changes[date] for date in sorted_actual_dates]
+
+#         return jsonify({
+#             "client_id": client_id,
+#             "comparison_chart_data": {
+#                 "actual_dates": sorted_actual_dates,
+#                 "actual_values": actual_line_chart_data,
+#                 "predicted": predicted_line_chart_data,
+#             },
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error generating actual vs predicted comparison: {e}")
+#         return jsonify({"message": f"Error generating comparison: {e}"}), 500
+
+
 ############################################################################################
 
 #####################################################################################################################
+from yfinance import Ticker
 
 def create_current_prediction_line_chart(client_id,client_name,funds,investor_personality) :
     try:
@@ -8022,16 +10498,51 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
         print(f"Current Quarter: {current_quarter}")
 
         confidence_data = []
-
-        # Process each asset in the portfolio
+        FORECAST_DAYS = 92
+        
+        # Process each asset in the portfolio :
+        # Calculate actual portfolio return from market prices
+        total_initial_value = 0
+        total_current_value = 0
+        
         for asset in portfolio_data:
+            print(f"Processing asset: {asset['symbol']}")
+
             ticker = asset.get("symbol")
             if not ticker or ticker == "N/A":
+                print(f"Skipping invalid ticker: {ticker}")
                 continue
 
+            quantity = asset.get("quantity", 0)
+            buy_price = asset.get("buy_price", 0)
+
+            if not ticker or ticker == "N/A" or quantity <= 0:
+                print(f"No valid Ticker :{ticker} or valid units :{quantity}")
+                continue
+
+            try:
+                # Fetch current market price
+                stock = Ticker(ticker)
+                current_price = stock.history(period="1d")["Close"].iloc[-1]
+
+                initial_value = buy_price * quantity
+                current_value = current_price * quantity
+
+                asset["actual_return_pct"] = round(((current_value - initial_value) / initial_value) * 100, 2)
+                asset["actual_return_value"] = round(current_value - initial_value, 2)
+
+                total_initial_value += initial_value
+                total_current_value += current_value
+
+            except Exception as e:
+                print(f"Failed to fetch current price for {ticker}: {e}")
+                asset["actual_return_pct"] = 0
+                asset["actual_return_value"] = 0
+                
             # Fetch historical returns
             historical_returns = fetch_historical_returns(ticker)
             if historical_returns.empty:
+                print(f"No data for {ticker}, assigning default values.")
                 asset["volatility"] = 0.8
                 asset["sharpe_ratio"] = 0.7
                 asset["beta"] = 0.5
@@ -8039,14 +10550,46 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 asset["simulated_returns"] = [0] * FORECAST_DAYS
                 continue
 
-            # Metrics Calculation
-            asset["volatility"] = compute_volatility(historical_returns)
-            asset["sharpe_ratio"] = compute_sharpe_ratio(historical_returns)
-            asset["beta"] = compute_beta(historical_returns, market_returns)
-            asset["forecasted_returns"] = arima_forecast(historical_returns).tolist()
-            asset["simulated_returns"] = simulate_fluctuations(asset["forecasted_returns"][0], asset["volatility"])
+            try:
+                # Calculate metrics
+                asset["volatility"] = compute_volatility(historical_returns)
+                asset["sharpe_ratio"] = compute_sharpe_ratio(historical_returns)
+
+                # Fetch market returns (S&P 500)
+                market_returns = fetch_historical_returns("^GSPC")
+                asset["beta"] = compute_beta(historical_returns, market_returns)
+
+                # Forecast returns using ARIMA
+                historical_returns = ensure_frequency(historical_returns)
+                asset["forecasted_returns"] = arima_forecast(historical_returns, forecast_days=FORECAST_DAYS).tolist()
+
+                # Simulate fluctuations
+                asset["simulated_returns"] = simulate_fluctuations(
+                    base_value=asset["forecasted_returns"][0],
+                    volatility=asset["volatility"],
+                    days=FORECAST_DAYS
+                )
+
+            except Exception as e:
+                print(f"Error processing metrics for {ticker}: {e}")
+                asset["volatility"] = 0.8
+                asset["sharpe_ratio"] = 0.7
+                asset["beta"] = 0.5
+                asset["forecasted_returns"] = [0] * FORECAST_DAYS
+                asset["simulated_returns"] = [0] * FORECAST_DAYS
             
+        # Overall actual return of the portfolio
+        if total_initial_value > 0:
+            portfolio_actual_return_pct = round(((total_current_value - total_initial_value) / total_initial_value) * 100, 2)
+            portfolio_actual_return_value = round(total_current_value - total_initial_value, 2)
+        else:
+            portfolio_actual_return_pct = 0
+            portfolio_actual_return_value = 0
+
+        print(f"Actual Portfolio Return: {portfolio_actual_return_pct}% | Value: ${portfolio_actual_return_value}")
+        
         # Load client financial data
+        
         if USE_AWS:
             # client_summary_key = f"{client_summary_folder}{client_id}.json"
             client_summary_key = f"{client_summary_folder}client-data/{client_id}.json"
@@ -8102,7 +10645,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -8144,6 +10687,7 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             Daily Changes So far (Fluctuations): {raw_daily_changes_data}
             Portfolio Daily Dates : {sorted_actual_dates}
             Portfolio Daily Returns: {actual_line_chart_data}
+            Portfolio Actual Return: {portfolio_actual_return_pct}% (${portfolio_actual_return_value})
                      
             Analyze the portfolio and each assets in the portfolio properly and also refer to the Portfolio news and Economic News for your reference and Performance of the assets.
             Alongside this you are passed with it you may or may not be provided with the actual daily returns of that portfolio.
@@ -8167,7 +10711,11 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
 
             3. Dynamically align predictions based on the latest actual market trends and fluctuations provided in the data set.
 
-            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You amy refer to the daily returns so far {raw_daily_changes_data}.
+            4. Introduce natural noise, but maintain predicted returns within a reasonable range close to actual returns for gradual, smooth portfolio changes.You may refer to the daily returns so far {raw_daily_changes_data}.
+            
+            5. Try to Capture all the Actual Returns {unique_daily_changes} in your Predictions Range for the actual data dates time interval as many actual data points are available if any and match your predictions with the actual data for the available dates but don't predict constant return there must be real Fluctuations.
+            
+            6. Try to be very accurate and maintain a Proper Real Returns Range based on the Real Fluctuations seen so far.
 
             
             Introduce **realistic daily ups and downs** caused by market conditions and noise to simulate realistic portfolio performance.
@@ -8177,7 +10725,8 @@ def create_current_prediction_line_chart(client_id,client_name,funds,investor_pe
             - The actual portfolio daily returns range between {min_actual_return}% and {max_actual_return}%.
             - Best-case scenario returns must not exceed {max_actual_return + 5}% under normal conditions within {buffer}
             - Worst-case scenario returns should not fall below {min_actual_return - 5}% within {buffer}
-            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions
+            - Introduce realistic fluctuations in predictions, but align the trends smoothly with recent market conditions.
+            - Capture all the Actual Returns in your predictions returns range for that time interval whose data is/if available and Predict Returns that is in expected Range of these Returns for the current quarter.
 
             Example of simulated_response = 
             ### Response Format:
@@ -8331,12 +10880,12 @@ def get_current_quarter_dates():
 
 # Actual vs Predicted Endpoint : Original Code :
 
-# @app.route('/actual_vs_predicted', methods=['POST'])
+# @app.route('/api/actual_vs_predicted', methods=['POST'])
 # def actual_vs_predicted():
 #     try:
 #         # Retrieve client ID and current portfolio daily change
 #         client_id = request.json.get('client_id')
-#         portfolio_daily_change = request.json.get('porfolio_daily_change')
+#         portfolio_daily_change = request.json.get('portfolio_daily_change')
 #         current_date = datetime.now().strftime("%Y-%m-%d")
 
 #         current_quarter = "2024_Q4"
@@ -8508,29 +11057,152 @@ CLIENT_SUMMARY_DIR =  "client_data/client_data" #"client_summary/"
 # #1. Fetch historical returns for the past 3 months
 import yfinance as yf
 
-def fetch_historical_returns(ticker, period='3mo'):
-    """Fetch historical returns using yfinance."""
-    stock = yf.Ticker(ticker)
-    data = stock.history(period=period)
-    data['returns'] = data['Close'].pct_change()
-
-    # Clean the data: Drop NaN, inf, or -inf values
-    data = data.dropna(subset=['returns'])
-    data = data.replace([np.inf, -np.inf], np.nan).dropna()
-
-    # Ensure index frequency for ARIMA
-    if data.index.inferred_freq is None:
-        data = data.asfreq('B', method='pad')  # Business day frequency
-
-    return data['returns']
-
-
-# 2. Add Quantitative Metrics :
+import warnings
 import numpy as np
+import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+import random
+
+
+# Suppress convergence warnings
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+def fetch_historical_returns(ticker, periods=None):
+    """Fetch historical returns for a given ticker using yfinance with fallbacks."""
+    if periods is None:
+        periods = ["3mo", "1mo", "1w", "5d"]
+
+    for period in periods:
+        try:
+            data = yf.download(ticker, period=period)
+            if data.empty:
+                print(f"No data found for ticker {ticker} with period {period}.")
+                continue
+
+            # Calculate daily returns
+            data['returns'] = data['Adj Close'].pct_change().dropna()
+
+            # Clean data
+            data = data.replace([np.inf, -np.inf], np.nan).dropna(subset=['returns'])
+
+            # Ensure frequency
+            data['returns'] = ensure_frequency(data['returns'])
+
+            print(f"Successfully fetched data for {ticker} with period {period}.")
+            return data['returns']
+        except Exception as e:
+            print(f"Error fetching data for {ticker} with period {period}: {e}")
+
+    print(f"All periods failed for ticker {ticker}. Returning empty data.")
+    return pd.Series()
+
+
+
+def check_stationarity(series):
+    """Perform ADF test to check stationarity."""
+    try:
+        # Drop NaN and infinite values
+        series = series.replace([np.inf, -np.inf], np.nan).dropna()
+
+        # Ensure there are enough data points for the test
+        if len(series) < 10:
+            print("Insufficient data for ADF test.")
+            return False
+
+        result = adfuller(series)
+        return result[1] < 0.05  # Stationary if p-value < 0.05
+    except Exception as e:
+        print(f"Error in ADF test: {e}")
+        return False
+
+def ensure_frequency(series, freq='B'):
+    """Ensure the series has a consistent frequency."""
+    if not isinstance(series.index, pd.DatetimeIndex):
+        print("Index is not a DatetimeIndex.")
+        return series
+
+    if series.index.inferred_freq is None:
+        print("No frequency detected, setting frequency to:", freq)
+        series = series.asfreq(freq, method='pad')  # Fill missing dates
+    return series
+
+def arima_forecast(returns, forecast_days=92):
+    """Use ARIMA to forecast future returns with robust error handling."""
+    try:
+        if not isinstance(returns, pd.Series):
+            returns = pd.Series(returns)
+
+        # Clean data
+        returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+        # Ensure enough data points
+        if len(returns) < 10:
+            print("Insufficient data for ARIMA, returning mean forecast.")
+            return pd.Series([np.mean(returns)] * forecast_days)
+
+        # Ensure index frequency
+        returns = ensure_frequency(returns)
+
+        # Check stationarity
+        if not check_stationarity(returns):
+            returns = returns.diff().dropna()
+
+        # Suppress warnings and fit ARIMA
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+        model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+        model_fit = model.fit()
+
+        # Forecast future returns
+        forecast = model_fit.forecast(steps=forecast_days)
+        return forecast
+    except Exception as e:
+        print(f"ARIMA failed: {e}")
+        return pd.Series([np.mean(returns)] * forecast_days)
+
+
+# def arima_forecast(returns, forecast_days=92):
+#     """Use ARIMA to forecast future returns with error handling."""
+#     try:
+#         # Ensure returns are a pandas Series
+#         if not isinstance(returns, pd.Series):
+#             returns = pd.Series(returns)
+
+#         # Clean data
+#         returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
+#         # Ensure enough data points
+#         if len(returns) < 10:
+#             print("Insufficient data for ARIMA. Returning mean forecast.")
+#             return pd.Series([np.mean(returns)] * forecast_days)
+
+#         # Ensure the index has a frequency
+#         if returns.index.inferred_freq is None:
+#             returns = returns.asfreq('B')  # Business day frequency
+
+#         # Check stationarity and apply differencing if needed
+#         if not check_stationarity(returns):
+#             returns = returns.diff().dropna()
+
+#         # Fit ARIMA model
+#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
+#         model_fit = model.fit()
+
+#         # Forecast future returns
+#         forecast = model_fit.forecast(steps=forecast_days)
+#         return forecast
+
+#     except Exception as e:
+#         print(f"ARIMA failed: {e}")
+#         # Fallback: Return constant mean forecast
+#         return pd.Series([np.mean(returns)] * forecast_days)
+
 
 def compute_volatility(returns):
     """Calculate standard deviation of returns (volatility)."""
     return np.std(returns)
+
 
 def compute_sharpe_ratio(returns, risk_free_rate=0.0):
     """Calculate Sharpe Ratio (risk-adjusted return)."""
@@ -8538,128 +11210,52 @@ def compute_sharpe_ratio(returns, risk_free_rate=0.0):
     std_dev = np.std(returns)
     return (mean_return - risk_free_rate) / std_dev if std_dev != 0 else 0
 
-
 def compute_beta(asset_returns, market_returns):
     """Calculate Beta (sensitivity to market)."""
-    # Align lengths of asset_returns and market_returns
-    min_length = min(len(asset_returns), len(market_returns))
-    asset_returns = asset_returns.iloc[-min_length:]
-    market_returns = market_returns.iloc[-min_length:]
-
-    # Calculate covariance and beta
-    covariance = np.cov(asset_returns, market_returns)[0][1]
-    market_variance = np.var(market_returns)
-    return covariance / market_variance if market_variance != 0 else 0
-
-
-# # Fetch market index returns (S&P 500)
-# market_returns = fetch_historical_returns('^GSPC')
-
-
-# 3. Add ARIMA Forecasting for Returns
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.tools.sm_exceptions import ConvergenceWarning
-import warnings
-
-# def check_stationarity(data):
-#     """Placeholder function to check if the series is stationary."""
-#     from statsmodels.tsa.stattools import adfuller
-#     result = adfuller(data)
-#     return result[1] <= 0.05  # p-value <= 0.05 implies stationarity
-
-# def arima_forecast(returns, forecast_days=92):
-#     """
-#     Use ARIMA to forecast future returns with robust error handling.
-#     """
-#     if not isinstance(returns, pd.Series):
-#         returns = pd.Series(returns)
-
-#     # Clean data
-#     returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-
-#     # Ensure enough data points
-#     if len(returns) < 10:
-#         print("Insufficient data for ARIMA, using mean-based forecast.")
-#         return pd.Series([np.mean(returns)] * forecast_days)
-
-#     # Ensure the index has a frequency for time series modeling
-#     if returns.index.inferred_freq is None:
-#         returns.index = pd.date_range(start=returns.index[0], periods=len(returns), freq='B')
-
-#     # Check stationarity and apply differencing if needed
-#     if not check_stationarity(returns):
-#         returns = returns.diff().dropna()
-
-#     # Suppress convergence warnings
-#     warnings.filterwarnings("ignore", category=ConvergenceWarning)
-
-#     # ARIMA model with error handling
-#     try:
-#         model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
-#         model_fit = model.fit()
-#         forecast = model_fit.forecast(steps=forecast_days)
-#         return forecast
-#     except Exception as e:
-#         print(f"ARIMA failed: {e}")
-#         # Fallback: Return constant mean forecast
-#         return pd.Series([np.mean(returns)] * forecast_days)
-
-
-def check_stationarity(series):
-    """Perform ADF test to check stationarity."""
-    result = adfuller(series)
-    return result[1] < 0.05  # Stationary if p-value < 0.05
-
-
-
-def arima_forecast(returns, forecast_days=92):
-    """Use ARIMA to forecast future returns with error handling."""
-    if not isinstance(returns, pd.Series):
-        returns = pd.Series(returns)
-
-    # Clean data
-    returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-
-    # Ensure enough data points
-    if len(returns) < 10:
-        return pd.Series([np.mean(returns)] * forecast_days)
-
-    # Ensure the index has a frequency
-    if returns.index.inferred_freq is None:
-        returns = returns.asfreq('B')  # Business day frequency
-
-    # Check stationarity and apply differencing if needed
-    if not check_stationarity(returns):
-        returns = returns.diff().dropna()
-
-    # ARIMA model with error handling
     try:
-        model = ARIMA(returns, order=(1, 1, 1), enforce_stationarity=False)
-        model_fit = model.fit()
-        forecast = model_fit.forecast(steps=forecast_days)
-        return forecast
+        if market_returns.empty:
+            print("Market returns not available, defaulting beta to 1.")
+            return 1
+
+        # Align lengths of asset_returns and market_returns
+        min_length = min(len(asset_returns), len(market_returns))
+        asset_returns = asset_returns.iloc[-min_length:]
+        market_returns = market_returns.iloc[-min_length:]
+
+        # Calculate covariance and beta
+        covariance = np.cov(asset_returns, market_returns)[0][1]
+        market_variance = np.var(market_returns)
+        return covariance / market_variance if market_variance != 0 else 0
     except Exception as e:
-        print(f"ARIMA failed: {e}")
-        # Fallback: Return constant mean forecast
-        return pd.Series([np.mean(returns)] * forecast_days)
+        print(f"Error computing beta: {e}")
+        return 1  # Default beta
 
 
-# 4. Simulate Realistic Fluctuations
-import random
+# def compute_beta(asset_returns, market_returns):
+#     """Calculate Beta (sensitivity to market)."""
+#     try:
+#         # Align lengths of asset_returns and market_returns
+#         min_length = min(len(asset_returns), len(market_returns))
+#         asset_returns = asset_returns.iloc[-min_length:]
+#         market_returns = market_returns.iloc[-min_length:]
 
-def adf_test(returns):
-    """Perform stationarity test."""
-    result = adfuller(returns)
-    return "Stationary" if result[1] < 0.05 else "Non-Stationary"
+#         # Calculate covariance and beta
+#         covariance = np.cov(asset_returns, market_returns)[0][1]
+#         market_variance = np.var(market_returns)
+#         return covariance / market_variance if market_variance != 0 else 0
+#     except Exception as e:
+#         print(f"Error calculating beta: {e}")
+#         return 0
 
-def simulate_fluctuations(base_value, volatility, days=30):
-    """Simulate fluctuations based on volatility."""
+
+def simulate_fluctuations(base_value, volatility, days=92):
+    """Simulate realistic fluctuations based on volatility."""
     simulated = [base_value]
     for _ in range(1, days):
         noise = random.uniform(-volatility, volatility)
         simulated.append(simulated[-1] * (1 + noise))
     return simulated
+
 
 
 # 5. Validate Predictions
@@ -8887,7 +11483,7 @@ def plot_refined_data(refined_data):
 # Final Predict Returns for Next Quarter :
 
 # v-2 :
-@app.route('/predict_returns', methods=['POST'])
+@app.route('/api/predict_returns', methods=['POST'])
 def predict_returns():
     try:
         # Retrieve client and portfolio details
@@ -9046,7 +11642,7 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
             print(sharpe_ratio)
             beta = compute_beta(historical_returns, market_returns)
             print(beta)
-            stationarity = adf_test(historical_returns)
+            stationarity = check_stationarity(historical_returns)
             print(stationarity)
 
             # Forecasting
@@ -9120,7 +11716,7 @@ def create_next_quarter_prediction_line_chart(client_id,client_name,funds,invest
                 date = datetime.strptime(timestamp.split(',')[0], "%m/%d/%Y").strftime("%Y-%m-%d")
 
                 # Safely get the correct daily change value
-                value = details.get("portfolio_daily_change") or details.get("porfolio_daily_change", 0)
+                value = details.get("portfolio_daily_change") or details.get("portfolio_daily_change", 0)
 
                 # Append if the value is not zero and is after or on the start date
                 if value != 0 and date >= start_date:
@@ -9490,7 +12086,7 @@ def calculate_predicted_returns_by_asset_class(portfolio_data, funds, investor_p
 
 
 
-@app.route('/asset_class_predictions', methods=['POST'])
+@app.route('/api/asset_class_predictions', methods=['POST'])
 def asset_class_predictions():
     try:
         # Fetch client and portfolio data
@@ -9589,47 +12185,110 @@ def asset_class_predictions():
                                     """
 
 
-        task_portfolio_variance = f"""
-                                    You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio. 
-                                    The portfolio details are as follows:
-                                    - **Portfolio Details:** {portfolio_data}
-                                    - **Daily Changes Data:** {raw_daily_changes_data}
-                                    - **Portfolio Size:** ${funds}
-                                    - **Asset Classes:** {asset_classes}
+        # task_portfolio_variance = f"""
+        #                             You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio. 
+        #                             The portfolio details are as follows:
+        #                             - **Portfolio Details:** {portfolio_data}
+        #                             - **Daily Changes Data:** {raw_daily_changes_data}
+        #                             - **Portfolio Size:** ${funds}
+        #                             - **Asset Classes:** {asset_classes}
 
-                                    ### Portfolio Assumptions:
-                                    - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
-                                    - Use the following provided examples to guide your calculations:
+        #                             ### Portfolio Assumptions:
+        #                             - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
+        #                             - Use the following provided examples to guide your calculations:
                                     
-                                    #### Example 1: Variance Calculation for a Single Stock
-                                    - **Profit:** $4000 with a probability of 0.3.
-                                    - **Loss:** -$1000 with a probability of 0.7.
-                                    - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
-                                    - **Variance (σ²):** Use the formula σ² = Σ[(x²) * f(x)] - μ².
-                                    - **Standard Deviation (σ):** Take the square root of the variance.
+        #                             #### Example 1: Variance Calculation for a Single Stock
+        #                             - **Profit:** $4000 with a probability of 0.3.
+        #                             - **Loss:** -$1000 with a probability of 0.7.
+        #                             - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
+        #                             - **Variance (σ²):** Use the formula σ² = Σ[(x²) * f(x)] - μ².
+        #                             - **Standard Deviation (σ):** Take the square root of the variance.
 
-                                    #### Example 2: Portfolio Variance
-                                    For a portfolio distributed across multiple assets:
-                                    1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
-                                    2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
-                                    - Expected Portfolio Return:
-                                        Boom = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
-                                        Bust = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
-                                    - Portfolio Variance:
-                                        Include the correlation between assets if applicable.
+        #                             #### Example 2: Portfolio Variance
+        #                             For a portfolio distributed across multiple assets:
+        #                             1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
+        #                             2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
+        #                             - Expected Portfolio Return:
+        #                                 Boom = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+        #                                 Bust = (0.5 x Return_A) + (0.25 x Return_B) + (0.25 x Return_C)
+        #                             - Portfolio Variance:
+        #                                 Include the correlation between assets if applicable.
 
-                                    ### Deliverables:
-                                    1. Explain your step-by-step calculations for:
-                                    - **Expected Return** for each asset and the overall portfolio.
-                                    - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
+        #                             ### Deliverables:
+        #                             1. Explain your step-by-step calculations for:
+        #                             - **Expected Return** for each asset and the overall portfolio.
+        #                             - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
 
-                                    2. Present results in a clear, well-explained format, avoiding tables but providing structured paragraphs with values.
+        #                             2. Present results in a clear, well-explained format, avoiding tables but providing structured paragraphs with values.
 
-                                    3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
+        #                             3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
 
-                                    Ensure your calculations are correct, and the explanation is clear and easy to understand for both technical and non-technical audiences.
-                                    """
+        #                             Ensure your calculations are correct, and the explanation is clear and easy to understand for both technical and non-technical audiences.
+        #                             """
 
+        # Calculate the portfolio metrics by asset class.
+        portfolio_metrics = calculate_portfolio_metrics(portfolio_data)
+
+        # Convert metrics into a readable string section.
+        metrics_lines = []
+        for asset_class, metrics in portfolio_metrics.items():
+            line = (f"Asset Class: {asset_class}; Total Invested: ${metrics['total_invested']:.2f}; "
+                    f"Weighted Expected Return: {metrics['weighted_expected_return']*100:.2f}%; "
+                    f"Variance: {metrics['variance']:.6f}; Standard Deviation: {metrics['std_deviation']:.4f}")
+            metrics_lines.append(line)
+        
+        metrics_str = "\n".join(metrics_lines)
+        
+        
+        task_portfolio_variance = f"""
+                You are an AI financial analyst tasked with calculating the expected variance and standard deviation for a portfolio.
+
+                Portfolio Details:
+                - **Portfolio Data:** {portfolio_data}
+                - **Daily Changes Data:** {raw_daily_changes_data}
+                - **Portfolio Size:** ${funds}
+                - **Asset Classes:** {asset_classes}
+                - ** Asset Class Metrics:** {metrics_str}
+
+                ### Portfolio Assumptions:
+                - Each asset class has associated expected returns and probabilities for different market conditions (e.g., boom, bust).
+                - Use the following provided examples to guide your calculations:
+
+                #### Example 1: Variance Calculation for a Single Stock
+                - **Profit:** $4000 with a probability of 0.3.
+                - **Loss:** -$1000 with a probability of 0.7.
+                - **Expected Return (E(X)):** Calculate as the weighted sum of the returns.
+                - **Variance (σ²):** Use the formula σ² = Σ[(x²) * p(x)] - (E(X))².
+                - **Standard Deviation (σ):** Take the square root of the variance.
+
+                #### Example 2: Portfolio Variance
+                For a portfolio distributed across multiple assets:
+                1. Use the expected returns for each asset based on probabilities for market conditions (e.g., boom, bust).
+                2. If Asset A is 50% of the portfolio, Asset B is 25%, and Asset C is 25%, calculate the portfolio's overall variance and expected return:
+                - **Expected Portfolio Return:**
+                    - Boom = (0.5 × Return_A) + (0.25 × Return_B) + (0.25 × Return_C)
+                    - Bust = (0.5 × Return_A) + (0.25 × Return_B) + (0.25 × Return_C)
+                - **Portfolio Variance:**
+                    - Include correlations between assets if applicable.
+
+                ### Advanced Calculations:
+                For a more thorough analysis, calculate the overall portfolio variance using the formula:
+
+                σₚ² = Σ₍ᵢ₌₁₎ⁿ Σ₍ⱼ₌₁₎ⁿ (wᵢ × wⱼ × σᵢⱼ)
+
+                where:
+                - **wᵢ** are the asset weights (i.e., the proportion of the total portfolio invested in asset i).
+                - **σᵢⱼ** are the covariances between the returns of assets i and j.
+
+                ### Deliverables:
+                1. Explain your step-by-step calculations for:
+                - **Expected Return** for each asset and the overall portfolio.
+                - **Variance** and **Standard Deviation** for each asset and the overall portfolio.
+                2. Present results in clear, structured paragraphs (avoid tables) with numerical values.
+                3. Provide insights into how the variance and standard deviation influence the overall portfolio risk and performance.
+
+                Ensure your calculations are correct and that the explanation is easy to understand for both technical and non-technical audiences.
+                """
 
         # AI Model Integration
         # Table Response :
@@ -9651,18 +12310,26 @@ def asset_class_predictions():
         simulated_response = markdown_to_text(response.text)
         
         # Process the response from LLM
-        html_suggestions = markdown.markdown(simulated_response)
+        # html_suggestions = markdown.markdown(simulated_response,extensions=["extra"])
+        # (Optional) Further post-process the plain text to remove any unwanted artifacts:
+        improved_response = simulated_response.replace("**", "").strip()
+
+        # Convert the processed markdown text to HTML.
+        # Here we use extra extensions (like fenced_code and toc) to improve formatting.
+        html_suggestions = markdown.markdown(improved_response, extensions=["extra", "fenced_code", "toc"])
+        # response_text = markdown.markdown(response_text, extensions=["extra"]) 
+        
         # print(f"html_suggestions:\n\n{html_suggestions}")
-        format_suggestions = markdown_to_text(html_suggestions)
+        # format_suggestions = markdown_to_text(html_suggestions)
         
         # Debugging output for validation
-        print("Generated Asset Class Predictions:\n\n", format_suggestions)
+        print("Generated Asset Class Predictions:\n\n",html_suggestions) # format_suggestions)
 
         # Response structure
         response_data = {
             "message": "Asset Class Predictions Generated Successfully",
             "asset_predictions_table_data":asset_predictions_table_data,
-            "simulated_response":format_suggestions
+            "simulated_response":html_suggestions  #format_suggestions
         }
 
         return jsonify(response_data), 200
@@ -9671,6 +12338,53 @@ def asset_class_predictions():
         print(f"Error in asset_class_predictions: {e}")
         return jsonify({"message": f"Error predicting asset class returns: {e}"}), 500
     
+
+def calculate_portfolio_metrics(portfolio_data):
+    # Group the data by asset class.
+    data_by_class = {}
+    for asset in portfolio_data:
+        asset_class = asset.get("assetClass", "Other")
+        amount_invested = float(asset.get("Amount_Invested", 0))
+        exp_return = float(asset.get("expected_return", 0))
+        # For this example, we assume historical_returns is a list of numbers.
+        historical_returns = asset.get("historical_returns", [])
+        if asset_class not in data_by_class:
+            data_by_class[asset_class] = {
+                "amount_invested": 0,
+                "weighted_expected_return": 0,
+                "all_returns": []
+            }
+        data_by_class[asset_class]["amount_invested"] += amount_invested
+        data_by_class[asset_class]["weighted_expected_return"] += amount_invested * exp_return
+        data_by_class[asset_class]["all_returns"].extend(historical_returns)
+    
+    # Calculate overall metrics per asset class.
+    metrics = {}
+    for asset_class, values in data_by_class.items():
+        total_invested = values["amount_invested"]
+        # Weighted expected return across all assets within this class.
+        if total_invested > 0:
+            weighted_exp_return = values["weighted_expected_return"] / total_invested
+        else:
+            weighted_exp_return = 0
+
+        # Using the list of returns, we can compute variance and standard deviation.
+        # Here, we assume historical_returns are provided; otherwise, you must derive returns from price data.
+        returns_array = np.array(values["all_returns"])
+        variance = np.var(returns_array) if returns_array.size > 0 else 0
+        std_deviation = np.sqrt(variance) if variance > 0 else 0
+
+        metrics[asset_class] = {
+            "total_invested": total_invested,
+            "weighted_expected_return": weighted_exp_return,
+            "variance": variance,
+            "std_deviation": std_deviation
+        }
+
+    # Optionally, you can also calculate an overall covariance matrix among asset classes if you have time series
+    # data for each class. This example only calculates metrics per group.
+    return metrics
+
 
 def extract_table_data_from_text(text):
     """
@@ -9765,7 +12479,7 @@ def get_top_low_portfolios(insights):
 
 #  # Best version :
 
-@app.route('/get_top_low_performers', methods=['POST'])
+@app.route('/api/get_top_low_performers', methods=['POST'])
 def get_top_low_performers_api():
     try:
         # Fetch all clients' financial data
@@ -9947,7 +12661,7 @@ def fetch_consolidated_portfolio(client_ids):
 
 # Asset Allocation based on INvestor Profile :
 
-@app.route('/asset_allocation_investor_profile', methods=['POST'])
+@app.route('/api/asset_allocation_investor_profile', methods=['POST'])
 def asset_allocation_investor_profile():
     try:
         # Fetch client data and validate input
@@ -10057,7 +12771,7 @@ def asset_allocation_investor_profile():
 
 # Best Version :
 
-@app.route('/asset_class_infographics', methods=['POST'])
+@app.route('/api/asset_class_infographics', methods=['POST'])
 def asset_class_infographics():
     try:
         # Fetch all clients' financial data
@@ -10159,7 +12873,7 @@ def asset_class_infographics():
 
 # Best Version :
 
-@app.route('/get_best_performing_assets', methods=['POST'])
+@app.route('/api/get_best_performing_assets', methods=['POST'])
 def get_best_performing_assets_api():
     try:
         # Fetch all clients' financial data
@@ -10305,23 +13019,32 @@ def fetch_portfolios(client_ids):
 
 #  # v-4 : More insights and metrics :
 
-@app.route('/analyze_dashboard', methods=['POST'])
+import time  
+
+@app.route('/api/analyze_dashboard', methods=['POST'])
 def analyze_dashboard():
     try:
-        # Fetch all clients' financial data
+        start_time = time.time()  # Track start time
+        logging.info("🔹 Received request for dashboard analysis")
+        
         clients = request.json.get("data")
         if not clients:
             return jsonify({"message": "No client data provided"}), 400
+        
+        print(f"🔹 Processing {len(clients)} clients")
+        logging.info(f"🔹 Processing {len(clients)} clients")
 
         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
         if not client_ids:
             return jsonify({"message": "No valid client IDs found in the request"}), 400
-
-        # call infographics for testing purposes :
-        # dashboard_infographics(clients)
         
-        # Fetch portfolios for all clients in bulk
+        # Step 1: Fetch portfolios for all clients
+        logging.info("🔹 Fetching portfolios...")
+        start_fetch_time = time.time()
         portfolios = fetch_portfolios(client_ids)
+        if not portfolios:
+            return jsonify({"message": "No portfolio data found for provided clients"}), 404
+        logging.info(f"✅ Portfolios fetched in {time.time() - start_fetch_time:.2f} seconds")
 
         insights = []
         performance_list = []
@@ -10334,14 +13057,17 @@ def analyze_dashboard():
             if not client_id or client_id not in portfolios:
                 continue
 
-            # Load client financial data (from AWS or local based on USE_AWS)
+            logging.info(f"🔹 Processing client: {client_id}")
+
+            # Step 2: Fetch Client Data (from AWS or local)
+            start_client_fetch = time.time()
             if USE_AWS:
-                client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+                client_data_key = f"{client_summary_folder}/client-data/{client_id}.json"
                 try:
                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
                     client_data = json.loads(response['Body'].read().decode('utf-8'))
                 except Exception as e:
-                    logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+                    logging.error(f"Error retrieving client data from AWS: {e}")
                     continue
             else:
                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
@@ -10350,62 +13076,104 @@ def analyze_dashboard():
                 with open(client_data_file_path, 'r') as f:
                     client_data = json.load(f)
 
-            # Ensure funds are numeric
-            funds = float(client_data.get("investmentAmount", 0) or 0)
+            # Use available_funds if investmentAmount is not provided
+            funds = float(client_data.get("investmentAmount", 0) or client_data.get("available_funds", 0))
             if funds <= 0:
                 continue
 
-            # Get portfolio data from the fetched portfolios
-            portfolio_data = portfolios.get(client_id, [])
-
-            # Safely parse assets and liabilities
-            assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
-            liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+            logging.info(f"✅ Client data fetched for {client_id} in {time.time() - start_client_fetch:.2f} seconds")
+            
+            start_analysis = time.time()
+            # ASSETS: Sum of assetsDatasets->datasets[0]->data
+            asset_values = client_data["assetsDatasets"]["datasets"][0]["data"]
+            assets = sum(float(val) for val in asset_values)
+            
+            # LIABILITIES: Sum of liabilityDatasets->datasets[0]->data
+            liability_values = client_data["liabilityDatasets"]["datasets"][0]["data"]
+            liabilities = sum(float(val) for val in liability_values)
             net_worth = assets - liabilities
             
-            # Savings Rate
-            annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+            # Savings Rate: from incomeFields
+            annual_income = sum(float(inc.get("amountIncome", 0)) for inc in client_data.get("incomeFields", []))
             savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
-            print(f"Savings Rate :{savings_rate}")
-            
-            # Calculate Monthly Expenses
+            print(f"Savings Rate: {savings_rate}")
+
+            # Calculate Monthly Expenses:
+            # Sum monthly payments from myLiabilities (keys ending with "monthly", case-insensitive)
             liability_monthly_payments = sum(
-                float(client_data["myLiabilities"][key].get("mortgageMonthly", 0) or 0)
-                for key in client_data["myLiabilities"]
-                if "Monthly" in client_data["myLiabilities"][key]
+                float(val) for liab in client_data.get("myLiabilities", {}).values()
+                for key, val in liab.items() if key.lower().endswith("monthly") and val
             )
-
+            # Sum monthly premiums from insurancePolicies (keys starting with "premiumAmount")
             insurance_monthly_premiums = sum(
-                float(client_data["insuranceCoverage"][key].get("monthlyPayLIClient", 0) or 0)
-                for key in client_data["insuranceCoverage"]
-                if "monthlyPayLIClient" in client_data["insuranceCoverage"][key]
+                float(policy.get(key, 0)) for policy in client_data.get("insurancePolicies", [])
+                for key in policy if key.startswith("premiumAmount")
             )
-
-            # Monthly Expenses = Liabilities + Insurance - Savings (Investments)
             monthly_expenses = liability_monthly_payments + insurance_monthly_premiums
 
-            # Use monthly expenses for emergency fund coverage calculation
+            # Liquid assets from assetsDatasets for specific categories
+            liquid_asset_categories = [
+                "Cash/bank accounts",
+                "Brokerage/non-qualified accounts",
+                "529 Plans",
+                "Roth IRA, Roth 401(k)"
+            ]
+            assets_labels = client_data["assetsDatasets"]["labels"]
+            liquid_assets = sum(
+                float(asset_values[i]) for i, label in enumerate(assets_labels)
+                if label in liquid_asset_categories
+            )
+            
+            liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
             emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
 
-            # Additional Metrics
+            # Debt-to-Asset Ratio
             debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
 
+            # Determine risk level based on debt-to-asset ratio
+            if debt_to_asset_ratio > 75:
+                risk_level = "High Risk"
+            elif debt_to_asset_ratio > 50:
+                risk_level = "Moderate Risk"
+            else:
+                risk_level = "Low Risk"
+
             investment_personality = client_data.get("investment_personality", "Unknown")
-            retirement_age = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
             retirement_goals = client_data.get("retirementGoal", "Unknown")
-            # print(f"Retirement Goal :\n{retirement_goals}")
-            financial_goals = client_data.get("goalFields","Unknown")
-            # print(f"Financial goals :\n{financial_goals}")
-            client_income = client_data.get("incomeFields","Unknown")
-            # print(f"Client income :\n{client_income}")
+            financial_goals = client_data.get("goalFields", "Unknown")
+            client_income = client_data.get("incomeFields", "Unknown")
+            
+            # Progress Towards Financial Goals:
+            progress_to_goals_score = {}
+            if isinstance(financial_goals, list):
+                for goal in financial_goals:
+                    try:
+                        goal_cost = float(goal.get("cost", 0))
+                    except ValueError:
+                        goal_cost = 0
+                    progress = (net_worth / goal_cost * 100) if goal_cost > 0 else 0
+                    progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
+                    print(f"Progress to goals score: {progress_to_goals_score}")
+            else:
+                print("Financial goals are not in the expected format.")
+            
+            client_goal_progress[client_id] = progress_to_goals_score
 
-            invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
-            available_funds = funds - invested_amount
-
-            # Initialize variables to calculate portfolio-level metrics
-            portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
-            portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
-            portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+            # Step 3: Process Portfolio Data
+            start_portfolio_processing = time.time()
+            portfolio_data = portfolios.get(client_id, [])
+            logging.info(f"✅ Processed portfolio for {client_id} in {time.time() - start_portfolio_processing:.2f} seconds")
+            if not portfolio_data:
+                logging.warning(f"No portfolio data found for client {client_id}. Skipping portfolio analysis.")
+                continue
+            
+            # Portfolio Performance Metrics:
+            invested_amount = sum(float(asset.get("Amount_Invested", 0)) for asset in portfolio_data)
+            available_funds_calc = funds - invested_amount
+            
+            portfolio_current_value = sum(float(asset.get("current_value", 0)) for asset in portfolio_data)
+            portfolio_daily_change = sum(float(asset.get("Daily_Value_Change", 0)) for asset in portfolio_data)
+            portfolio_investment_gain_loss = sum(float(asset.get("Investment_Gain_or_Loss", 0)) for asset in portfolio_data)
             
             if portfolio_current_value != 0:
                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
@@ -10414,29 +13182,24 @@ def analyze_dashboard():
                 portfolio_daily_change_perc = 0
                 portfolio_investment_gain_loss_perc = 0
             
-            # Calculate portfolio time held
+            # Portfolio Time Held Calculation
             time_held_values = []
             for asset in portfolio_data:
                 time_held_str = asset.get("Time_Held", "")
                 if time_held_str:
                     try:
-                        # Adjusted format string for American date format (MM/DD/YYYY)
                         time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
                         time_held_values.append(time_held_dt)
                     except ValueError as ve:
                         print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
-
             if time_held_values:
                 oldest_time_held = min(time_held_values)
                 portfolio_time_held = (datetime.now() - oldest_time_held).days
-                # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
             else:
                 portfolio_time_held = 0
                 print("No valid Time_Held data found in portfolio.")
-
-            # print(f"Portfolio Time Held: {portfolio_time_held} days")
             
-            # Calculate high asset class
+            # Calculate High Asset Class returns
             asset_class_returns = {}
             for asset in portfolio_data:
                 asset_class = asset.get("assetClass", "Unknown")
@@ -10444,232 +13207,102 @@ def analyze_dashboard():
                 if asset_class != "Unknown":
                     asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
                 else:
-                    print(f"Missing asset_class for asset: {asset}")  # Debug log
-
-            # Log asset_class_returns for debugging
-            # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
-
-            # Find the asset class with the highest return
+                    print(f"Missing asset_class for asset: {asset}")
             if asset_class_returns:
                 high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
             else:
                 high_asset_class = "Unknown"
-                
+            
             # Asset Allocation
             asset_allocation = {}
             for asset in portfolio_data:
                 asset_class = asset.get("assetClass", "Other")
                 allocation = float(asset.get("Amount_Invested", 0))
                 asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
-
             total_allocation = sum(asset_allocation.values())
-            asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
-            
-            # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
-            
-            # Risk-reward metrics
+            if total_allocation > 0:
+                asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+            else:
+                asset_allocation = {}
+
+            # Risk-Reward Metrics
             sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
-            volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
-            volatility = volatility if volatility > 0 else volatility * (-1)
-            # print(f"sharpe ratio :{sharpe_ratio}")
+            volatility = portfolio_daily_change_perc if portfolio_daily_change_perc > 0 else -portfolio_daily_change_perc
             
-            # Diversification analysis
-            diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
-            # print(f"Diversification Score :{diversification_score}")
+            diversification_score = len(asset_allocation)  # Number of asset classes
             
-            # Stress Testing
+            # Stress Testing (example logic)
             stress_scenarios = ["recession", "high inflation", "market crash"]
-            stress_test_result = {
-                "client_id": client_id,
-                "scenarios": {}
-            }
+            stress_test_result = {"client_id": client_id, "scenarios": {}}
             for scenario in stress_scenarios:
-                factor = {
-                    "recession": -0.2,
-                    "high inflation": -0.15,
-                    "market crash": -0.3
-                }.get(scenario, -0.1)
-                stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
+                factor = {"recession": -0.2, "high inflation": -0.15, "market crash": -0.3}.get(scenario, -0.1)
+                stressed_portfolio_value = float(portfolio_data[0].get("current_value", 0)) * (1 + factor)
                 stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
             stress_test_results.append(stress_test_result)
-            
-            print(f"Stress Test Results : {stress_test_results}")
+            print(f"Stress Test Results: {stress_test_results}")
 
-            
-            # Liquidity analysis :
-            
-            # Extract assets and liabilities data
-            assets_labels = client_data["assetsDatasets"]["labels"]
-            assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
-            liabilities_data = client_data["liabilityDatasets"]["datasets"][0]["data"]
-
-            # Map liquid asset categories
-            liquid_asset_categories = [
-                "Cash/bank accounts",
-                "Brokerage/non-qualified accounts",
-                "529 Plans",
-                "Roth IRA, Roth 401(k)"
-            ]
-
-            # Calculate liquid assets
-            liquid_assets = sum(
-                float(assets_data[i] or 0)
-                for i, label in enumerate(assets_labels)
-                if label in liquid_asset_categories
-            )
-
-            # Calculate total liabilities
-            total_liabilities = sum(float(liability or 0) for liability in liabilities_data)
-
-            # Calculate liquidity ratio
-            liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
-            
-            print(f"Liquid assets :{liquid_assets}")
-            print(f"Liquidity Ratio :{liquidity_ratio}")
-
-            # Progress Towards Financial Goals
-            progress_to_goals_score = {}
-            if isinstance(financial_goals, list):
-                for goal in financial_goals:
-                    try:
-                        goal_cost = float(goal.get("cost", 0) or 0)  # Convert cost to float
-                    except ValueError:
-                        goal_cost = 0  # Fallback if cost is invalid
-
-                    progress = (net_worth / goal_cost) * 100 if goal_cost > 0 else 0
-                    progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
-                    print(f"Progress to goals score :\n{progress_to_goals_score}")    
-            else:
-                print("Financial goals are not in the expected format.")
-            
-            client_goal_progress[client_id] = progress_to_goals_score
-            
-            # Recommendations
-            rebalancing_recommendations = []
-            for asset_class, percentage in asset_allocation.items():
-                if percentage > 50:
-                    rebalancing_recommendations.append(f"Reduce allocation in {asset_class} to improve diversification.")
-
-            client_rebalancing_recommendations[client_id] = rebalancing_recommendations
-            
-            # Append to performance list
             performance_list.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
-                "retirement_goals" : retirement_goals,
-                "retirement_age" : retirement_age,
-                "financial_goals" : financial_goals,
-                "client_income" : client_income,
+                "retirement_goals": client_data.get("retirementGoal", "Unknown"),
+                "retirement_age": client_data["retirementGoal"].get("retirementDateClient", "Unknown"),  # updated key name if needed
+                "financial_goals": financial_goals,
+                "client_income": client_income,
                 "assets": assets,
                 "liabilities": liabilities,
                 "net_worth": net_worth,
                 "funds": funds,
-                "available_funds": available_funds,
+                "available_funds": available_funds_calc,
                 "invested_amount": invested_amount,
                 "portfolio_current_value": portfolio_current_value,
                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
-                "high_asset_class":high_asset_class,
-                "portfolio_time_held" : portfolio_time_held ,
-                "asset_allocation":asset_allocation,
-                "total_allocation":total_allocation,
+                "high_asset_class": high_asset_class,
+                "portfolio_time_held": portfolio_time_held,
+                "asset_allocation": asset_allocation,
+                "total_allocation": total_allocation,
                 "sharpe_ratio": sharpe_ratio,
-                "savings_ratio":savings_rate,
-                "Liability Monthly Payments":liability_monthly_payments,
+                "savings_ratio": savings_rate,
+                "Liability Monthly Payments": liability_monthly_payments,
                 "Insurance Monthly Premiums": insurance_monthly_premiums,
                 "Calculated Monthly Expenses": monthly_expenses,
-                "Emergency Funds Coverage":emergency_fund_coverage,
+                "Emergency Funds Coverage": emergency_fund_coverage,
                 "Debt To Asset Ratio": debt_to_asset_ratio,
                 "volatility": volatility,
                 "diversification_score": diversification_score,
                 "liquidity_ratio": liquidity_ratio,
                 "progress_to_goals_score": progress_to_goals_score,
-                "stress_test_results": stress_test_results,
-                "rebalancing_recommendations": rebalancing_recommendations
+                "stress_test_results": stress_test_results
             })
-
-            # Generate insights using Gemini LLM
-            task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
-                    Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
-                    - Total Assets: ${assets}
-                    - Total Liabilities: ${liabilities}
-                    - Net Worth: ${net_worth}
-                    - Investment Personality: {investment_personality}
-                    - Retirement Age Goal: {retirement_age}
-                    - Retirement Goal: {retirement_goals}
-                    - Client Income: {client_income}
-                    - Financial Goals: {financial_goals}
-                    - Funds: {funds}
-                    - Invested Amount: ${invested_amount}
-                    - Available Funds: ${available_funds}
-                    - Current Portfolio Value: ${portfolio_current_value}
-                    - Portfolio Daily Change: ${portfolio_daily_change}
-                    - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
-                    - Portfolio Returns: ${portfolio_investment_gain_loss}
-                    - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
-                    - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
-                    - Best Performing Asset Class: {high_asset_class}
-                    - Best Performing Asset: {portfolio_data}
-                    - Asset Allocation (Breakdown): {asset_allocation}
-                    - Total Allocation: ${total_allocation}
-                    - Sharpe Ratio: {sharpe_ratio}
-                    - Volatility: {volatility}%
-                    - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
-                    - Liquid Assets: ${liquid_assets}
-                    - Liquidity Ratio: {liquidity_ratio}%
-                    - Savings Ratio: {savings_rate}%
-                    - Liability Monthly Payments: ${liability_monthly_payments}
-                    - Insurance Monthly Premiums: ${insurance_monthly_premiums}
-                    - Monthly Expenses: ${monthly_expenses}
-                    - Progress to Goals Score: {progress_to_goals_score} 
-                    - Stress Test Results: {stress_test_results}
-                    - Rebalancing Recommendations: {rebalancing_recommendations}
-
-                    Provide detailed insights into:
-                    1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
-                    2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
-                    3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
-                    4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
-                    5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
-                    6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
-                    7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
-                    8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
-
-                    Generate specific insights for the client on:
-                    - How their portfolio aligns with their stated investment personality.
-                    - Strategies to improve diversification, liquidity, and overall portfolio health.
-                    - Long-term viability of their financial plan given current metrics.
-                    """
-
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(task)
-            insights_text = markdown.markdown(response.text)
-
-            # Append insights
+            
             insights.append({
                 "client_id": client_id,
                 "client_name": client_data["clientDetail"]["clientName"],
-                "insights": insights_text,
                 "net_worth": net_worth,
+                "performance_list": performance_list
             })
+            
+            logging.info(f"✅ Completed financial analysis for {client_id} in {time.time() - start_analysis:.2f} seconds")
+            
+        total_time = time.time() - start_time
+        logging.info(f"✅ All Dashboard Clients analysis completed in {total_time:.2f} seconds")
 
-        # Analyze the Dashboard:
-        assets = sum(map(lambda x: x["net_worth"], insights))
-        liabilities = sum(map(lambda x: x["net_worth"], insights))
-        net_worth = assets - liabilities
+        # Analyze the Dashboard: sort insights, identify top performers, etc.
         insights.sort(key=lambda x: x["net_worth"], reverse=True)
-        top_client_id = insights[0]["client_id"]
-        top_client_name = insights[0]["client_name"]
+        if insights:
+            top_client_id = insights[0]["client_id"]
+            top_client_name = insights[0]["client_name"]
+        else:
+            top_client_id = top_client_name = None
 
-        # Identify top and low performers
         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
         top_performers = performance_list[:10]
         low_performers = performance_list[-10:]
-
         curr_date = datetime.now()
         
+        # new :
         task = f"""
-            You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
+            You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management.
             Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
             The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
             
@@ -10680,168 +13313,153 @@ def analyze_dashboard():
             4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
             5. Use readable percentages, dollar values, and ratios where applicable.
             6. The report should have a **summary section** at the end with actionable next steps.
-            7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
-            8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
-            9. Include all the Sections mentioned below in the report.
+            7. Avoid redundancy and ensure recommendations are clearly highlighted without repetition.
+            8. Use numbered headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+            9. Ensure all the sections mentioned below are included.
             
             ### Dashboard Insights and Performance Analysis
 
-            Date : {curr_date}
+            **Date:** {curr_date}
             
             #### **Key Deliverables**:
-            Refer to the insights here: {insights}.
-            Provide a **clear, structured, and actionable report** covering the following areas:
+            Insights reference: {insights}
+            Provide a **structured and actionable report** covering:
 
             ---
-
+            
             ### 1. **Top Performing Clients**
-            - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
-            - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
-            - Best-performing assets and asset classes.
-            - Strategies or characteristics that contributed to their success.
-            - Provide actionable recommendations to replicate successful strategies for other clients.
+            - Identify and analyze top-performing clients ({top_performers}):
+              - **Net Worth, Liquidity Ratios, Asset Allocation, Monthly Expenses, Savings Rates, Risk Metrics** (Sharpe Ratio, Volatility)
+              - **Best-performing assets and asset classes**
+              - **Key strategies contributing to success**
+            - Provide actionable recommendations to replicate success for other clients.
             
             ---
-
+            
             ### 2. **Low Performing Clients**
-            - Identify and Examine weaknesses among low-performing clients ({low_performers}):
-            - Common gaps in their financial profiles, such as:
-                - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
-                - Over-reliance on volatile or underperforming assets.
-                - Insufficient Emergency Funds
-                - Misaligned Risk Tolerance and Portfolio Composition
-                - High Monthly Expenses and Low Savings Rates
-            - Poor Goal Alignment or Misaligned Risk Tolerance.
-            - Suggest actionable improvements:
-            - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
-            - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
-            - Rebalancing Recommendations for Portfolios to address underperforming areas.
-
+            - Identify weaknesses among low-performing clients ({low_performers}):
+              - **Common financial issues:** High Debt-to-Asset Ratios, Low Diversification, Over-reliance on volatile assets, Insufficient Emergency Funds
+              - **Expense reduction opportunities**: Identify avoidable expenses.
+              - **Misaligned Risk Tolerance & Goal Alignment**
+            - Actionable recommendations:
+              - Debt management plans
+              - Portfolio rebalancing strategies
+              - Ways to improve savings and reduce expenses
+            
             ---
-
+            
             ### 3. **Comparative Analysis of Clients**
-            - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
-            - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
-            - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
-            - Common Trends and Development for both.
-            - Provide insights into successful strategies and common pitfalls to avoid.  
-            - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
-            - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
-
+            - Compare top-performing and low-performing clients:
+              - **Portfolio Characteristics:** Asset Allocation, Financial Situation, Monthly Expenses, Savings Patterns, Risk Metrics
+              - **Common trends and vulnerabilities**
+              - **Strategies to uplift low performers using insights from top performers**
+            
             ---
-
+            
             ### 4. **Stress Testing Results**
-            - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
-            - Analyze:
-            - Portfolio Resilience Rankings for all clients.
-            - Potential Financial Impacts on Net Worth and Liquidity.
-            - Provide actionable steps to strengthen and fortify portfolios against future risks.
-
+            - Simulate market downturn scenarios (e.g., recession, inflation spikes) using {stress_test_results}.
+            - **Portfolio Resilience Rankings**
+            - **Potential Financial Impacts on Net Worth and Liquidity**
+            - **Actionable steps to strengthen portfolios against risks**
+            
             ---
-
+            
             ### 5. **Rebalancing Recommendations**
-            - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
-            - Address over-concentration in certain asset classes or sectors.
-            - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
-            - Align portfolios with client financial goals and risk profiles.
-            - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
-
+            - Tailored portfolio adjustments ({client_rebalancing_recommendations}):
+              - Address over-concentration in specific sectors.
+              - Highlight underweighted sectors (e.g., Bonds, Real Estate).
+              - Align portfolios with financial goals and risk profiles.
+            
             ---
-
+            
             ### 6. **Asset Allocation Trends**
-            - Analyze trends in asset allocation across all clients:
-            - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
-            - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
-
+            - Trends in asset allocation across all clients:
+              - **Dominant asset classes** (Cryptocurrency, Stocks, Bonds, etc.) and associated risks/returns.
+              - **Opportunities to optimize allocations based on market conditions**.
+            
             ---
-
+            
             ### 7. **Goal Achievement Progress**
-            - Assess the progress of client goals ({client_goal_progress}):
-            - Evaluate how many :
-                - Goals Achieved(we need to determine that it wont be mentioned direclty),
-                - Goals on Track(including an estimate of when the goal will be achieved for most clients),
-                - Goals at Risk of Delay.
-                - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
-            - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
-
+            - Assess client goal progress ({client_goal_progress}):
+              - Goals Achieved, On Track, At Risk, or Unreachable.
+              - **Estimated timeline adjustments for at-risk goals**.
+            - **Steps to accelerate progress or adjust target years**.
+            
             ---
-
+            
             ### 8. **Risk and Diversification Metrics**
-            - Calculate and Evaluate:
-            - Diversification Scores (Average and Individual Client Scores).
-            - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
-            - Liquidity Ratios and Emergency Fund Coverage.
-            - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
-
+            - Evaluate:
+              - **Diversification Scores** (Client & Portfolio Level)
+              - **Risk Metrics (Sharpe Ratios, Portfolio Volatility)**
+              - **Liquidity Ratios and Emergency Fund Coverage**
+            - **Actionable strategies to enhance diversification & risk management**.
+            
             ---
-
+            
             ### 9. **Common Patterns and Trends**
-            - Identify patterns among top-performing clients:
-            - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
-            - Highlight patterns among low-performing clients:
-            - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
-            - Provide actionable insights to address vulnerabilities and capitalize on strengths.
-
-            ---
-
-            ### 10. **Goal-Based Insights**
-            - How many goals have been achieved, are on track, or at risk?
-            - Suggest steps to:
-            - Accelerate progress for at-risk goals.
-            - Adjust timelines for unreachable goals.
-
-            ---
-
-            ### 11. **Most Gaining and Losing Assets**
-            - Highlight the **most gaining** and **most losing assets** for:
-            - Individual Clients.
-            - Across all portfolios.
-            - Recommend strategies to leverage high-performing assets or mitigate losses.
-
+            - **Top performers:** Traits such as High Liquidity, Diversified Portfolios, Strong Savings Habits.
+            - **Low performers:** High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+            - **Insights to address vulnerabilities & capitalize on strengths.**
+            
             ---
             
-            ### 12. **Longest and Shortest Investment Periods**
-            - Identify clients with the:
-            - Longest Investment Period and its impact on performance.
-            - Shortest Investment Period and how it reflects their strategies.
-
-            ---
-
-            ### 13. **Overall Portfolio Management Score**
-            - Assign a score out of 100 for the Wealth Manager based on:
-            - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
-            - Provide reasons for the score and actionable steps for improvement.
-
-            ---
-
-            ### 14. **Custom Recommendations**
-            - Identify and Suggest specific investment opportunities including:
-            - Low-risk alternatives like Bonds, ETFs, or Index Funds.
-            - High-potential sectors based on current market trends.
-            - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
-
+            ### 10. **Most Gaining and Losing Assets**
+            - **Highlight top gaining & losing assets** for:
+              - Individual clients
+              - Across all portfolios
+            - **Recommendations to leverage high-performing assets & mitigate losses**.
+            
             ---
             
-            ### 15. **Actionable Summary**
-            - Provide key insights, recommendations, and patterns to help the Wealth Manager:
-            - Improve portfolio performance.
-            - Align client portfolios with financial goals and market trends.
-            - Strengthen risk management and diversification.
-
+            ### 11. **Investment Time Periods**
+            - Identify clients with:
+              - **Longest investment periods** and their impact on performance.
+              - **Shortest investment periods** and their portfolio strategy.
+            
+            ---
+            
+            ### 12. **Overall Portfolio Management Score**
+            - Assign a score (out of 100) based on:
+              - **Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.**
+            - **Provide reasoning and actionable improvement steps**.
+            
+            ---
+            
+            ### 13. **Custom Investment Recommendations**
+            - Identify investment opportunities including:
+              - Low-risk options: Bonds, ETFs, Index Funds
+              - High-potential sectors based on market trends
+            - **Tailored strategies for high-net-worth & low-performing clients**.
+            
+            ---
+            
+            ### 14. **Actionable Summary**
+            - **Key insights and recommendations** to help the Wealth Manager:
+              - Improve portfolio performance.
+              - Align client portfolios with financial goals & market trends.
+              - Strengthen risk management & diversification.
+            
             #### **Note**:
-            Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
-            Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
-            Use all the provided data to generate meaningful and actionable insights.
-            Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
+            Ensure the report is structured, clear, and comprehensive.
+            Avoid stating "insufficient data." Use all provided data to generate meaningful, actionable insights.
+            Remove redundancy and ensure clarity for efficient decision-making.
             """
 
+
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(task)
         dashboard_analysis = markdown_to_text_new(response.text)
+        
         # Process the response from LLM
-        html_suggestions = markdown.markdown(dashboard_analysis)
+        # response_text = markdown.markdown(response_text, extensions=["extra"]) 
+        html_suggestions = markdown.markdown(dashboard_analysis,extensions=["extra"])
         print(html_suggestions)
         dashboard_suggestions = markdown_to_text_new(html_suggestions)
         print(dashboard_suggestions)
+        
+        total_insights_time = time.time() - total_time
+        logging.info(f"✅ Dashboard analysis completed in {total_insights_time:.2f} seconds")
+
         # Return the response
         return jsonify({
             "message": "Dashboard Analysis generated successfully",
@@ -10853,6 +13471,1063 @@ def analyze_dashboard():
     except Exception as e:
         print(f"Error in analyzing dashboard: {e}")
         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
+    
+    
+# Previous Version :
+# @app.route('/api/analyze_dashboard', methods=['POST'])
+# def analyze_dashboard():
+#     try:
+#         start_time = time.time()  # Track time
+#         # Fetch all clients' financial data
+#         logging.info("🔹 Received request for dashboard analysis")
+        
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+        
+#         print(f"🔹 Processing {len(clients)} clients")
+#         logging.info(f"🔹 Processing {len(clients)} clients")
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found in the request"}), 400
+        
+#         # Fetch portfolios for all clients in bulk
+#         # Step 1: Fetch all portfolios
+#         logging.info("🔹 Fetching portfolios...")
+#         start_fetch_time = time.time()
+#         portfolios = fetch_portfolios(client_ids)
+#         if not portfolios:
+#             return jsonify({"message": "No portfolio data found for provided clients"}), 404
+#         logging.info(f"✅ Portfolios fetched in {time.time() - start_fetch_time:.2f} seconds")
+
+#         insights = []
+#         performance_list = []
+#         stress_test_results = []
+#         client_goal_progress = {}
+#         client_rebalancing_recommendations = {}
+        
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id or client_id not in portfolios:
+#                 continue
+
+#             # Load client financial data (from AWS or local based on USE_AWS)
+#             logging.info(f"🔹 Processing client: {client_id}")
+
+#             # Step 2: Fetch Client Data
+#             start_client_fetch = time.time()
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     continue
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     continue
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
+
+#             # Ensure funds are numeric
+#             funds = float(client_data.get("investmentAmount", 0) or 0)
+#             if funds <= 0:
+#                 continue
+
+#             # Get portfolio data from the fetched portfolios
+#             logging.info(f"✅ Client data fetched for {client_id} in {time.time() - start_client_fetch:.2f} seconds")
+            
+#             start_analysis = time.time()
+#             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#             net_worth = assets - liabilities
+            
+#             # Savings Rate
+#             annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#             savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+#             print(f"Savings Rate :{savings_rate}")
+            
+#             # Calculate Monthly Expenses
+#             liability_monthly_payments = sum(
+#                 float(client_data["myLiabilities"][key].get("mortgageMonthly", 0) or 0)
+#                 for key in client_data["myLiabilities"]
+#                 if "Monthly" in client_data["myLiabilities"][key]
+#             )
+
+#             insurance_monthly_premiums = sum(
+#                 float(client_data["insuranceCoverage"][key].get("monthlyPayLIClient", 0) or 0)
+#                 for key in client_data["insuranceCoverage"]
+#                 if "monthlyPayLIClient" in client_data["insuranceCoverage"][key]
+#             )
+
+#             # Monthly Expenses = Liabilities + Insurance - Savings (Investments)
+#             monthly_expenses = liability_monthly_payments + insurance_monthly_premiums
+
+#             # Use monthly expenses for emergency fund coverage calculation
+#             emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#             # Additional Metrics
+#             debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+#             retirement_age = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+#             retirement_goals = client_data.get("retirementGoal", "Unknown")
+#             # print(f"Retirement Goal :\n{retirement_goals}")
+#             financial_goals = client_data.get("goalFields","Unknown")
+#             # print(f"Financial goals :\n{financial_goals}")
+#             client_income = client_data.get("incomeFields","Unknown")
+#             # print(f"Client income :\n{client_income}")
+            
+#             # Liquidity analysis :
+            
+#             # Extract assets and liabilities data
+#             assets_labels = client_data["assetsDatasets"]["labels"]
+#             assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+#             liabilities_data = client_data["liabilityDatasets"]["datasets"][0]["data"]
+
+#             # Map liquid asset categories
+#             liquid_asset_categories = [
+#                 "Cash/bank accounts",
+#                 "Brokerage/non-qualified accounts",
+#                 "529 Plans",
+#                 "Roth IRA, Roth 401(k)"
+#             ]
+
+#             # Calculate liquid assets
+#             liquid_assets = sum(
+#                 float(assets_data[i] or 0)
+#                 for i, label in enumerate(assets_labels)
+#                 if label in liquid_asset_categories
+#             )
+
+#             # Calculate total liabilities
+#             total_liabilities = sum(float(liability or 0) for liability in liabilities_data)
+
+#             # Calculate liquidity ratio
+#             liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+            
+#             print(f"Liquid assets :{liquid_assets}")
+#             print(f"Liquidity Ratio :{liquidity_ratio}")
+
+#             # Progress Towards Financial Goals
+#             progress_to_goals_score = {}
+#             if isinstance(financial_goals, list):
+#                 for goal in financial_goals:
+#                     try:
+#                         goal_cost = float(goal.get("cost", 0) or 0)  # Convert cost to float
+#                     except ValueError:
+#                         goal_cost = 0  # Fallback if cost is invalid
+
+#                     progress = (net_worth / goal_cost) * 100 if goal_cost > 0 else 0
+#                     progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
+#                     print(f"Progress to goals score :\n{progress_to_goals_score}")    
+#             else:
+#                 print("Financial goals are not in the expected format.")
+            
+#             client_goal_progress[client_id] = progress_to_goals_score
+
+#             # Step 3: Process Portfolio Data
+#             start_portfolio_processing = time.time()
+#             portfolio_data = portfolios.get(client_id, [])
+#             logging.info(f"✅ Processed portfolio for {client_id} in {time.time() - start_portfolio_processing:.2f} seconds")
+
+#             if not portfolio_data:  # Check if portfolio_data is empty
+#                 logging.warning(f"No portfolio data found for client {client_id}. Skipping portfolio analysis.")
+#                 continue
+            
+#             # Calculate portfolio performance metrics
+#             else:
+#                 # Safely parse assets and liabilities
+#                 # Step 4: Analyze Portfolio Performance
+
+#                 invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
+#                 available_funds = funds - invested_amount
+
+#                 # Initialize variables to calculate portfolio-level metrics
+#                 portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#                 portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#                 portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+                
+#                 if portfolio_current_value != 0:
+#                     portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+#                     portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#                 else:
+#                     portfolio_daily_change_perc = 0
+#                     portfolio_investment_gain_loss_perc = 0
+                
+#                 # Calculate portfolio time held
+#                 time_held_values = []
+#                 for asset in portfolio_data:
+#                     time_held_str = asset.get("Time_Held", "")
+#                     if time_held_str:
+#                         try:
+#                             # Adjusted format string for American date format (MM/DD/YYYY)
+#                             time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
+#                             time_held_values.append(time_held_dt)
+#                         except ValueError as ve:
+#                             print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
+
+#                 if time_held_values:
+#                     oldest_time_held = min(time_held_values)
+#                     portfolio_time_held = (datetime.now() - oldest_time_held).days
+#                     # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
+#                 else:
+#                     portfolio_time_held = 0
+#                     print("No valid Time_Held data found in portfolio.")
+
+#                 # print(f"Portfolio Time Held: {portfolio_time_held} days")
+                
+#                 # Calculate high asset class
+#                 asset_class_returns = {}
+#                 for asset in portfolio_data:
+#                     asset_class = asset.get("assetClass", "Unknown")
+#                     asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+#                     if asset_class != "Unknown":
+#                         asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+#                     else:
+#                         print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+#                 # Log asset_class_returns for debugging
+#                 # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+#                 # Find the asset class with the highest return
+#                 if asset_class_returns:
+#                     high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+#                 else:
+#                     high_asset_class = "Unknown"
+                    
+#                 # Asset Allocation
+#                 asset_allocation = {}
+#                 for asset in portfolio_data:
+#                     asset_class = asset.get("assetClass", "Other")
+#                     allocation = float(asset.get("Amount_Invested", 0))
+#                     asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+#                 total_allocation = sum(asset_allocation.values())
+#                 asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
+                
+#                 # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
+                
+#                 # Risk-reward metrics
+#                 sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
+#                 volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
+#                 volatility = volatility if volatility > 0 else volatility * (-1)
+#                 # print(f"sharpe ratio :{sharpe_ratio}")
+                
+#                 # Diversification analysis
+#                 diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
+#                 # print(f"Diversification Score :{diversification_score}")
+                
+#                 # Stress Testing
+#                 stress_scenarios = ["recession", "high inflation", "market crash"]
+#                 stress_test_result = {
+#                     "client_id": client_id,
+#                     "scenarios": {}
+#                 }
+#                 for scenario in stress_scenarios:
+#                     factor = {
+#                         "recession": -0.2,
+#                         "high inflation": -0.15,
+#                         "market crash": -0.3
+#                     }.get(scenario, -0.1)
+#                     stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
+#                     stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
+#                 stress_test_results.append(stress_test_result)
+                
+#                 print(f"Stress Test Results : {stress_test_results}")
+            
+            
+#             # Append to performance list
+#             performance_list.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "retirement_goals" : retirement_goals,
+#                 "retirement_age" : retirement_age,
+#                 "financial_goals" : financial_goals,
+#                 "client_income" : client_income,
+#                 "assets": assets,
+#                 "liabilities": liabilities,
+#                 "net_worth": net_worth,
+#                 "funds": funds,
+#                 "available_funds": available_funds,
+#                 "invested_amount": invested_amount,
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#                 "high_asset_class":high_asset_class,
+#                 "portfolio_time_held" : portfolio_time_held ,
+#                 "asset_allocation":asset_allocation,
+#                 "total_allocation":total_allocation,
+#                 "sharpe_ratio": sharpe_ratio,
+#                 "savings_ratio":savings_rate,
+#                 "Liability Monthly Payments":liability_monthly_payments,
+#                 "Insurance Monthly Premiums": insurance_monthly_premiums,
+#                 "Calculated Monthly Expenses": monthly_expenses,
+#                 "Emergency Funds Coverage":emergency_fund_coverage,
+#                 "Debt To Asset Ratio": debt_to_asset_ratio,
+#                 "volatility": volatility,
+#                 "diversification_score": diversification_score,
+#                 "liquidity_ratio": liquidity_ratio,
+#                 "progress_to_goals_score": progress_to_goals_score,
+#                 "stress_test_results": stress_test_results #,
+#                 # "rebalancing_recommendations": rebalancing_recommendations
+#             })
+            
+#             insights.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "net_worth": net_worth,
+#                 "performance_list":performance_list
+#             })
+            
+#             logging.info(f"✅ Completed financial analysis for {client_id} in {time.time() - start_analysis:.2f} seconds")
+
+            
+#         total_time = time.time() - start_time
+#         logging.info(f"✅ All Dashboard Clients analysis completed in {total_time:.2f} seconds")
+
+#         # Analyze the Dashboard:
+#         assets = sum(map(lambda x: x["net_worth"], insights))
+#         liabilities = sum(map(lambda x: x["net_worth"], insights))
+#         net_worth = assets - liabilities
+#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
+#         top_client_id = insights[0]["client_id"]
+#         top_client_name = insights[0]["client_name"]
+
+#         # Identify top and low performers
+#         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+#         top_performers = performance_list[:10]
+#         low_performers = performance_list[-10:]
+
+#         curr_date = datetime.now()
+        
+#         # new :
+#         task = f"""
+#             You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management.
+#             Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
+#             The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
+            
+#             ### Formatting Guidelines:
+#             1. Use **bolded section headings** to clearly delineate sections of the report.
+#             2. Organize information into structured categories such as **Insights**, **Comparative Analysis**, **Recommendations**, and **Key Metrics**.
+#             3. Avoid raw table syntax like '|---|---|', and instead use visually separated sections.
+#             4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
+#             5. Use readable percentages, dollar values, and ratios where applicable.
+#             6. The report should have a **summary section** at the end with actionable next steps.
+#             7. Avoid redundancy and ensure recommendations are clearly highlighted without repetition.
+#             8. Use numbered headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+#             9. Ensure all the sections mentioned below are included.
+            
+#             ### Dashboard Insights and Performance Analysis
+
+#             **Date:** {curr_date}
+            
+#             #### **Key Deliverables**:
+#             Insights reference: {insights}
+#             Provide a **structured and actionable report** covering:
+
+#             ---
+            
+#             ### 1. **Top Performing Clients**
+#             - Identify and analyze top-performing clients ({top_performers}):
+#               - **Net Worth, Liquidity Ratios, Asset Allocation, Monthly Expenses, Savings Rates, Risk Metrics** (Sharpe Ratio, Volatility)
+#               - **Best-performing assets and asset classes**
+#               - **Key strategies contributing to success**
+#             - Provide actionable recommendations to replicate success for other clients.
+            
+#             ---
+            
+#             ### 2. **Low Performing Clients**
+#             - Identify weaknesses among low-performing clients ({low_performers}):
+#               - **Common financial issues:** High Debt-to-Asset Ratios, Low Diversification, Over-reliance on volatile assets, Insufficient Emergency Funds
+#               - **Expense reduction opportunities**: Identify avoidable expenses.
+#               - **Misaligned Risk Tolerance & Goal Alignment**
+#             - Actionable recommendations:
+#               - Debt management plans
+#               - Portfolio rebalancing strategies
+#               - Ways to improve savings and reduce expenses
+            
+#             ---
+            
+#             ### 3. **Comparative Analysis of Clients**
+#             - Compare top-performing and low-performing clients:
+#               - **Portfolio Characteristics:** Asset Allocation, Financial Situation, Monthly Expenses, Savings Patterns, Risk Metrics
+#               - **Common trends and vulnerabilities**
+#               - **Strategies to uplift low performers using insights from top performers**
+            
+#             ---
+            
+#             ### 4. **Stress Testing Results**
+#             - Simulate market downturn scenarios (e.g., recession, inflation spikes) using {stress_test_results}.
+#             - **Portfolio Resilience Rankings**
+#             - **Potential Financial Impacts on Net Worth and Liquidity**
+#             - **Actionable steps to strengthen portfolios against risks**
+            
+#             ---
+            
+#             ### 5. **Rebalancing Recommendations**
+#             - Tailored portfolio adjustments ({client_rebalancing_recommendations}):
+#               - Address over-concentration in specific sectors.
+#               - Highlight underweighted sectors (e.g., Bonds, Real Estate).
+#               - Align portfolios with financial goals and risk profiles.
+            
+#             ---
+            
+#             ### 6. **Asset Allocation Trends**
+#             - Trends in asset allocation across all clients:
+#               - **Dominant asset classes** (Cryptocurrency, Stocks, Bonds, etc.) and associated risks/returns.
+#               - **Opportunities to optimize allocations based on market conditions**.
+            
+#             ---
+            
+#             ### 7. **Goal Achievement Progress**
+#             - Assess client goal progress ({client_goal_progress}):
+#               - Goals Achieved, On Track, At Risk, or Unreachable.
+#               - **Estimated timeline adjustments for at-risk goals**.
+#             - **Steps to accelerate progress or adjust target years**.
+            
+#             ---
+            
+#             ### 8. **Risk and Diversification Metrics**
+#             - Evaluate:
+#               - **Diversification Scores** (Client & Portfolio Level)
+#               - **Risk Metrics (Sharpe Ratios, Portfolio Volatility)**
+#               - **Liquidity Ratios and Emergency Fund Coverage**
+#             - **Actionable strategies to enhance diversification & risk management**.
+            
+#             ---
+            
+#             ### 9. **Common Patterns and Trends**
+#             - **Top performers:** Traits such as High Liquidity, Diversified Portfolios, Strong Savings Habits.
+#             - **Low performers:** High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+#             - **Insights to address vulnerabilities & capitalize on strengths.**
+            
+#             ---
+            
+#             ### 10. **Most Gaining and Losing Assets**
+#             - **Highlight top gaining & losing assets** for:
+#               - Individual clients
+#               - Across all portfolios
+#             - **Recommendations to leverage high-performing assets & mitigate losses**.
+            
+#             ---
+            
+#             ### 11. **Investment Time Periods**
+#             - Identify clients with:
+#               - **Longest investment periods** and their impact on performance.
+#               - **Shortest investment periods** and their portfolio strategy.
+            
+#             ---
+            
+#             ### 12. **Overall Portfolio Management Score**
+#             - Assign a score (out of 100) based on:
+#               - **Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.**
+#             - **Provide reasoning and actionable improvement steps**.
+            
+#             ---
+            
+#             ### 13. **Custom Investment Recommendations**
+#             - Identify investment opportunities including:
+#               - Low-risk options: Bonds, ETFs, Index Funds
+#               - High-potential sectors based on market trends
+#             - **Tailored strategies for high-net-worth & low-performing clients**.
+            
+#             ---
+            
+#             ### 14. **Actionable Summary**
+#             - **Key insights and recommendations** to help the Wealth Manager:
+#               - Improve portfolio performance.
+#               - Align client portfolios with financial goals & market trends.
+#               - Strengthen risk management & diversification.
+            
+#             #### **Note**:
+#             Ensure the report is structured, clear, and comprehensive.
+#             Avoid stating "insufficient data." Use all provided data to generate meaningful, actionable insights.
+#             Remove redundancy and ensure clarity for efficient decision-making.
+#             """
+
+
+#         model = genai.GenerativeModel("gemini-1.5-flash")
+#         response = model.generate_content(task)
+#         dashboard_analysis = markdown_to_text_new(response.text)
+        
+#         # Process the response from LLM
+#         # response_text = markdown.markdown(response_text, extensions=["extra"]) 
+#         html_suggestions = markdown.markdown(dashboard_analysis,extensions=["extra"])
+#         print(html_suggestions)
+#         dashboard_suggestions = markdown_to_text_new(html_suggestions)
+#         print(dashboard_suggestions)
+        
+#         total_insights_time = time.time() - total_time
+#         logging.info(f"✅ Dashboard analysis completed in {total_insights_time:.2f} seconds")
+
+#         # Return the response
+#         return jsonify({
+#             "message": "Dashboard Analysis generated successfully",
+#             "dashboard_analysis": dashboard_suggestions,
+#             "performance": insights,
+#             "performance_list": performance_list
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in analyzing dashboard: {e}")
+#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
+
+#####################################################################################################
+# Previous Version : Takes long Processing Time :
+
+# @app.route('/api/analyze_dashboard', methods=['POST'])
+# def analyze_dashboard():
+#     try:
+#         start_time = time.time()  # Track time
+#         # Fetch all clients' financial data
+#         clients = request.json.get("data")
+#         if not clients:
+#             return jsonify({"message": "No client data provided"}), 400
+
+#         client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
+#         if not client_ids:
+#             return jsonify({"message": "No valid client IDs found in the request"}), 400
+
+#         # call infographics for testing purposes :
+#         # dashboard_infographics(clients)
+        
+#         # Fetch portfolios for all clients in bulk
+#         portfolios = fetch_portfolios(client_ids)
+
+#         insights = []
+#         performance_list = []
+#         stress_test_results = []
+#         client_goal_progress = {}
+#         client_rebalancing_recommendations = {}
+        
+#         for client in clients:
+#             client_id = client.get("uniqueId")
+#             if not client_id or client_id not in portfolios:
+#                 continue
+
+#             # Load client financial data (from AWS or local based on USE_AWS)
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#                     continue
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     continue
+#                 with open(client_data_file_path, 'r') as f:
+#                     client_data = json.load(f)
+
+#             # Ensure funds are numeric
+#             funds = float(client_data.get("investmentAmount", 0) or 0)
+#             if funds <= 0:
+#                 continue
+
+#             # Get portfolio data from the fetched portfolios
+#             portfolio_data = portfolios.get(client_id, [])
+
+#             # Safely parse assets and liabilities
+#             assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#             liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#             net_worth = assets - liabilities
+            
+#             # Savings Rate
+#             annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#             savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+#             print(f"Savings Rate :{savings_rate}")
+            
+#             # Calculate Monthly Expenses
+#             liability_monthly_payments = sum(
+#                 float(client_data["myLiabilities"][key].get("mortgageMonthly", 0) or 0)
+#                 for key in client_data["myLiabilities"]
+#                 if "Monthly" in client_data["myLiabilities"][key]
+#             )
+
+#             insurance_monthly_premiums = sum(
+#                 float(client_data["insuranceCoverage"][key].get("monthlyPayLIClient", 0) or 0)
+#                 for key in client_data["insuranceCoverage"]
+#                 if "monthlyPayLIClient" in client_data["insuranceCoverage"][key]
+#             )
+
+#             # Monthly Expenses = Liabilities + Insurance - Savings (Investments)
+#             monthly_expenses = liability_monthly_payments + insurance_monthly_premiums
+
+#             # Use monthly expenses for emergency fund coverage calculation
+#             emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#             # Additional Metrics
+#             debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#             investment_personality = client_data.get("investment_personality", "Unknown")
+#             retirement_age = client_data["retirementGoal"]["retirementPlan"]["retirementAgeClient"]
+#             retirement_goals = client_data.get("retirementGoal", "Unknown")
+#             # print(f"Retirement Goal :\n{retirement_goals}")
+#             financial_goals = client_data.get("goalFields","Unknown")
+#             # print(f"Financial goals :\n{financial_goals}")
+#             client_income = client_data.get("incomeFields","Unknown")
+#             # print(f"Client income :\n{client_income}")
+
+#             invested_amount = sum(float(asset["Amount_Invested"] or 0) for asset in portfolio_data)
+#             available_funds = funds - invested_amount
+
+#             # Initialize variables to calculate portfolio-level metrics
+#             portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#             portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#             portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+            
+#             if portfolio_current_value != 0:
+#                 portfolio_daily_change_perc = (portfolio_daily_change / portfolio_current_value) * 100
+#                 portfolio_investment_gain_loss_perc = (portfolio_investment_gain_loss / portfolio_current_value) * 100
+#             else:
+#                 portfolio_daily_change_perc = 0
+#                 portfolio_investment_gain_loss_perc = 0
+            
+#             # Calculate portfolio time held
+#             time_held_values = []
+#             for asset in portfolio_data:
+#                 time_held_str = asset.get("Time_Held", "")
+#                 if time_held_str:
+#                     try:
+#                         # Adjusted format string for American date format (MM/DD/YYYY)
+#                         time_held_dt = datetime.strptime(time_held_str, "%m/%d/%Y, %H:%M:%S")
+#                         time_held_values.append(time_held_dt)
+#                     except ValueError as ve:
+#                         print(f"Error parsing Time_Held for asset {asset.get('name', 'Unknown')}: {time_held_str} - {ve}")
+
+#             if time_held_values:
+#                 oldest_time_held = min(time_held_values)
+#                 portfolio_time_held = (datetime.now() - oldest_time_held).days
+#                 # print(f"Oldest Time Held: {oldest_time_held}, Portfolio Time Held: {portfolio_time_held} days")
+#             else:
+#                 portfolio_time_held = 0
+#                 print("No valid Time_Held data found in portfolio.")
+
+#             # print(f"Portfolio Time Held: {portfolio_time_held} days")
+            
+#             # Calculate high asset class
+#             asset_class_returns = {}
+#             for asset in portfolio_data:
+#                 asset_class = asset.get("assetClass", "Unknown")
+#                 asset_return = float(asset.get("Investment_Gain_or_Loss", 0))
+#                 if asset_class != "Unknown":
+#                     asset_class_returns[asset_class] = asset_class_returns.get(asset_class, 0) + asset_return
+#                 else:
+#                     print(f"Missing asset_class for asset: {asset}")  # Debug log
+
+#             # Log asset_class_returns for debugging
+#             # print(f"Asset class returns for client {client_id}: {asset_class_returns}")
+
+#             # Find the asset class with the highest return
+#             if asset_class_returns:
+#                 high_asset_class = max(asset_class_returns, key=asset_class_returns.get)
+#             else:
+#                 high_asset_class = "Unknown"
+                
+#             # Asset Allocation
+#             asset_allocation = {}
+#             for asset in portfolio_data:
+#                 asset_class = asset.get("assetClass", "Other")
+#                 allocation = float(asset.get("Amount_Invested", 0))
+#                 asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+#             total_allocation = sum(asset_allocation.values())
+#             asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}  # Convert to percentage
+            
+#             # print(f"Asset Allocation :{asset_allocation} \nTotal Allocation :{total_allocation}")
+            
+#             # Risk-reward metrics
+#             sharpe_ratio = (portfolio_investment_gain_loss / invested_amount) if invested_amount > 0 else 0
+#             volatility = portfolio_daily_change_perc  # Assuming daily change percentage as volatility for simplicity
+#             volatility = volatility if volatility > 0 else volatility * (-1)
+#             # print(f"sharpe ratio :{sharpe_ratio}")
+            
+#             # Diversification analysis
+#             diversification_score = len(asset_allocation)  # More asset classes indicate higher diversification
+#             # print(f"Diversification Score :{diversification_score}")
+            
+#             # Stress Testing
+#             stress_scenarios = ["recession", "high inflation", "market crash"]
+#             stress_test_result = {
+#                 "client_id": client_id,
+#                 "scenarios": {}
+#             }
+#             for scenario in stress_scenarios:
+#                 factor = {
+#                     "recession": -0.2,
+#                     "high inflation": -0.15,
+#                     "market crash": -0.3
+#                 }.get(scenario, -0.1)
+#                 stressed_portfolio_value = portfolio_data[0].get("current_value", 0) * (1 + factor)
+#                 stress_test_result["scenarios"][scenario] = round(stressed_portfolio_value, 2)
+#             stress_test_results.append(stress_test_result)
+            
+#             print(f"Stress Test Results : {stress_test_results}")
+
+            
+#             # Liquidity analysis :
+            
+#             # Extract assets and liabilities data
+#             assets_labels = client_data["assetsDatasets"]["labels"]
+#             assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+#             liabilities_data = client_data["liabilityDatasets"]["datasets"][0]["data"]
+
+#             # Map liquid asset categories
+#             liquid_asset_categories = [
+#                 "Cash/bank accounts",
+#                 "Brokerage/non-qualified accounts",
+#                 "529 Plans",
+#                 "Roth IRA, Roth 401(k)"
+#             ]
+
+#             # Calculate liquid assets
+#             liquid_assets = sum(
+#                 float(assets_data[i] or 0)
+#                 for i, label in enumerate(assets_labels)
+#                 if label in liquid_asset_categories
+#             )
+
+#             # Calculate total liabilities
+#             total_liabilities = sum(float(liability or 0) for liability in liabilities_data)
+
+#             # Calculate liquidity ratio
+#             liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+            
+#             print(f"Liquid assets :{liquid_assets}")
+#             print(f"Liquidity Ratio :{liquidity_ratio}")
+
+#             # Progress Towards Financial Goals
+#             progress_to_goals_score = {}
+#             if isinstance(financial_goals, list):
+#                 for goal in financial_goals:
+#                     try:
+#                         goal_cost = float(goal.get("cost", 0) or 0)  # Convert cost to float
+#                     except ValueError:
+#                         goal_cost = 0  # Fallback if cost is invalid
+
+#                     progress = (net_worth / goal_cost) * 100 if goal_cost > 0 else 0
+#                     progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 4)
+#                     print(f"Progress to goals score :\n{progress_to_goals_score}")    
+#             else:
+#                 print("Financial goals are not in the expected format.")
+            
+#             client_goal_progress[client_id] = progress_to_goals_score
+            
+#             # Recommendations
+#             rebalancing_recommendations = []
+#             for asset_class, percentage in asset_allocation.items():
+#                 if percentage > 50:
+#                     rebalancing_recommendations.append(f"Reduce allocation in {asset_class} to improve diversification.")
+
+#             client_rebalancing_recommendations[client_id] = rebalancing_recommendations
+            
+#             # Append to performance list
+#             performance_list.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "retirement_goals" : retirement_goals,
+#                 "retirement_age" : retirement_age,
+#                 "financial_goals" : financial_goals,
+#                 "client_income" : client_income,
+#                 "assets": assets,
+#                 "liabilities": liabilities,
+#                 "net_worth": net_worth,
+#                 "funds": funds,
+#                 "available_funds": available_funds,
+#                 "invested_amount": invested_amount,
+#                 "portfolio_current_value": portfolio_current_value,
+#                 "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+#                 "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+#                 "high_asset_class":high_asset_class,
+#                 "portfolio_time_held" : portfolio_time_held ,
+#                 "asset_allocation":asset_allocation,
+#                 "total_allocation":total_allocation,
+#                 "sharpe_ratio": sharpe_ratio,
+#                 "savings_ratio":savings_rate,
+#                 "Liability Monthly Payments":liability_monthly_payments,
+#                 "Insurance Monthly Premiums": insurance_monthly_premiums,
+#                 "Calculated Monthly Expenses": monthly_expenses,
+#                 "Emergency Funds Coverage":emergency_fund_coverage,
+#                 "Debt To Asset Ratio": debt_to_asset_ratio,
+#                 "volatility": volatility,
+#                 "diversification_score": diversification_score,
+#                 "liquidity_ratio": liquidity_ratio,
+#                 "progress_to_goals_score": progress_to_goals_score,
+#                 "stress_test_results": stress_test_results,
+#                 "rebalancing_recommendations": rebalancing_recommendations
+#             })
+
+#             # Generate insights using Gemini LLM
+#             task = f"""Your task is to highlight the Client Data, their Portfolio Data, and its Performance. 
+#                     Analyze the financial data of the client {client_data['clientDetail']['clientName']}:
+#                     - Total Assets: ${assets}
+#                     - Total Liabilities: ${liabilities}
+#                     - Net Worth: ${net_worth}
+#                     - Investment Personality: {investment_personality}
+#                     - Retirement Age Goal: {retirement_age}
+#                     - Retirement Goal: {retirement_goals}
+#                     - Client Income: {client_income}
+#                     - Financial Goals: {financial_goals}
+#                     - Funds: {funds}
+#                     - Invested Amount: ${invested_amount}
+#                     - Available Funds: ${available_funds}
+#                     - Current Portfolio Value: ${portfolio_current_value}
+#                     - Portfolio Daily Change: ${portfolio_daily_change}
+#                     - Portfolio Daily Change Percentage: {portfolio_daily_change_perc}%
+#                     - Portfolio Returns: ${portfolio_investment_gain_loss}
+#                     - Portfolio Returns Percentage: {portfolio_investment_gain_loss_perc}%
+#                     - Longest Portfolio Time Held: {portfolio_time_held} days/weeks/months/years
+#                     - Best Performing Asset Class: {high_asset_class}
+#                     - Best Performing Asset: {portfolio_data}
+#                     - Asset Allocation (Breakdown): {asset_allocation}
+#                     - Total Allocation: ${total_allocation}
+#                     - Sharpe Ratio: {sharpe_ratio}
+#                     - Volatility: {volatility}%
+#                     - Diversification Score: {diversification_score} (Higher scores indicate more diversification.)
+#                     - Liquid Assets: ${liquid_assets}
+#                     - Liquidity Ratio: {liquidity_ratio}%
+#                     - Savings Ratio: {savings_rate}%
+#                     - Liability Monthly Payments: ${liability_monthly_payments}
+#                     - Insurance Monthly Premiums: ${insurance_monthly_premiums}
+#                     - Monthly Expenses: ${monthly_expenses}
+#                     - Progress to Goals Score: {progress_to_goals_score} 
+#                     - Stress Test Results: {stress_test_results}
+#                     - Rebalancing Recommendations: {rebalancing_recommendations}
+
+#                     Provide detailed insights into:
+#                     1. **Asset Class Breakdown**: Highlight how each asset class has performed daily and its contribution to the portfolio.
+#                     2. **Performance Analysis**: Explain why specific asset classes or investments are performing well or poorly.
+#                     3. **Risk Exposure**: Assess the client's exposure to high-risk or volatile assets like cryptocurrency.
+#                     4. **Goal Alignment**: Evaluate the client's progress toward financial and retirement goals.
+#                     5. **Emergency Fund Adequacy**: Discuss whether the client has sufficient liquidity for emergencies.
+#                     6. **Debt Management**: Highlight potential risks arising from high liabilities or monthly payments.
+#                     7. **Stress Testing**: Assess how the portfolio would fare under adverse market conditions like inflation or recession.
+#                     8. **Rebalancing Needs**: Provide actionable recommendations for rebalancing the portfolio to reduce risk and align with goals.
+
+#                     Generate specific insights for the client on:
+#                     - How their portfolio aligns with their stated investment personality.
+#                     - Strategies to improve diversification, liquidity, and overall portfolio health.
+#                     - Long-term viability of their financial plan given current metrics.
+#                     """
+
+#             model = genai.GenerativeModel("gemini-1.5-flash")
+#             response = model.generate_content(task)
+#             insights_text = markdown.markdown(response.text)
+
+#             # Append insights
+#             insights.append({
+#                 "client_id": client_id,
+#                 "client_name": client_data["clientDetail"]["clientName"],
+#                 "insights": insights_text,
+#                 "net_worth": net_worth,
+#             })
+
+#         # Analyze the Dashboard:
+#         assets = sum(map(lambda x: x["net_worth"], insights))
+#         liabilities = sum(map(lambda x: x["net_worth"], insights))
+#         net_worth = assets - liabilities
+#         insights.sort(key=lambda x: x["net_worth"], reverse=True)
+#         top_client_id = insights[0]["client_id"]
+#         top_client_name = insights[0]["client_name"]
+
+#         # Identify top and low performers
+#         performance_list.sort(key=lambda x: x["portfolio_investment_gain_loss_perc"], reverse=True)
+#         top_performers = performance_list[:10]
+#         low_performers = performance_list[-10:]
+
+#         curr_date = datetime.now()
+        
+#         task = f"""
+#             You are working for a skilled Wealth Manager who is an expert in Portfolio and Asset Management. 
+#             Your task is to provide comprehensive insights, actionable recommendations, and analysis to help the Wealth Manager better manage the portfolios of a large client base.
+#             The Wealth Manager needs detailed, actionable, and reliable information to ease their workload, improve portfolio performance, and ensure client satisfaction.
+            
+#             ### Formatting Guidelines:
+#             1. Use **bolded section headings** to clearly delineate sections of the report.
+#             2. Organize information into structured categories such as **Insights**, **Comparative Analysis**, **Recommendations**, and **Key Metrics**.
+#             3. Avoid raw table syntax like '|---|---|', and instead use visually separated sections.
+#             4. Ensure actionable recommendations are **concise** and organized in bullet points under each section.
+#             5. Use readable percentages, dollar values, and ratios where applicable.
+#             6. The report should have a **summary section** at the end with actionable next steps.
+#             7. Avoid redundancy and ensure actionable recommendations are clearly highlighted.
+#             8. Use headings (e.g., **"1. Top Performing Clients"**) to separate main sections.
+#             9. Include all the Sections mentioned below in the report.
+            
+#             ### Dashboard Insights and Performance Analysis
+
+#             Date : {curr_date}
+            
+#             #### **Key Deliverables**:
+#             Refer to the insights here: {insights}.
+#             Provide a **clear, structured, and actionable report** covering the following areas:
+
+#             ---
+
+#             ### 1. **Top Performing Clients**
+#             - Analyze and Highlight patterns among top-performing clients ({top_performers}), focusing on:
+#             - Net Worth, Liquidity Ratios, Asset Allocation,Monthly Expenses,Savings Rates and Risk Metrics  (e.g., Sharpe Ratio, Volatility).
+#             - Best-performing assets and asset classes.
+#             - Strategies or characteristics that contributed to their success.
+#             - Provide actionable recommendations to replicate successful strategies for other clients.
+            
+#             ---
+
+#             ### 2. **Low Performing Clients**
+#             - Identify and Examine weaknesses among low-performing clients ({low_performers}):
+#             - Common gaps in their financial profiles, such as:
+#                 - High Debt-to-Asset Ratios, Negative Net Worth, Low Diversification Scores.
+#                 - Over-reliance on volatile or underperforming assets.
+#                 - Insufficient Emergency Funds
+#                 - Misaligned Risk Tolerance and Portfolio Composition
+#                 - High Monthly Expenses and Low Savings Rates
+#             - Poor Goal Alignment or Misaligned Risk Tolerance.
+#             - Suggest actionable improvements:
+#             - Debt Management Plans, Diversification Strategies, Goal-Based Investment Recommendations.
+#             - Suggest ways and Methods to reduce Monthly Expenses and Increase Savings by Identifying some expenses that can be avoided based on whatever data is available. 
+#             - Rebalancing Recommendations for Portfolios to address underperforming areas.
+
+#             ---
+
+#             ### 3. **Comparative Analysis of Clients**
+#             - Highlight differences and similarities between top-performing and low-performing clients ({top_performers}, {low_performers}):
+#             - Highlight Portfolio Characteristics: Asset Allocation, Investor Personality,Financial Situation,Monthly Expenses,Savings Patterns, risk metrics,goal alignment. etc.
+#             - Identify common Vulnerabilities and Trends: Common weaknesses and opportunities for improvement.
+#             - Common Trends and Development for both.
+#             - Provide insights into successful strategies and common pitfalls to avoid.  
+#             - Provide actionable steps to address commonalities and strengthen the client base and to strengthen portfolios against future risks..
+#             - Suggest strategies to uplift low-performing clients using trends observed in top-performing portfolios.
+
+#             ---
+
+#             ### 4. **Stress Testing Results**
+#             - Simulate adverse market scenarios (e.g., recession, inflation spike) using {stress_test_results}.
+#             - Analyze:
+#             - Portfolio Resilience Rankings for all clients.
+#             - Potential Financial Impacts on Net Worth and Liquidity.
+#             - Provide actionable steps to strengthen and fortify portfolios against future risks.
+
+#             ---
+
+#             ### 5. **Rebalancing Recommendations**
+#             - Provide Tailored portfolio rebalancing actions and suggestionsfor underperforming clients :({client_rebalancing_recommendations}):
+#             - Address over-concentration in certain asset classes or sectors.
+#             - Highlight opportunities in underweighted sectors (e.g., Bonds, Index Funds, Real Estate).
+#             - Align portfolios with client financial goals and risk profiles.
+#             - If Rebalancing Recommendations are valid mention it again for the Wealth Manager in brief for the clients who require Rebalancing Recommendations.
+
+#             ---
+
+#             ### 6. **Asset Allocation Trends**
+#             - Analyze trends in asset allocation across all clients:
+#             - Highlight Dominant Asset Classes: Cryptocurrency, Stocks, Bonds, etc., and their risks and returns.
+#             - Suggest Opportunities to align and optimize allocation based on market conditions and client objectives.
+
+#             ---
+
+#             ### 7. **Goal Achievement Progress**
+#             - Assess the progress of client goals ({client_goal_progress}):
+#             - Evaluate how many :
+#                 - Goals Achieved(we need to determine that it wont be mentioned direclty),
+#                 - Goals on Track(including an estimate of when the goal will be achieved for most clients),
+#                 - Goals at Risk of Delay.
+#                 - Unreachable Goals,help clients to achieve reasonable Goals or give new Target Goal Year
+#             - Provide Recommendations steps to help clients stay on track or accelerate progress or achieve reasonable goals or adjust target timelines.
+
+#             ---
+
+#             ### 8. **Risk and Diversification Metrics**
+#             - Calculate and Evaluate:
+#             - Diversification Scores (Average and Individual Client Scores).
+#             - Risk Metrics (including Sharpe Ratios, Portfolio Volatility).
+#             - Liquidity Ratios and Emergency Fund Coverage.
+#             - Provide actionable strategies and steps to enhance and improve overall portfolio diversification and risk management.
+
+#             ---
+
+#             ### 9. **Common Patterns and Trends**
+#             - Identify patterns among top-performing clients:
+#             - Traits like High Liquidity, Consistent Savings, Diversified Portfolios.
+#             - Highlight patterns among low-performing clients:
+#             - High Liabilities, Poor Goal Alignment, Over-reliance on volatile assets.
+#             - Provide actionable insights to address vulnerabilities and capitalize on strengths.
+
+#             ---
+
+#             ### 10. **Goal-Based Insights**
+#             - How many goals have been achieved, are on track, or at risk?
+#             - Suggest steps to:
+#             - Accelerate progress for at-risk goals.
+#             - Adjust timelines for unreachable goals.
+
+#             ---
+
+#             ### 11. **Most Gaining and Losing Assets**
+#             - Highlight the **most gaining** and **most losing assets** for:
+#             - Individual Clients.
+#             - Across all portfolios.
+#             - Recommend strategies to leverage high-performing assets or mitigate losses.
+
+#             ---
+            
+#             ### 12. **Longest and Shortest Investment Periods**
+#             - Identify clients with the:
+#             - Longest Investment Period and its impact on performance.
+#             - Shortest Investment Period and how it reflects their strategies.
+
+#             ---
+
+#             ### 13. **Overall Portfolio Management Score**
+#             - Assign a score out of 100 for the Wealth Manager based on:
+#             - Diversification, Liquidity, Goal Progress, Returns Generated, Risk Management.
+#             - Provide reasons for the score and actionable steps for improvement.
+
+#             ---
+
+#             ### 14. **Custom Recommendations**
+#             - Identify and Suggest specific investment opportunities including:
+#             - Low-risk alternatives like Bonds, ETFs, or Index Funds.
+#             - High-potential sectors based on current market trends.
+#             - Provide personalized strategies to optimize portfolios for both high-net-worth and low-performing clients.
+
+#             ---
+            
+#             ### 15. **Actionable Summary**
+#             - Provide key insights, recommendations, and patterns to help the Wealth Manager:
+#             - Improve portfolio performance.
+#             - Align client portfolios with financial goals and market trends.
+#             - Strengthen risk management and diversification.
+
+#             #### **Note**:
+#             Ensure your response is structured, clear, and comprehensive.Make sure all the above 15 points are covered in your report
+#             Give in a Report Format and Avoid stating "insufficient data" or vague assumptions. 
+#             Use all the provided data to generate meaningful and actionable insights.
+#             Make sure there is no repeatations in your answer making it unnecessarily lenghty and wordy.
+#             """
+
+#         response = model.generate_content(task)
+#         dashboard_analysis = markdown_to_text_new(response.text)
+#         # Process the response from LLM
+#         html_suggestions = markdown.markdown(dashboard_analysis)
+#         print(html_suggestions)
+#         dashboard_suggestions = markdown_to_text_new(html_suggestions)
+#         print(dashboard_suggestions)
+#         # Return the response
+#         return jsonify({
+#             "message": "Dashboard Analysis generated successfully",
+#             "dashboard_analysis": dashboard_suggestions,
+#             "performance": insights,
+#             "performance_list": performance_list
+#         }), 200
+
+#     except Exception as e:
+#         print(f"Error in analyzing dashboard: {e}")
+#         return jsonify({"message": f"Error in analyzing dashboard: {e}"}), 500
 
 
 def markdown_to_text_new(md):
@@ -10874,33 +14549,33 @@ def markdown_to_text_new(md):
 ################################################################################################
 # Dashboard Infographics :
 
-def rebalancing_strategy(before):
-    """
-    Example rebalancing strategy: Reduce categories above 50% allocation to 50% and 
-    distribute the remainder evenly across other categories.
-    """
-    max_allocation = 50  # Max allocation threshold in %
-    excess_allocation = 0
-    after = {}
+# def rebalancing_strategy(before):
+#     """
+#     Example rebalancing strategy: Reduce categories above 50% allocation to 50% and 
+#     distribute the remainder evenly across other categories.
+#     """
+#     max_allocation = 50  # Max allocation threshold in %
+#     excess_allocation = 0
+#     after = {}
 
-    # Cap allocations above the threshold and calculate excess
-    for category, percentage in before.items():
-        if percentage > max_allocation:
-            excess_allocation += percentage - max_allocation
-            after[category] = max_allocation
-        else:
-            after[category] = percentage
+#     # Cap allocations above the threshold and calculate excess
+#     for category, percentage in before.items():
+#         if percentage > max_allocation:
+#             excess_allocation += percentage - max_allocation
+#             after[category] = max_allocation
+#         else:
+#             after[category] = percentage
 
-    # Redistribute excess allocation proportionally
-    total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
-    redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
+#     # Redistribute excess allocation proportionally
+#     total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
+#     redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
 
-    for category in after:
-        if after[category] < max_allocation:
-            after[category] += redistribution
-            after[category] = min(after[category], max_allocation)
+#     for category in after:
+#         if after[category] < max_allocation:
+#             after[category] += redistribution
+#             after[category] = min(after[category], max_allocation)
 
-    return after
+#     return after
 
 
 # Calculate metrics and prepare data for dashboard infographics:
@@ -11118,12 +14793,268 @@ def rebalancing_strategy(before):
 #     }
 
 
-
 # prev :
+
+# def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3=s3, s3_bucket_name=S3_BUCKET_NAME):
+#     performance_list = []
+#     stress_test_results = []
+#     client_goal_progress = {}
+#     client_rebalancing_recommendations = {}
+#     comparative_analysis_data = []
+#     portfolio_management_scores = []
+#     risk_and_liquidity_data = []
+
+#     def get_safe_field(dictionary, keys, default=None):
+#         """Helper function to safely get a nested field from a dictionary."""
+#         try:
+#             for key in keys:
+#                 dictionary = dictionary.get(key, {})
+#             return dictionary or default
+#         except AttributeError:
+#             return default
+
+#     def rebalancing_strategy(before):
+#         """
+#         Example rebalancing strategy: Cap allocations above 50% and redistribute excess proportionally.
+#         """
+#         max_allocation = 50  # Max allocation threshold in %
+#         excess_allocation = 0
+#         after = {}
+
+#         # Cap allocations above the threshold and calculate excess
+#         for category, percentage in before.items():
+#             if percentage > max_allocation:
+#                 excess_allocation += percentage - max_allocation
+#                 after[category] = max_allocation
+#             else:
+#                 after[category] = percentage
+
+#         # Redistribute excess allocation proportionally
+#         total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
+#         redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
+
+#         for category in after:
+#             if after[category] < max_allocation:
+#                 after[category] += redistribution
+#                 after[category] = min(after[category], max_allocation)
+
+#         return after
+
+#     for client in clients:
+#         client_id = client.get("uniqueId")
+#         if not client_id or client_id not in portfolios:
+#             logging.warning(f"Client ID {client_id} is invalid or not in portfolios. Skipping.")
+#             continue
+
+#         # Safely fetch client name
+#         client_name = get_safe_field(client, ["clientDetail", "clientName"], "Unknown")
+#         if client_name == "Unknown":
+#             logging.warning(f"Missing client name for client ID {client_id}. Defaulting to 'Unknown'.")
+
+#         # Fetch client data
+#         client_data = None
+#         if use_aws:
+#             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#             try:
+#                 response = s3.get_object(Bucket=s3_bucket_name, Key=client_data_key)
+#                 client_data = json.loads(response['Body'].read().decode('utf-8'))
+#             except Exception as e:
+#                 logging.error(f"Error retrieving client data from AWS for {client_id}: {e}")
+#                 continue
+#         else:
+#             client_data_path = os.path.join("client_data", f"{client_id}.json")
+#             if os.path.exists(client_data_path):
+#                 with open(client_data_path, 'r') as file:
+#                     client_data = json.load(file)
+#         if not client_data:
+#             logging.warning(f"No client data found for client ID {client_id}. Skipping.")
+#             continue
+
+#         # Process and calculate metrics
+#         funds = float(client_data.get("investmentAmount", 0) or 0)
+#         assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
+#         liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+#         net_worth = assets - liabilities
+
+#         # Savings Rate
+#         annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+#         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
+
+#         # Emergency Fund Coverage
+#         monthly_expenses = sum(
+#             float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
+#         ) + sum(
+#             float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
+#         )
+#         assets_labels = client_data["assetsDatasets"]["labels"]
+#         assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+
+#         liquid_asset_categories = [
+#             "Cash/bank accounts",
+#             "Brokerage/non-qualified accounts",
+#             "529 Plans",
+#             "Roth IRA, Roth 401(k)"
+#         ]
+#         liquid_assets = sum(
+#             float(assets_data[i] or 0)
+#             for i, label in enumerate(assets_labels)
+#             if label in liquid_asset_categories
+#         )
+#         total_liabilities = liabilities
+#         liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+#         emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+#         # Debt-to-Asset Ratio
+#         debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
+
+#         # Asset Allocation
+#         portfolio_data = portfolios.get(client_id, [])
+#         asset_allocation = {}
+#         for asset in portfolio_data:
+#             asset_class = asset.get("assetClass", "Other")
+#             allocation = float(asset.get("Amount_Invested", 0))
+#             asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+#         total_allocation = sum(asset_allocation.values())
+#         asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+
+#         # Portfolio Metrics
+#         diversification_score = len(asset_allocation)
+#         sharpe_ratio = client_data.get("sharpeRatio", 0)
+#         volatility = client_data.get("volatility", 0)
+#         portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
+#         portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
+#         portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
+#         portfolio_investment_gain_loss_perc = (
+#             (portfolio_investment_gain_loss / portfolio_current_value) * 100 if portfolio_current_value != 0 else 0
+#         )
+
+#         # Progress Towards Financial Goals
+#         financial_goals = client_data.get("goalFields", [])
+#         progress_to_goals_score = {}
+#         for goal in financial_goals:
+#             goal_cost = float(goal.get("cost", 0) or 0)
+#             progress = (net_worth / goal_cost * 100) if goal_cost > 0 else 0
+#             progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 2)
+            
+#         # client_goal_progress[client_id] = progress_to_goals_score
+#         client_goal_progress[client_name] = progress_to_goals_score
+        
+
+#         # Append Data
+#         comparative_analysis_data.append({
+#             "client_name": client_name,
+#             "assets": assets,
+#             "liabilities": liabilities,
+#             "net_worth": net_worth,
+#             "profit_loss": portfolio_investment_gain_loss,
+#             "profit_loss_percentage": portfolio_investment_gain_loss_perc,
+#         })
+#         risk_and_liquidity_data.append({
+#             "client_name": client_name,
+#             "liquidity_ratio": liquidity_ratio,
+#             "debt_to_asset_ratio": debt_to_asset_ratio,
+#             "net_worth": net_worth,
+#             "emergency_fund_coverage": emergency_fund_coverage,
+#         })
+#         portfolio_management_scores.append({
+#             "client_id": client_id,
+#             "client_name": client_name,
+#             "sharpe_ratio": sharpe_ratio,
+#             "savings_rate": savings_rate,
+#             "volatility": volatility,
+#             "diversification_score": diversification_score,
+#             "progress_to_goals_score": progress_to_goals_score,
+#         })
+
+#     # Prepare rebalancing and recommendations
+#     dashboard_data = {"recommendations_impact": {}}
+#     for client_id, portfolio_data in portfolios.items():
+#         # Aggregate current asset allocation (calculate 'before')
+#         asset_allocation = {}
+#         for asset in portfolio_data:
+#             asset_class = asset.get("assetClass", "Other")
+#             allocation = float(asset.get("Amount_Invested", 0))
+#             asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+
+#         # Normalize asset allocation to percentages
+#         total_allocation = sum(asset_allocation.values())
+#         before_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+
+#         # Calculate 'after' allocation using the rebalancing strategy
+#         after_allocation = rebalancing_strategy(before_allocation)
+
+#         # Generate recommendations
+#         recommendations = [
+#             f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50
+#         ]
+#         client_rebalancing_recommendations[client_id] = recommendations
+
+#         # Prepare chart data for recommendations impact
+#         chart_data = {
+#             "categories": list(before_allocation.keys()),
+#             "before_values": list(before_allocation.values()),
+#             "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()],
+#         }
+#         dashboard_data["recommendations_impact"][client_id] = chart_data
+#         print(f"Dashboard data for recommendations impact : {chart_data}")
+        
+#     return {
+#         "performance_list": performance_list,
+#         "stress_test_results": stress_test_results,
+#         "client_goal_progress": client_goal_progress,
+#         "client_rebalancing_recommendations": client_rebalancing_recommendations,
+#         "comparative_analysis_data": comparative_analysis_data,
+#         "portfolio_management_scores": portfolio_management_scores,
+#         "risk_and_liquidity_data": risk_and_liquidity_data,
+#         "recommendations_impact": dashboard_data["recommendations_impact"].get(client_id, {}),
+#     }
+
+# New Version :
 
 # Updated :
 
-def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3=s3, s3_bucket_name=S3_BUCKET_NAME):
+
+def safe_float(value, default=0.0):
+    """Safely convert a value to float; return default if conversion fails or if value is empty."""
+    try:
+        if value is None or str(value).strip() == "":
+            return default
+        return float(value)
+    except Exception as e:
+        logging.error(f"Error converting value '{value}' to float: {e}")
+        return default
+
+def get_safe_field(dictionary, keys, default=None):
+    """Helper function to safely get a nested field from a dictionary."""
+    try:
+        for key in keys:
+            dictionary = dictionary.get(key, {})
+        return dictionary or default
+    except AttributeError:
+        return default
+
+def rebalancing_strategy(before):
+    """
+    Example rebalancing strategy: Cap allocations above 50% and redistribute excess proportionally.
+    """
+    max_allocation = 50  # Max allocation threshold in %
+    excess_allocation = 0
+    after = {}
+    for category, percentage in before.items():
+        if percentage > max_allocation:
+            excess_allocation += percentage - max_allocation
+            after[category] = max_allocation
+        else:
+            after[category] = percentage
+    total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
+    redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
+    for category in after:
+        if after[category] < max_allocation:
+            after[category] += redistribution
+            after[category] = min(after[category], max_allocation)
+    return after
+
+def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_aws=True, s3_obj=None, s3_bucket_name=None):
     performance_list = []
     stress_test_results = []
     client_goal_progress = {}
@@ -11132,41 +15063,8 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
     portfolio_management_scores = []
     risk_and_liquidity_data = []
 
-    def get_safe_field(dictionary, keys, default=None):
-        """Helper function to safely get a nested field from a dictionary."""
-        try:
-            for key in keys:
-                dictionary = dictionary.get(key, {})
-            return dictionary or default
-        except AttributeError:
-            return default
-
-    def rebalancing_strategy(before):
-        """
-        Example rebalancing strategy: Cap allocations above 50% and redistribute excess proportionally.
-        """
-        max_allocation = 50  # Max allocation threshold in %
-        excess_allocation = 0
-        after = {}
-
-        # Cap allocations above the threshold and calculate excess
-        for category, percentage in before.items():
-            if percentage > max_allocation:
-                excess_allocation += percentage - max_allocation
-                after[category] = max_allocation
-            else:
-                after[category] = percentage
-
-        # Redistribute excess allocation proportionally
-        total_under_allocated = sum(1 for v in after.values() if v < max_allocation)
-        redistribution = excess_allocation / total_under_allocated if total_under_allocated > 0 else 0
-
-        for category in after:
-            if after[category] < max_allocation:
-                after[category] += redistribution
-                after[category] = min(after[category], max_allocation)
-
-        return after
+    # Define client_ids from the input clients
+    client_ids = [client.get("uniqueId") for client in clients if client.get("uniqueId")]
 
     for client in clients:
         client_id = client.get("uniqueId")
@@ -11177,20 +15075,20 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
         # Safely fetch client name
         client_name = get_safe_field(client, ["clientDetail", "clientName"], "Unknown")
         if client_name == "Unknown":
-            logging.warning(f"Missing client name for client ID {client_id}. Defaulting to 'Unknown'.")
+            logging.warning(f"Missing client name for client ID {client_id}.")
 
-        # Fetch client data
+        # Fetch client data from AWS or local
         client_data = None
         if use_aws:
             client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
             try:
-                response = s3.get_object(Bucket=s3_bucket_name, Key=client_data_key)
+                response = s3_obj.get_object(Bucket=s3_bucket_name, Key=client_data_key)
                 client_data = json.loads(response['Body'].read().decode('utf-8'))
             except Exception as e:
                 logging.error(f"Error retrieving client data from AWS for {client_id}: {e}")
                 continue
         else:
-            client_data_path = os.path.join("client_data", f"{client_id}.json")
+            client_data_path = os.path.join("client_data", "client_data", f"{client_id}.json")
             if os.path.exists(client_data_path):
                 with open(client_data_path, 'r') as file:
                     client_data = json.load(file)
@@ -11198,84 +15096,70 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
             logging.warning(f"No client data found for client ID {client_id}. Skipping.")
             continue
 
-        # Process and calculate metrics
-        funds = float(client_data.get("investmentAmount", 0) or 0)
-        assets = sum(float(value or 0) for value in client_data["assetsDatasets"]["datasets"][0]["data"])
-        liabilities = sum(float(value or 0) for value in client_data["liabilityDatasets"]["datasets"][0]["data"])
+        # Funds: use investmentAmount or available_funds
+        funds = safe_float(client_data.get("investmentAmount", 0) or client_data.get("available_funds", 0))
+        if funds <= 0:
+            continue
+
+        # ASSETS: from assetsDatasets -> datasets[0]["data"]
+        asset_values = client_data["assetsDatasets"]["datasets"][0]["data"]
+        assets = sum(safe_float(val) for val in asset_values)
+
+        # LIABILITIES: from liabilityDatasets -> datasets[0]["data"]
+        liability_values = client_data["liabilityDatasets"]["datasets"][0]["data"]
+        liabilities = sum(safe_float(val) for val in liability_values)
         net_worth = assets - liabilities
 
-        # Savings Rate
-        annual_income = sum(float(inc.get("amountIncome", 0) or 0) for inc in client_data.get("incomeFields", []))
+        # Savings Rate from incomeFields
+        annual_income = sum(safe_float(inc.get("amountIncome", 0)) for inc in client_data.get("incomeFields", []))
         savings_rate = (funds / annual_income * 100) if annual_income > 0 else 0
 
-        # Emergency Fund Coverage
-        monthly_expenses = sum(
-            float(liab.get("mortgageMonthly", 0) or 0) for liab in client_data["myLiabilities"].values()
-        ) + sum(
-            float(ins.get("monthlyPayLIClient", 0) or 0) for ins in client_data["insuranceCoverage"].values()
-        )
-        assets_labels = client_data["assetsDatasets"]["labels"]
-        assets_data = client_data["assetsDatasets"]["datasets"][0]["data"]
+        # Calculate Monthly Expenses:
+        liability_monthly_payments = 0
+        for liab in client_data.get("myLiabilities", {}).values():
+            for key, value in liab.items():
+                if key.lower().endswith("monthly") and value:
+                    liability_monthly_payments += safe_float(str(value).replace(",", ""))
+        insurance_monthly_premiums = 0
+        for policy in client_data.get("insurancePolicies", []):
+            for key, value in policy.items():
+                if key.startswith("premiumAmount") and value:
+                    insurance_monthly_premiums += safe_float(value)
+        monthly_expenses = liability_monthly_payments + insurance_monthly_premiums
 
+        # Liquid Assets: using assetsDatasets labels and data
         liquid_asset_categories = [
             "Cash/bank accounts",
             "Brokerage/non-qualified accounts",
             "529 Plans",
             "Roth IRA, Roth 401(k)"
         ]
+        assets_labels = client_data["assetsDatasets"]["labels"]
         liquid_assets = sum(
-            float(assets_data[i] or 0)
-            for i, label in enumerate(assets_labels)
+            safe_float(asset_values[i]) for i, label in enumerate(assets_labels)
             if label in liquid_asset_categories
         )
-        total_liabilities = liabilities
-        liquidity_ratio = (liquid_assets / total_liabilities * 100) if total_liabilities > 0 else 0
+        liquidity_ratio = (liquid_assets / liabilities * 100) if liabilities > 0 else 0
         emergency_fund_coverage = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
 
         # Debt-to-Asset Ratio
         debt_to_asset_ratio = (liabilities / assets * 100) if assets > 0 else 0
 
-        # Asset Allocation
-        portfolio_data = portfolios.get(client_id, [])
-        asset_allocation = {}
-        for asset in portfolio_data:
-            asset_class = asset.get("assetClass", "Other")
-            allocation = float(asset.get("Amount_Invested", 0))
-            asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
-        total_allocation = sum(asset_allocation.values())
-        asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
-
-        # Portfolio Metrics
-        diversification_score = len(asset_allocation)
-        sharpe_ratio = client_data.get("sharpeRatio", 0)
-        volatility = client_data.get("volatility", 0)
-        portfolio_current_value = sum(float(asset["current_value"] or 0) for asset in portfolio_data)
-        portfolio_daily_change = sum(float(asset["Daily_Value_Change"] or 0) for asset in portfolio_data)
-        portfolio_investment_gain_loss = sum(float(asset["Investment_Gain_or_Loss"] or 0) for asset in portfolio_data)
-        portfolio_investment_gain_loss_perc = (
-            (portfolio_investment_gain_loss / portfolio_current_value) * 100 if portfolio_current_value != 0 else 0
-        )
-
-        # Progress Towards Financial Goals
+        # Progress Towards Financial Goals (from goalFields)
         financial_goals = client_data.get("goalFields", [])
         progress_to_goals_score = {}
         for goal in financial_goals:
-            goal_cost = float(goal.get("cost", 0) or 0)
+            goal_cost = safe_float(goal.get("cost", 0))
             progress = (net_worth / goal_cost * 100) if goal_cost > 0 else 0
             progress_to_goals_score[goal.get("goal", "Unknown Goal")] = round(progress, 2)
-            
-        # client_goal_progress[client_id] = progress_to_goals_score
         client_goal_progress[client_name] = progress_to_goals_score
-        
 
-        # Append Data
         comparative_analysis_data.append({
             "client_name": client_name,
             "assets": assets,
             "liabilities": liabilities,
             "net_worth": net_worth,
-            "profit_loss": portfolio_investment_gain_loss,
-            "profit_loss_percentage": portfolio_investment_gain_loss_perc,
+            "profit_loss": None,  # To be updated in portfolio analysis
         })
         risk_and_liquidity_data.append({
             "client_name": client_name,
@@ -11284,48 +15168,139 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
             "net_worth": net_worth,
             "emergency_fund_coverage": emergency_fund_coverage,
         })
+
+        # Portfolio Analysis
+        portfolio_data = portfolios.get(client_id, [])
+        if not portfolio_data:
+            logging.warning(f"No portfolio data for client {client_id}. Skipping portfolio analysis.")
+            continue
+
+        invested_amount = sum(safe_float(asset.get("Amount_Invested", 0)) for asset in portfolio_data)
+        available_funds_calc = funds - invested_amount
+        portfolio_current_value = sum(safe_float(asset.get("current_value", 0)) for asset in portfolio_data)
+        portfolio_daily_change = sum(safe_float(asset.get("Daily_Value_Change", 0)) for asset in portfolio_data)
+        portfolio_investment_gain_loss = sum(safe_float(asset.get("Investment_Gain_or_Loss", 0)) for asset in portfolio_data)
+        portfolio_investment_gain_loss_perc = (
+            (portfolio_investment_gain_loss / portfolio_current_value) * 100 if portfolio_current_value != 0 else 0
+        )
+
+        # Asset Allocation from portfolio data
+        asset_allocation = {}
+        for asset in portfolio_data:
+            asset_class = asset.get("assetClass", "Other")
+            allocation = safe_float(asset.get("Amount_Invested", 0))
+            asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
+        total_allocation = sum(asset_allocation.values())
+        if total_allocation > 0:
+            asset_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
+        else:
+            asset_allocation = {}
+
+        diversification_score = len(asset_allocation)
+        sharpe_ratio = safe_float(client_data.get("sharpeRatio", 0))
+        volatility = safe_float(client_data.get("volatility", 0))
+
+        # Stress Testing: using first asset's current_value as baseline
+        stress_scenarios = ["recession", "high inflation", "market crash"]
+        stress_test_result = {"client_id": client_id, "scenarios": {}}
+        for scenario in stress_scenarios:
+            factor = {"recession": -0.2, "high inflation": -0.15, "market crash": -0.3}.get(scenario, -0.1)
+            try:
+                base_value = safe_float(portfolio_data[0].get("current_value", 0))
+            except Exception:
+                base_value = 0
+            stressed_value = base_value * (1 + factor)
+            stress_test_result["scenarios"][scenario] = round(stressed_value, 2)
+        stress_test_results.append(stress_test_result)
+
+        performance_list.append({
+            "client_id": client_id,
+            "client_name": client_name,
+            "retirement_goals": client_data.get("retirementGoal", "Unknown"),
+            "retirement_age": get_safe_field(client_data, ["retirementGoal", "retirementPlan", "retirementDateClient"], "Unknown"),
+            "financial_goals": financial_goals,
+            "client_income": client_data.get("incomeFields", "Unknown"),
+            "assets": assets,
+            "liabilities": liabilities,
+            "net_worth": net_worth,
+            "funds": funds,
+            "available_funds": available_funds_calc,
+            "invested_amount": invested_amount,
+            "portfolio_current_value": portfolio_current_value,
+            "portfolio_investment_gain_loss_perc": portfolio_investment_gain_loss_perc,
+            "portfolio_investment_gain_loss": portfolio_investment_gain_loss,
+            "asset_allocation": asset_allocation,
+            "total_allocation": total_allocation,
+            "sharpe_ratio": sharpe_ratio,
+            "savings_ratio": savings_rate,
+            "Liability Monthly Payments": liability_monthly_payments,
+            "Insurance Monthly Premiums": insurance_monthly_premiums,
+            "Calculated Monthly Expenses": monthly_expenses,
+            "Emergency Funds Coverage": emergency_fund_coverage,
+            "Debt To Asset Ratio": debt_to_asset_ratio,
+            "volatility": volatility,
+            "diversification_score": diversification_score,
+            "liquidity_ratio": liquidity_ratio,
+            "progress_to_goals_score": progress_to_goals_score,
+            "stress_test_results": stress_test_results
+        })
+
+        comparative_analysis_data.append({
+            "client_name": client_name,
+            "assets": assets,
+            "liabilities": liabilities,
+            "net_worth": net_worth,
+            "profit_loss": portfolio_investment_gain_loss,
+            "profit_loss_percentage": portfolio_investment_gain_loss_perc,
+        })
+
         portfolio_management_scores.append({
             "client_id": client_id,
             "client_name": client_name,
             "sharpe_ratio": sharpe_ratio,
-            "savings_rate": savings_rate,
+            "savings_ratio": savings_rate,
             "volatility": volatility,
             "diversification_score": diversification_score,
             "progress_to_goals_score": progress_to_goals_score,
         })
 
-    # Prepare rebalancing and recommendations
+        risk_and_liquidity_data.append({
+            "client_name": client_name,
+            "liquidity_ratio": liquidity_ratio,
+            "debt_to_asset_ratio": debt_to_asset_ratio,
+            "net_worth": net_worth,
+            "emergency_fund_coverage": emergency_fund_coverage,
+        })
+
+        logging.info(f"✅ Completed financial analysis for {client_id} in {time.time() - start_analysis:.2f} seconds")
+
+    # Prepare rebalancing and recommendations across all portfolios
     dashboard_data = {"recommendations_impact": {}}
-    for client_id, portfolio_data in portfolios.items():
-        # Aggregate current asset allocation (calculate 'before')
+    for cid, port_data in portfolios.items():
         asset_allocation = {}
-        for asset in portfolio_data:
+        for asset in port_data:
             asset_class = asset.get("assetClass", "Other")
-            allocation = float(asset.get("Amount_Invested", 0))
+            allocation = safe_float(asset.get("Amount_Invested", 0))
             asset_allocation[asset_class] = asset_allocation.get(asset_class, 0) + allocation
-
-        # Normalize asset allocation to percentages
-        total_allocation = sum(asset_allocation.values())
-        before_allocation = {k: v / total_allocation * 100 for k, v in asset_allocation.items()}
-
-        # Calculate 'after' allocation using the rebalancing strategy
+        total_alloc = sum(asset_allocation.values())
+        if total_alloc > 0:
+            before_allocation = {k: v / total_alloc * 100 for k, v in asset_allocation.items()}
+        else:
+            before_allocation = {}
         after_allocation = rebalancing_strategy(before_allocation)
-
-        # Generate recommendations
-        recommendations = [
-            f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50
-        ]
-        client_rebalancing_recommendations[client_id] = recommendations
-
-        # Prepare chart data for recommendations impact
-        chart_data = {
+        recommendations = [f"Reduce allocation in {cat} to below 50%." for cat, perc in before_allocation.items() if perc > 50]
+        client_rebalancing_recommendations[cid] = recommendations
+        dashboard_data["recommendations_impact"][cid] = {
             "categories": list(before_allocation.keys()),
             "before_values": list(before_allocation.values()),
-            "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()],
+            "after_values": [after_allocation.get(cat, 0) for cat in before_allocation.keys()]
         }
-        dashboard_data["recommendations_impact"][client_id] = chart_data
-        print(f"Dashboard data for recommendations impact : {chart_data}")
-        
+
+    # Get recommendations impact for the last client in client_ids
+    last_client_id = client_ids[-1] if client_ids else None
+    recommendations_impact = dashboard_data["recommendations_impact"].get(last_client_id, {})
+
+    curr_date = datetime.now()
     return {
         "performance_list": performance_list,
         "stress_test_results": stress_test_results,
@@ -11334,10 +15309,8 @@ def calculate_dashboard_metrics(clients, portfolios, client_summary_folder, use_
         "comparative_analysis_data": comparative_analysis_data,
         "portfolio_management_scores": portfolio_management_scores,
         "risk_and_liquidity_data": risk_and_liquidity_data,
-        "recommendations_impact": dashboard_data["recommendations_impact"].get(client_id, {}),
+        "recommendations_impact": recommendations_impact,
     }
-
-
 
 
 # Visualization functions :
@@ -11357,26 +15330,6 @@ def plot_comparative_analysis(data):
         category: [client.get(category, 0) for client in data]
         for category in categories
     }
-
-    # x = np.arange(len(clients))  # Client positions
-    # width = 0.2  # Bar width
-
-    # fig, ax = plt.subplots(figsize=(12, 8))
-
-    # # Plot bars for each category
-    # for i, category in enumerate(categories):
-    #     ax.bar(x + i * width, values[category], width, label=category.replace('_', ' ').title())
-
-    # # Adjust tick positions and labels
-    # ax.set_xticks(x + (width * (len(categories) - 1)) / 2)  # Center tick labels
-    # ax.set_xticklabels(clients, rotation=45, ha='right')
-
-    # ax.set_ylabel('Values')
-    # ax.set_title('Comparative Analysis of Clients')
-    # ax.legend()
-
-    # plt.tight_layout()
-    # plt.show()
 
     # Prepare chart data for frontend
     chart_data = {
@@ -11436,14 +15389,14 @@ def plot_portfolio_management_scores(data):
         plt.show()
 
 # updated :
-
+# """
+#     Create a horizontal bar chart for goal achievement progress.
+#     :param data: Dict of progress scores for each client and their goals.
+#                  Example: {'John': {'Home': 50, 'Education': -25}, 'Jane': {'Retirement': 150}}
+#     :return: Chart data for the frontend.
+#     """
 def plot_goal_achievement_progress(data):
-    """
-    Create a horizontal bar chart for goal achievement progress.
-    :param data: Dict of progress scores for each client and their goals.
-                 Example: {'John': {'Home': 50, 'Education': -25}, 'Jane': {'Retirement': 150}}
-    :return: Chart data for the frontend.
-    """
+    
     if not data:
         print("No data available for plotting goal achievement progress.")
         return {"clients": [], "goals": [], "progress_values": [], "annotations": []}
@@ -11485,30 +15438,6 @@ def plot_goal_achievement_progress(data):
         for progress in progress_values
     ]
 
-    # ax.barh(y_positions, progress_values, color=bar_colors, edgecolor="black")
-
-    # # Add labels
-    # ax.set_yticks(y_positions)
-    # ax.set_yticklabels(labels, fontsize=10)
-    # ax.set_xlabel("Progress")
-    # ax.set_title("Goal Achievement Progress")
-    # ax.axvline(x=0, color="black", linewidth=0.8, linestyle="--")  # Reference line at 0%
-
-    # # Annotate the bars with descriptive text
-    # for i, (v, annotation) in enumerate(zip(progress_values, annotations)):
-    #     ax.text(
-    #         v,
-    #         i,
-    #         annotation,
-    #         va="center",
-    #         ha="right" if v < 0 else "left",
-    #         fontsize=9,
-    #         color="black"
-    #     )
-
-    # plt.tight_layout()
-    # plt.show()
-
     # Prepare data for frontend
     chart_data = {
         "clients": [label.split(":")[0] for label in labels],
@@ -11520,101 +15449,18 @@ def plot_goal_achievement_progress(data):
 
 
 
-# Prev :
-
-# def plot_goal_achievement_progress(data):
-#     """
-#     Create a horizontal bar chart for goal achievement progress.
-#     :param data: Dict of progress scores for each client and their goals.
-#     """
-#     if not data:
-#         print("No data available for plotting goal achievement progress.")
-#         return
-
-#     fig, ax = plt.subplots(figsize=(10, 6))
-
-#     y_positions = []
-#     labels = []
-#     progress_values = []
-
-#     # Extract progress scores and prepare data
-#     for client, goals in data.items():
-#         if not goals:
-#             print(f"No goals for client {client}. Skipping.")
-#             continue
-#         for goal_name, progress in goals.items():
-#             y_positions.append(len(y_positions))  # Incremental index
-#             labels.append(f"{client}: {goal_name or 'Unknown Goal'}")  # Combine client and goal
-#             progress_values.append(progress)
-
-#     if not progress_values:
-#         print("No valid progress values to plot.")
-#         return
-
-#     # Bar colors based on progress type
-#     bar_colors = [
-#         "green" if progress > 0 else "orange" if -50 <= progress <= 0 else "red"
-#         for progress in progress_values
-#     ]
-
-#     ax.barh(y_positions, progress_values, color=bar_colors, edgecolor="black")
-
-#     # Add labels
-#     ax.set_yticks(y_positions)
-#     ax.set_yticklabels(labels, fontsize=10)
-#     ax.set_xlabel("Progress (%)")
-#     ax.set_title("Goal Achievement Progress")
-#     ax.axvline(x=0, color="black", linewidth=0.8, linestyle="--")  # Reference line at 0%
-
-#     # Annotate the bars with progress values
-#     for i, v in enumerate(progress_values):
-#         ax.text(
-#             v,
-#             i,
-#             f"{v:.1f}%",
-#             va="center",
-#             ha="right" if v < 0 else "left",
-#             fontsize=9,
-#         )
-
-#     plt.tight_layout()
-#     plt.show()
-
 #updated version :
-
+# """
+#     Create a bubble chart for risk and liquidity analysis and prepare data for frontend.
+#     :param data: List of dicts with metrics (liquidity_ratio, debt_to_asset_ratio, net_worth).
+#     """
 def plot_risk_and_liquidity(data):
-    """
-    Create a bubble chart for risk and liquidity analysis and prepare data for frontend.
-    :param data: List of dicts with metrics (liquidity_ratio, debt_to_asset_ratio, net_worth).
-    """
+    
     x = [item['liquidity_ratio'] for item in data]
     y = [item['debt_to_asset_ratio'] for item in data]
     raw_sizes = [item['net_worth'] / 1e6 for item in data]  # Scale net worth for visualization
     sizes = [max(abs(size), 0.01) * 500 for size in raw_sizes]  # Normalize and scale sizes
     labels = [item['client_name'] for item in data]
-
-    # Plot bubble chart
-    # fig, ax = plt.subplots(figsize=(12, 8))
-    # scatter = ax.scatter(
-    #     x, y, s=sizes, alpha=0.7, c=raw_sizes, cmap='viridis', edgecolors='k', linewidth=0.5
-    # )
-
-    # Add labels with dynamic offsets
-    # for i, label in enumerate(labels):
-    #     ax.text(
-    #         x[i], y[i] * 1.05, label, fontsize=9, ha='center', va='bottom',
-    #         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1)
-    #     )
-
-    # Apply logarithmic scale for wide y-axis range
-    # ax.set_yscale('log')
-    # ax.set_xlabel('Liquidity Ratio (%)')
-    # ax.set_ylabel('Debt-to-Asset Ratio (%) (Log Scale)')
-    # ax.set_title('Risk and Liquidity Analysis')
-    # plt.colorbar(scatter, ax=ax, label='Net Worth (in $M)')
-    # plt.grid(True, which="both", linestyle='--', linewidth=0.5, alpha=0.7)
-    # plt.tight_layout()
-    # plt.show()
 
     # Prepare chart data for frontend
     chart_data = {
@@ -11627,14 +15473,14 @@ def plot_risk_and_liquidity(data):
 
 
 # updated :
-
+# """
+#     Create a before-and-after bar chart for recommendations impact and prepare chart data for the frontend.
+#     :param before: Dict of asset allocation percentages before recommendations.
+#     :param after: Dict of asset allocation percentages after recommendations.
+#     :return: Chart data for frontend.
+#     """
 def plot_recommendations_impact(before, after):
-    """
-    Create a before-and-after bar chart for recommendations impact and prepare chart data for the frontend.
-    :param before: Dict of asset allocation percentages before recommendations.
-    :param after: Dict of asset allocation percentages after recommendations.
-    :return: Chart data for frontend.
-    """
+    
     # Handle empty input gracefully
     if not before or not after:
         print("No data provided for plotting.")
@@ -11650,19 +15496,6 @@ def plot_recommendations_impact(before, after):
     before_values = [before.get(cat, 0) for cat in categories]
     after_values = [after.get(cat, 0) for cat in categories]
 
-    # fig, ax = plt.subplots(figsize=(10, 6))
-    # ax.bar(x - 0.2, before_values, width=0.4, label='Before', color='skyblue')
-    # ax.bar(x + 0.2, after_values, width=0.4, label='After', color='orange')
-
-    # ax.set_xticks(x)
-    # ax.set_xticklabels(categories, rotation=45, ha='right')
-    # ax.set_ylabel('Allocation (%)')
-    # ax.set_title('Impact of Recommendations on Asset Allocation')
-    # ax.legend()
-
-    # plt.tight_layout()
-    # plt.show()
-
     # Prepare data for the frontend
     chart_data = {
         "categories": categories,
@@ -11674,9 +15507,8 @@ def plot_recommendations_impact(before, after):
 
 # with api :
 
-@app.route('/dashboard_infographics', methods=['POST'])
+@app.route('/api/dashboard_infographics', methods=['POST'])
 def dashboard_infographics():
-# def dashboard_infographics(clients):
     try:
         clients = request.json.get("data")
         if not clients:
@@ -11743,18 +15575,6927 @@ def dashboard_infographics():
     except Exception as e:
         print(f"Error calculating dashboard metrics: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+    
+    
 
 #################################################################################################################################
+# Tax Advisor Chatbot :
+# from src.taxes.tax_advice import *
+
+import json
+import os
+import requests
+from flask import Flask, request, jsonify, session
+
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
+
+# AWS S3 Configuration
+# S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+tax_assessment_folder = os.getenv('tax_assessment_folder')
+TAX_QUESTIONS_KEY = f"{tax_assessment_folder}/tax_questions.json"
+revisit_assessment_count = {}
+
+# tax_questions = [
+#         "What is your primary source of income?",
+#         "What is your total annual taxable income?",
+#         "Which state do you reside in?",
+#         "Do you have any dependents?",
+#         "What tax deductions or exemptions are you eligible for?",
+#         "Do you own any real estate properties?",
+#         "Are you self-employed or a small business owner?",
+#         "Do you have medical expenses exceeding a certain percentage of your income?",
+#         "Do you contribute to a charity or nonprofit organization?",
+#         "Have you made any large one-time purchases in the past year?"
+# ]
+
+#################################################################################
+
+# Taxes Calculations 
+
+# Sample tax rates : Static :
+# Default tax rates (fallback if online search fails)
+
+# Default tax rates (fallback if online search fails)
+DEFAULT_TAX_RATES = {
+    "Employment": 0.3,         # 30% tax on employment income
+    "Capital Gains": 0.15,     # 15% tax on investment gains
+    "Real Estate": 0.25,       # 25% property tax on real estate
+    "Business": 0.2,           # 20% tax on business income
+    "Other Assets": 0.1,       # 10% tax on miscellaneous assets
+    "Liabilities": 0.05        # 5% tax on loan interests
+}
+
+from urllib.parse import urlparse, parse_qs, unquote
+from bs4 import BeautifulSoup
+
+# working code :
+
+def extract_tax_rates(text):
+    tax_rates = DEFAULT_TAX_RATES.copy()
+    patterns = {
+        "Employment": r"(?:Federal Income Tax Rates|Taxable Income).*?(\d{1,2}\.?\d*)%",
+        "Capital Gains": r"(Capital\s+Gains|Investments).*?(\d{1,2}\.?\d*)%",
+        "Real Estate": r"(Real\s+Estate|Property).*?(\d{1,2}\.?\d*)%",
+        "Business": r"(Business Income|Self-Employment).*?(\d{1,2}\.?\d*)%",
+        "Other Assets": r"(Other\s+Assets|Miscellaneous).*?(\d{1,2}\.?\d*)%",
+        "Liabilities": r"(Loan\s+Interest|Debt).*?(\d{1,2}\.?\d*)%",
+    }
+    
+    # First try to find tables with tax rates
+    tables = re.findall(r"<table.*?>(.*?)</table>", text, re.DOTALL | re.IGNORECASE)
+    for table in tables:
+        matches = re.findall(r">(\d{1,2}\.?\d*)%<", table)
+        if matches:
+            try:
+                tax_rates["Employment"] = max(tax_rates["Employment"], float(matches[0])/100)
+            except:
+                pass
+
+    # Then try pattern matching
+    for category, pattern in patterns.items():
+        matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+        if matches:
+            try:
+                # Take the highest rate found for each category
+                rates = [float(m[-1])/100 for m in matches if m]
+                if rates:
+                    tax_rates[category] = max(rates)
+            except (ValueError, IndexError) as e:
+                continue
+
+    return tax_rates
+
+def get_irs_url():
+    FALLBACK_URL = "https://www.irs.gov/filing/federal-income-tax-rates-and-brackets"
+    
+    try:
+        # Try DuckDuckGo search first
+        query = "IRS tax rates 2024 site:irs.gov"
+        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        
+        response = requests.get(search_url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        results = soup.find_all("a", class_="result__url")
+        
+        for result in results:
+            url = result.get("href", "")
+            if "irs.gov" in url:
+                # Handle DuckDuckGo redirects
+                if url.startswith("/l/"):
+                    parsed = urlparse(url)
+                    uddg = parse_qs(parsed.query).get("uddg", [""])[0]
+                    if uddg:
+                        return unquote(uddg)
+                return url
+
+    except Exception as e:
+        print(f"Search failed: {e}")
+
+    # Fallback to direct URL
+    print("Using fallback IRS URL")
+    return FALLBACK_URL
+
+def fetch_tax_rates():
+    url = get_irs_url()
+    print(f"Fetching from: {url}")
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        # Clean up HTML
+        soup = BeautifulSoup(response.text, "html.parser")
+        for script in soup(["script", "style", "nav", "footer"]):
+            script.decompose()
+            
+        return extract_tax_rates(soup.get_text(separator=" ", strip=True))
+    
+    except Exception as e:
+        print(f"Fetch failed: {e}")
+        return DEFAULT_TAX_RATES
+
+def get_latest_tax_rates():
+    print("Fetching latest tax rates...")
+    rates = fetch_tax_rates()
+    print("Successfully retrieved rates" if rates != DEFAULT_TAX_RATES else "Using default rates")
+    return rates
+
+def calculate_taxes(user_responses, client_id, TAX_RATES):
+    """
+    Calculate total taxes based on user's chatbot responses and financial data.
+    
+    :param user_responses: Dictionary of user-provided responses from chatbot
+    :param client_id: Client's unique identifier
+    :param TAX_RATES: Dictionary with current tax rates
+    :return: Dictionary with total tax amount and detailed breakdown
+    """
+    total_taxes = 0.0
+    tax_details = {}
+    
+    # 🔹 Load client financial data (from AWS or local based on USE_AWS)
+    client_data = None
+    if USE_AWS:
+        client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+            client_data = json.loads(response['Body'].read().decode('utf-8'))
+        except Exception as e:
+            logging.error(f"Error retrieving client data from AWS: {e}")
+            return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+    else:
+        client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+        if not os.path.exists(client_data_file_path):
+            return {"error": f"No client data found for client ID: {client_id}"}
+        try:
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading local client data: {e}")
+            return {"error": f"Failed to load client data: {str(e)}"}
+    
+    if not client_data:
+        return {"error": "Client data could not be retrieved."}
+    
+    # 🔹 **Step 1: Tax on Income**
+    income_sources = client_data.get("incomeFields", [])
+    for income in income_sources:
+        source = income.get("sourceIncome", "Other")
+        income_amount = float(income.get("amountIncome", 0) or 0)
+        # Use fallback tax rate if needed; DEFAULT_TAX_RATES must be defined elsewhere.
+        rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))
+        income_tax = round(income_amount * rate, 2)
+        tax_details[f"Income Tax - {source}"] = income_tax
+        total_taxes += income_tax
+    
+    # 🔹 **Step 2: Tax on Assets**
+    asset_value_keys = [
+        "current529Plan", "currentAcc", "currentAnnuities", "currentBusiness",
+        "currentCashAcc", "currentEstate", "currentHome", "currentIRA",
+        "currentKb", "currentOtherLib", "currentIRAs"
+    ]
+    
+    assets = client_data.get("assetsLiabilities", {})
+    for asset in assets.values():
+        asset_name = asset.get("assetsName", "Other Assets")
+        current_value = 0.0
+        # Check each possible key; use the first one that gives a valid float.
+        for key in asset_value_keys:
+            if key in asset and asset[key] not in [None, ""]:
+                try:
+                    current_value = float(asset[key])
+                    break
+                except Exception:
+                    current_value = 0.0
+        # Determine tax rate based on asset type (case-insensitive)
+        asset_name_lower = asset_name.lower()
+        if "home" in asset_name_lower or "real estate" in asset_name_lower:
+            rate = TAX_RATES.get("Real Estate", 0.2)
+        elif "business" in asset_name_lower:
+            rate = TAX_RATES.get("Business", 0.25)
+        else:
+            rate = TAX_RATES.get("Other Assets", 0.15)
+    
+        asset_tax = round(current_value * rate, 2)
+        tax_details[f"Asset Tax - {asset_name}"] = asset_tax
+        total_taxes += asset_tax
+    
+    # 🔹 **Step 3: Tax on Liabilities**
+    liabilities = client_data.get("myLiabilities", {})
+    for liability in liabilities.values():
+        liability_name = liability.get("liabilityName", "Loan Interest")
+        liability_name_lower = liability_name.lower()
+        # Determine which keys to use based on the liability type
+        if "mortgage" in liability_name_lower:
+            balance_key = "mortgageBalance"
+            interest_key = "mortgageInterest"
+        elif "credit card" in liability_name_lower:
+            balance_key = "creditCardBalance"
+            interest_key = "creditCardInterest"
+        else:
+            balance_key = "balance"
+            interest_key = "interest"
+    
+        try:
+            loan_balance = float(liability.get(balance_key, 0) or 0)
+        except Exception:
+            loan_balance = 0.0
+        try:
+            interest_rate = float(liability.get(interest_key, 0) or 0) / 100
+        except Exception:
+            interest_rate = 0.0
+        liab_rate = TAX_RATES.get("Liabilities", 0.05)
+        interest_tax = round(loan_balance * interest_rate * liab_rate, 2)
+    
+        tax_details[f"Loan Interest Tax - {liability_name}"] = interest_tax
+        total_taxes += interest_tax
+        
+    return {"total_taxes": round(total_taxes, 2), "tax_breakdown": tax_details}
+
+
+# def calculate_taxes(user_responses, client_id,TAX_RATES):
+#     """
+#     Calculate total taxes based on user's chatbot responses and financial data.
+   
+#     :param user_responses: Dictionary of user-provided responses from chatbot
+#     :param client_id: Client's unique identifier
+#     :return: Dictionary with total tax amount and detailed breakdown
+#     """
+#     total_taxes = 0
+#     tax_details = {}
+ 
+#     # 🔹 Load client financial data (from AWS or local based on USE_AWS)
+#     client_data = None  # Initialize to avoid reference errors
+ 
+#     if USE_AWS:
+#         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except Exception as e:
+#             logging.error(f"Error occurred while retrieving client data from AWS: {e}")
+#             return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#     else:
+#         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#         if not os.path.exists(client_data_file_path):
+#             return {"error": f"No client data found for client ID: {client_id}"}
+ 
+#         try:
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#         except Exception as e:
+#             logging.error(f"Error loading local client data: {e}")
+#             return {"error": f"Failed to load client data: {str(e)}"}
+ 
+#     if not client_data:
+#         return {"error": "Client data could not be retrieved."}
+ 
+#     # 🔹 **Step 1: Tax on Income**
+#     income_sources = client_data.get("incomeFields", [])
+#     for income in income_sources:
+#         source = income.get("sourceIncome", "Other")
+#         income_amount = float(income.get("amountIncome", 0) or 0)  # Ensure numeric conversion
+#         tax_rate = TAX_RATES.get(source, DEFAULT_TAX_RATES.get(source, 0.3))  # Use fallback rate
+ 
+#         income_tax = income_amount * tax_rate
+#         tax_details[f"Income Tax - {source}"] = income_tax
+#         total_taxes += income_tax
+ 
+#     # 🔹 **Step 2: Tax on Assets**
+#     assets = client_data.get("assetsLiabilities", {})
+#     for asset in assets.values():  # Use `.values()` to avoid key errors
+#         asset_value = float(asset.get("currentLibKb", 0) or 0)
+#         asset_name = asset.get("assetsName", "Other Assets")
+ 
+#         if "Home" in asset_name or "Real Estate" in asset_name:
+#             tax_rate = TAX_RATES.get("Real Estate", 0.2)  # Default rate fallback
+#         elif "Business" in asset_name:
+#             tax_rate = TAX_RATES.get("Business", 0.25)
+#         else:
+#             tax_rate = TAX_RATES.get("Other Assets", 0.15)
+ 
+#         # asset_tax = asset_value * tax_rate
+#         asset_tax = round(asset_value * tax_rate, 2) # round up to 2 decimal places
+#         tax_details[f"Asset Tax - {asset_name}"] = asset_tax
+#         total_taxes += asset_tax
+ 
+#     # 🔹 **Step 3: Tax on Liabilities**
+#     liabilities = client_data.get("myLiabilities", {})
+#     for liability in liabilities.values():  # Use `.values()` to avoid key errors
+#         interest_rate = float(liability.get("mortgageInterest", 0) or 0) / 100  # Convert % to decimal
+#         loan_balance = float(liability.get("mortgageBalance", 0) or 0)
+#         # interest_tax = loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05)
+#         interest_tax = round(loan_balance * interest_rate * TAX_RATES.get("Liabilities", 0.05), 2) # round up to 2 decimal places
+ 
+#         liability_name = liability.get("liabilityName", "Loan Interest")
+#         tax_details[f"Loan Interest Tax - {liability_name}"] = interest_tax
+#         total_taxes += interest_tax
+ 
+#     return {"total_taxes": round(total_taxes, 2), "tax_breakdown": tax_details}
+
+
+# from groq import Groq  # For fast inference
+from phi.agent import Agent  # For structured reasoning
+from phi.agent import Agent, AgentMemory
+from phi.model.groq import Groq
+from phi.tools.yfinance import YFinanceTools
+from phi.tools.duckduckgo import DuckDuckGo
+
+from phi.agent import Agent, RunResponse
+from phi.model.google import Gemini
+
+# Initialize Groq client
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+# Set Google API Key
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# setx GROQ_API_KEY # # set it up manually in cmd
+
+# Initialize Phi agent
+phi_agent = Agent()
+
+###################################################################################################################
+
+# web search for the current tax rates :
+web_search_agent = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent = Agent(
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# Back Up agents declaration :
+
+# 1. LLAMA 3.3 70b :
+
+# web search for the current tax rates :
+web_search_agent_llama = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_llama = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_llama = Agent(
+    model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# 2. GPT-J 6B Fallback Agent :
+
+web_search_agent_gpt_j = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_gpt_j = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_gpt_j = Agent(
+    model=Groq(id="gpt-j-6b"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+#3. using Bloom :
+
+# web search for the current tax rates :
+web_search_agent_bloom = Agent(
+    name="Web Search Agent",
+    role="Search Web for Current US Tax Rates",
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [DuckDuckGo(),],
+    instructions = ["Always provide Sources"],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+# calculate taxes on the assets invested in :
+finance_agent_bloom = Agent(
+    name="Finance Agent",
+    role="Calculate the taxes on the given assets if in profits and based on the investment duration", 
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    tools = [
+        YFinanceTools(stock_price=True,analyst_recommendations=True,stock_fundamentals=True,
+                      company_news=True,company_info=True,key_financial_ratios=True,
+                      income_statements= True,technical_indicators=True,historical_prices=True),
+        ],
+    description = "Format your response using markdown and use tables to display data where possible.",
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    show_tools_calls= True,
+    markdown = True,
+)
+
+multi_ai_agent_bloom = Agent(
+    model=Groq(id="bloom-7b1"),
+    # model=Groq(id="llama-3.3-70b-versatile"), # cant handle large tokens
+    # model=Gemini(id="gemini-1.5-flash",api_key=GOOGLE_API_KEY),
+    team = [web_search_agent,finance_agent],
+    instructions = ["Always provide Sources",
+                    "Format your response using markdown and use tables to display data where possible."],
+    description="You are a helpful assistant that always responds in a polite, upbeat and positive manner.",
+    # num_history_responses=3,
+    # memory = AgentMemory(
+    #     create_user_memories=True,
+    #     create_session_summary=True
+    #     ),
+    # add_chat_history_to_messages = True,
+    show_tools_calls= True,
+    markdown = True,
+)
+
+##################################################################################################################################
+
+# # Function to generate tax-saving suggestions using Multi-AI Agent 
+
+# new code : with multiple failsafe :
+
+def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
+    """
+    Generate tax-saving suggestions using the multi-ai-agent (Groq + Phi).
+    """
+    # Step 1: Load client financial data
+    client_data = None
+    if USE_AWS:
+        client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+            client_data = json.loads(response['Body'].read().decode('utf-8'))
+        except Exception as e:
+            logging.error(f"Error retrieving client data from AWS: {e}")
+            return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+    else:
+        client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+        if not os.path.exists(client_data_file_path):
+            return {"error": f"No client data found for client ID: {client_id}"}
+
+        try:
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading local client data: {e}")
+            return {"error": f"Failed to load client data: {str(e)}"}
+
+    if not client_data:
+        return {"error": "Client data could not be retrieved."}
+    
+    # 🔹 **Step 2: Load Portfolio Data**
+    portfolio_data = None
+    if USE_AWS:
+        portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+            portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+        except s3.exceptions.NoSuchKey:
+            logging.warning(f"Portfolio file not found for client ID: {client_id}")
+            portfolio_data = "No investments made"
+    else:
+        portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+        if os.path.exists(portfolio_file_path):
+            with open(portfolio_file_path, 'r') as file:
+                portfolio_data = json.load(file)
+        else:
+            logging.warning(f"Portfolio file not found for client ID: {client_id}")
+            portfolio_data = "No investments made"
+
+    # Step 2: Prepare input for Multi-AI Agent
+    input_data = {
+        "user_responses": user_responses,
+        "client_data": client_data,
+        "tax_rates": TAX_RATES,
+        "portfolio_data": portfolio_data
+    }
+
+    # Step 3: Use Multi-AI Agent for Tax Optimization
+    # response = multi_ai_agent.print_response(
+    #     f"""
+    #     Based on the following financial data, tax rates, and user responses,
+    #     generate **actionable tax-saving strategies**:
+        
+    #     ```json
+    #     {json.dumps(input_data, indent=4)}
+    #     ```
+        
+    #     - Consider state-specific tax regulations.
+    #     - Identify possible deductions or exemptions.
+    #     - Suggest optimal investment strategies for tax efficiency.
+    #     - Provide structured, markdown-formatted output.
+    #     """
+    # )
+    
+    print(input_data)
+    # Step 3: Use Multi-AI Agent for Tax Optimization
+    try:
+        response = multi_ai_agent.run(
+             message=f"""
+                        Based on the available financial data:
+                        - **Annual Income:** {client_data.get('income', 'N/A')}
+                        - **Tax Bracket:** {TAX_RATES}
+                        - **Investment Portfolio:** {portfolio_data}
+                        - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                        - **Business Details:** {client_data.get('business', 'N/A')}
+                        - **Some user information related to tax:** {user_responses}
+
+                        Generate **a structured tax-saving strategy** that includes:
+
+                        1. **Investment Strategies for Tax Efficiency**
+                            - Tax-advantaged accounts (401(k), IRA, etc.).
+                            - Tax-efficient investing strategies.
+
+                        2. **Deductions, Exemptions, and Credits**
+                            - Identify applicable federal and Texas-specific deductions.
+                            - Highlight key tax credits that reduce liability.
+
+                        3. **State-Specific Tax Optimizations (Texas)**
+                            - Considerations based on local tax laws.
+
+                        4. **Tax-Loss Harvesting Opportunities**
+                            - Evaluate the investment portfolio for capital gains offsets.
+
+                        **Ensure the response is structured in markdown format with tables where applicable.**  
+                        - Do not request additional user input.  
+                        - Do not use first-person language.  
+                        - Do not mention AI agents or task delegation.  
+                        """,
+            messages=[input_data], 
+            stream=False  # Ensure it's not streamed, so we can capture it
+        )
+
+        # Extract response content safely
+        if isinstance(response, RunResponse) and hasattr(response, "content"):
+            response_text = response.content  # Extracting the actual response text
+        else:
+            response_text = "Error: Unexpected AI response format."
+
+        # Process the response from LLM
+        response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+
+    except Exception as e:
+        logging.error(f"Error during AI processing: {e}")
+        # use llama as fail safe :
+        try:
+            response = multi_ai_agent_llama.run(
+                message=f"""
+                            Based on the available financial data:
+                            - **Annual Income:** {client_data.get('income', 'N/A')}
+                            - **Tax Bracket:** {TAX_RATES}
+                            - **Investment Portfolio:** {portfolio_data}
+                            - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                            - **Business Details:** {client_data.get('business', 'N/A')}
+                            - **Some user information related to tax:** {user_responses}
+
+                            Generate **a structured tax-saving strategy** that includes:
+
+                            1. **Investment Strategies for Tax Efficiency**
+                                - Tax-advantaged accounts (401(k), IRA, etc.).
+                                - Tax-efficient investing strategies.
+
+                            2. **Deductions, Exemptions, and Credits**
+                                - Identify applicable federal and Texas-specific deductions.
+                                - Highlight key tax credits that reduce liability.
+
+                            3. **State-Specific Tax Optimizations (Texas)**
+                                - Considerations based on local tax laws.
+
+                            4. **Tax-Loss Harvesting Opportunities**
+                                - Evaluate the investment portfolio for capital gains offsets.
+
+                            **Ensure the response is structured in markdown format with tables where applicable.**  
+                            - Do not request additional user input.  
+                            - Do not use first-person language.  
+                            - Do not mention AI agents or task delegation.  
+                            """,
+                messages=[input_data], 
+                stream=False  # Ensure it's not streamed, so we can capture it
+            )
+
+            # Extract response content safely
+            if isinstance(response, RunResponse) and hasattr(response, "content"):
+                response_text = response.content  # Extracting the actual response text
+            else:
+                response_text = "Error: Unexpected AI response format."
+
+            # Process the response from LLM
+            response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+            # response_text = f"Error: {str(e)}"
+            
+        except Exception as e:
+            logging.error(f"Error during LLAMA processing: {e}")
+            # using gpt j as fail safe :
+            try:
+                response = multi_ai_agent_gpt_j.run(
+                message=f"""
+                            Based on the available financial data:
+                            - **Annual Income:** {client_data.get('income', 'N/A')}
+                            - **Tax Bracket:** {TAX_RATES}
+                            - **Investment Portfolio:** {portfolio_data}
+                            - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                            - **Business Details:** {client_data.get('business', 'N/A')}
+                            - **Some user information related to tax:** {user_responses}
+
+                            Generate **a structured tax-saving strategy** that includes:
+
+                            1. **Investment Strategies for Tax Efficiency**
+                                - Tax-advantaged accounts (401(k), IRA, etc.).
+                                - Tax-efficient investing strategies.
+
+                            2. **Deductions, Exemptions, and Credits**
+                                - Identify applicable federal and Texas-specific deductions.
+                                - Highlight key tax credits that reduce liability.
+
+                            3. **State-Specific Tax Optimizations (Texas)**
+                                - Considerations based on local tax laws.
+
+                            4. **Tax-Loss Harvesting Opportunities**
+                                - Evaluate the investment portfolio for capital gains offsets.
+
+                            **Ensure the response is structured in markdown format with tables where applicable.**  
+                            - Do not request additional user input.  
+                            - Do not use first-person language.  
+                            - Do not mention AI agents or task delegation.  
+                            """,
+                    messages=[input_data], 
+                    stream=False  # Ensure it's not streamed, so we can capture it
+                )
+
+                # Extract response content safely
+                if isinstance(response, RunResponse) and hasattr(response, "content"):
+                    response_text = response.content  # Extracting the actual response text
+                else:
+                    response_text = "Error: Unexpected AI response format."
+
+                # Process the response from LLM
+                response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                # response_text = f"Error: {str(e)}"
+                
+            except Exception as e:
+                logging.error(f"Error during GPT-J processing: {e}")
+                # using bloom as fail safe :
+                try :
+                    response = multi_ai_agent_bloom.run(
+                        message=f"""
+                                    Based on the available financial data:
+                                    - **Annual Income:** {client_data.get('income', 'N/A')}
+                                    - **Tax Bracket:** {TAX_RATES}
+                                    - **Investment Portfolio:** {portfolio_data}
+                                    - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+                                    - **Business Details:** {client_data.get('business', 'N/A')}
+                                    - **Some user information related to tax:** {user_responses}
+
+                                    Generate **a structured tax-saving strategy** that includes:
+
+                                    1. **Investment Strategies for Tax Efficiency**
+                                        - Tax-advantaged accounts (401(k), IRA, etc.).
+                                        - Tax-efficient investing strategies.
+
+                                    2. **Deductions, Exemptions, and Credits**
+                                        - Identify applicable federal and Texas-specific deductions.
+                                        - Highlight key tax credits that reduce liability.
+
+                                    3. **State-Specific Tax Optimizations (Texas)**
+                                        - Considerations based on local tax laws.
+
+                                    4. **Tax-Loss Harvesting Opportunities**
+                                        - Evaluate the investment portfolio for capital gains offsets.
+
+                                    **Ensure the response is structured in markdown format with tables where applicable.**  
+                                    - Do not request additional user input.  
+                                    - Do not use first-person language.  
+                                    - Do not mention AI agents or task delegation.  
+                                    """,
+                        messages=[input_data], 
+                        stream=False  # Ensure it's not streamed, so we can capture it
+                    )
+
+                    # Extract response content safely
+                    if isinstance(response, RunResponse) and hasattr(response, "content"):
+                        response_text = response.content  # Extracting the actual response text
+                    else:
+                        response_text = "Error: Unexpected AI response format."
+
+                    # Process the response from LLM
+                    response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                
+                except Exception as e:
+                    logging.error(f"Error during Bloom processing: {e}")
+                    response_text = "Error: Failed to generate a tax-saving strategy."
+        
+    # Step 4: Extract meaningful response
+    # 🔹 **Extract response content correctly**
+    # The following block has been disabled to preserve the HTML conversion from markdown.
+    # if isinstance(response, RunResponse):
+    #     response_text = getattr(response, "content", None)  # Extract content safely
+    #     if response_text is None:
+    #         response_text = "Error: No content received from AI."
+    # else:
+    #     response_text = str(response)  # Convert any unexpected response to string
+
+    # Step 4: Save Response to a File
+    output_file = f"tax_suggestions_{client_id}.txt"
+    os.makedirs("output", exist_ok=True)
+    try:
+        with open(output_file, "w", encoding="utf-8") as file:
+            file.write(response_text)  # Write extracted response text
+    except Exception as e:
+        logging.error(f"Error saving response to file: {e}")
+    
+    print("Response successfully stored at:", output_file)
+    
+    return response_text
+
+
+# previous code :
+
+# def generate_tax_suggestions_and_advice(user_responses, client_id,TAX_RATES):
+#     """
+#     Generate tax-saving suggestions using the multi-ai-agent (Groq + Phi).
+#     """
+#     # Step 1: Load client financial data
+#     client_data = None
+#     if USE_AWS:
+#         client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#             client_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except Exception as e:
+#             logging.error(f"Error retrieving client data from AWS: {e}")
+#             return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#     else:
+#         client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#         if not os.path.exists(client_data_file_path):
+#             return {"error": f"No client data found for client ID: {client_id}"}
+
+#         try:
+#             with open(client_data_file_path, 'r') as f:
+#                 client_data = json.load(f)
+#         except Exception as e:
+#             logging.error(f"Error loading local client data: {e}")
+#             return {"error": f"Failed to load client data: {str(e)}"}
+
+#     if not client_data:
+#         return {"error": "Client data could not be retrieved."}
+    
+#     # 🔹 **Step 2: Load Portfolio Data**
+#     portfolio_data = None
+#     if USE_AWS:
+#         portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+#         try:
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+#             portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+#         except s3.exceptions.NoSuchKey:
+#             logging.warning(f"Portfolio file not found for client ID: {client_id}")
+#             portfolio_data = "No investments made"
+#     else:
+#         portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+#         if os.path.exists(portfolio_file_path):
+#             with open(portfolio_file_path, 'r') as file:
+#                 portfolio_data = json.load(file)
+#         else:
+#             logging.warning(f"Portfolio file not found for client ID: {client_id}")
+#             portfolio_data = "No investments made"
+
+#     # Step 2: Prepare input for Multi-AI Agent
+#     input_data = {
+#         "user_responses": user_responses,
+#         "client_data": client_data,
+#         "tax_rates": TAX_RATES,
+#         "portfolio_data": portfolio_data
+#     }
+
+#     # Step 3: Use Multi-AI Agent for Tax Optimization
+#     # response = multi_ai_agent.print_response(
+#     #     f"""
+#     #     Based on the following financial data, tax rates, and user responses,
+#     #     generate **actionable tax-saving strategies**:
+        
+#     #     ```json
+#     #     {json.dumps(input_data, indent=4)}
+#     #     ```
+        
+#     #     - Consider state-specific tax regulations.
+#     #     - Identify possible deductions or exemptions.
+#     #     - Suggest optimal investment strategies for tax efficiency.
+#     #     - Provide structured, markdown-formatted output.
+#     #     """
+#     # )
+    
+#     print(input_data)
+#     # Step 3: Use Multi-AI Agent for Tax Optimization
+#     try:
+#         response = multi_ai_agent.run(
+#              message=f"""
+#                         Based on the available financial data:
+#                         - **Annual Income:** {client_data.get('income', 'N/A')}
+#                         - **Tax Bracket:** {TAX_RATES}
+#                         - **Investment Portfolio:** {portfolio_data}
+#                         - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                         - **Business Details:** {client_data.get('business', 'N/A')}
+#                         - **Some user information related to tax:** {user_responses}
+
+#                         Generate **a structured tax-saving strategy** that includes:
+
+#                         1. **Investment Strategies for Tax Efficiency**
+#                             - Tax-advantaged accounts (401(k), IRA, etc.).
+#                             - Tax-efficient investing strategies.
+
+#                         2. **Deductions, Exemptions, and Credits**
+#                             - Identify applicable federal and Texas-specific deductions.
+#                             - Highlight key tax credits that reduce liability.
+
+#                         3. **State-Specific Tax Optimizations (Texas)**
+#                             - Considerations based on local tax laws.
+
+#                         4. **Tax-Loss Harvesting Opportunities**
+#                             - Evaluate the investment portfolio for capital gains offsets.
+
+#                         **Ensure the response is structured in markdown format with tables where applicable.**  
+#                         - Do not request additional user input.  
+#                         - Do not use first-person language.  
+#                         - Do not mention AI agents or task delegation.  
+#                         """,
+#             messages=[input_data], 
+#             stream=False  # Ensure it's not streamed, so we can capture it
+#         )
+
+#         # Extract response content safely
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content  # Extracting the actual response text
+#         else:
+#             response_text = "Error: Unexpected AI response format."
+
+#         # Process the response from LLM
+#         response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+
+#     except Exception as e:
+#         logging.error(f"Error during AI processing: {e}")
+#         # use llama as fail safe :
+#         try:
+#             response = multi_ai_agent_llama.run(
+#                 message=f"""
+#                             Based on the available financial data:
+#                             - **Annual Income:** {client_data.get('income', 'N/A')}
+#                             - **Tax Bracket:** {TAX_RATES}
+#                             - **Investment Portfolio:** {portfolio_data}
+#                             - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                             - **Business Details:** {client_data.get('business', 'N/A')}
+#                             - **Some user information related to tax:** {user_responses}
+
+#                             Generate **a structured tax-saving strategy** that includes:
+
+#                             1. **Investment Strategies for Tax Efficiency**
+#                                 - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                 - Tax-efficient investing strategies.
+
+#                             2. **Deductions, Exemptions, and Credits**
+#                                 - Identify applicable federal and Texas-specific deductions.
+#                                 - Highlight key tax credits that reduce liability.
+
+#                             3. **State-Specific Tax Optimizations (Texas)**
+#                                 - Considerations based on local tax laws.
+
+#                             4. **Tax-Loss Harvesting Opportunities**
+#                                 - Evaluate the investment portfolio for capital gains offsets.
+
+#                             **Ensure the response is structured in markdown format with tables where applicable.**  
+#                             - Do not request additional user input.  
+#                             - Do not use first-person language.  
+#                             - Do not mention AI agents or task delegation.  
+#                             """,
+#                 messages=[input_data], 
+#                 stream=False  # Ensure it's not streamed, so we can capture it
+#             )
+
+#             # Extract response content safely
+#             if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                 response_text = response.content  # Extracting the actual response text
+#             else:
+#                 response_text = "Error: Unexpected AI response format."
+
+#             # Process the response from LLM
+#             response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+#             # response_text = f"Error: {str(e)}"
+            
+#         except Exception as e:
+#             logging.error(f"Error during LLAMA processing: {e}")
+#             # using gpt j as fail safe :
+#             try:
+#                 response = multi_ai_agent_gpt_j.run(
+#                 message=f"""
+#                             Based on the available financial data:
+#                             - **Annual Income:** {client_data.get('income', 'N/A')}
+#                             - **Tax Bracket:** {TAX_RATES}
+#                             - **Investment Portfolio:** {portfolio_data}
+#                             - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                             - **Business Details:** {client_data.get('business', 'N/A')}
+#                             - **Some user information related to tax:** {user_responses}
+
+#                             Generate **a structured tax-saving strategy** that includes:
+
+#                             1. **Investment Strategies for Tax Efficiency**
+#                                 - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                 - Tax-efficient investing strategies.
+
+#                             2. **Deductions, Exemptions, and Credits**
+#                                 - Identify applicable federal and Texas-specific deductions.
+#                                 - Highlight key tax credits that reduce liability.
+
+#                             3. **State-Specific Tax Optimizations (Texas)**
+#                                 - Considerations based on local tax laws.
+
+#                             4. **Tax-Loss Harvesting Opportunities**
+#                                 - Evaluate the investment portfolio for capital gains offsets.
+
+#                             **Ensure the response is structured in markdown format with tables where applicable.**  
+#                             - Do not request additional user input.  
+#                             - Do not use first-person language.  
+#                             - Do not mention AI agents or task delegation.  
+#                             """,
+#                     messages=[input_data], 
+#                     stream=False  # Ensure it's not streamed, so we can capture it
+#                 )
+
+#                 # Extract response content safely
+#                 if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                     response_text = response.content  # Extracting the actual response text
+#                 else:
+#                     response_text = "Error: Unexpected AI response format."
+
+#                 # Process the response from LLM
+#                 response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+#                 # response_text = f"Error: {str(e)}"
+                
+#             except Exception as e:
+#                 logging.error(f"Error during GPT-J processing: {e}")
+#                 # using bloom as fail safe :
+#                 try :
+#                     response = multi_ai_agent_bloom.run(
+#                         message=f"""
+#                                     Based on the available financial data:
+#                                     - **Annual Income:** {client_data.get('income', 'N/A')}
+#                                     - **Tax Bracket:** {TAX_RATES}
+#                                     - **Investment Portfolio:** {portfolio_data}
+#                                     - **Real Estate Holdings:** {client_data.get('real_estate', 'N/A')}
+#                                     - **Business Details:** {client_data.get('business', 'N/A')}
+#                                     - **Some user information related to tax:** {user_responses}
+
+#                                     Generate **a structured tax-saving strategy** that includes:
+
+#                                     1. **Investment Strategies for Tax Efficiency**
+#                                         - Tax-advantaged accounts (401(k), IRA, etc.).
+#                                         - Tax-efficient investing strategies.
+
+#                                     2. **Deductions, Exemptions, and Credits**
+#                                         - Identify applicable federal and Texas-specific deductions.
+#                                         - Highlight key tax credits that reduce liability.
+
+#                                     3. **State-Specific Tax Optimizations (Texas)**
+#                                         - Considerations based on local tax laws.
+
+#                                     4. **Tax-Loss Harvesting Opportunities**
+#                                         - Evaluate the investment portfolio for capital gains offsets.
+
+#                                     **Ensure the response is structured in markdown format with tables where applicable.**  
+#                                     - Do not request additional user input.  
+#                                     - Do not use first-person language.  
+#                                     - Do not mention AI agents or task delegation.  
+#                                     """,
+#                         messages=[input_data], 
+#                         stream=False  # Ensure it's not streamed, so we can capture it
+#                     )
+
+#                     # Extract response content safely
+#                     if isinstance(response, RunResponse) and hasattr(response, "content"):
+#                         response_text = response.content  # Extracting the actual response text
+#                     else:
+#                         response_text = "Error: Unexpected AI response format."
+
+#                     # Process the response from LLM
+#                     response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions # best o/p so far
+                
+#                 except Exception as e:
+#                     logging.error(f"Error during Bloom processing: {e}")
+#                     response_text = "Error: Failed to generate a tax-saving strategy."
+        
+#     # Step 4: Extract meaningful response
+#       # 🔹 **Extract response content correctly**
+#         if isinstance(response, RunResponse):
+#             response_text = getattr(response, "content", None)  # Extract content safely
+#             if response_text is None:
+#                 response_text = "Error: No content received from AI."
+#         else:
+#             response_text = str(response)  # Convert any unexpected response to string
+
+#     except Exception as e:
+#         logging.error(f"Error during AI processing: {e}")
+#         response_text = f"Error: {str(e)}"
+    
+#      # Step 4: Save Response to a File
+#     output_file = f"tax_suggestions_{client_id}.txt"
+#     os.makedirs("output", exist_ok=True)
+#     try:
+#         with open(output_file, "w", encoding="utf-8") as file:
+#             file.write(response_text)  # Write extracted response text
+#     except Exception as e:
+#         logging.error(f"Error saving response to file: {e}")
+    
+#     print("Response successfully stored at:", output_file)
+    
+#     return response_text
+
+
+# aws folder for taxes assessment :
+
+tax_assessment_folder = os.getenv('tax_assessment_folder')  # Folder in S3
+
+# Local storage fallback
+LOCAL_SAVE_DIR = "local_tax_assessments"
+
+def save_user_responses(client_id,user_responses,question_index=0):
+    """
+    Save user responses as a JSON file in AWS S3 or locally.
+    """
+    try:
+    # Define the filename
+        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+        
+        if USE_AWS:
+            responses_json = json.dumps(user_responses,indent=4)
+            print(f"Response json: {responses_json}\n")
+            
+            # Upload to S3
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=responses_key,
+                Body=responses_json,
+                ContentType='application/json'
+            )
+            print(f"Saved {question_index} user responses for client_id: {client_id} in AWS S3.")
+            logging.info(f"Saved {question_index} user responses for client_id: {client_id} in AWS S3.")
+            return f"Saved {question_index} user responses for client_id: {client_id} in AWS S3."
+        
+        else:
+                # Ensure local directory exists
+                os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
+
+                # Save locally
+                local_file_path = os.path.join(LOCAL_SAVE_DIR, f"{client_id}_user_responses.json")
+                with open(local_file_path, 'w') as file:
+                    json.dump(responses_json, file, indent=4)
+                
+                logging.info(f"Saved user responses for client_id: {client_id} locally.")
+                return f"Saved user responses for client_id: {client_id} "
+        
+    except Exception as e:
+        print(f"Error saving user responses : {e}")
+        logging.error(f"Error saving user responses : {e}")
+        return f"Error saving user responses : {e}"
+    
+
+def save_tax_suggestions(client_id,tax_details, tax_suggestions,client_last_modified): #,revisit_assessment_count):
+   
+    # Define the filename
+    tax_data = {
+        "tax_suggestions": tax_suggestions,
+        "tax_details": tax_details,
+        "client_last_modified":client_last_modified
+    }
+    
+    # tax_data = {
+    #     "tax_suggestions": tax_suggestions,
+    #     "tax_details": tax_details,
+    #     "revisit_assessment_count":revisit_assessment_count
+    # }
+    suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+
+    try:
+        if USE_AWS:
+            # Convert tax suggestions to JSON
+            suggestions_json = json.dumps(tax_data, indent=4)
+            print(f"Suggestions json: {suggestions_json}\n")
+
+            # Upload to S3
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=suggestions_key,
+                Body=suggestions_json,
+                ContentType='application/json'
+            )
+            logging.info(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
+            print(f"Saved tax suggestions for client_id: {client_id} in AWS S3.")
+            return f"Saved tax suggestions for client_id: {client_id} in AWS S3."
+        
+        else:
+            # Ensure local directory exists
+            os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
+
+            # Save locally
+            local_file_path = os.path.join(LOCAL_SAVE_DIR, f"{client_id}_tax_suggestions.json")
+            with open(local_file_path, 'w') as file:
+                json.dump(tax_data, file, indent=4)
+            
+            logging.info(f"Saved tax suggestions for client_id: {client_id} locally.")
+            return f"Saved tax suggestions for client_id: {client_id} "
+
+    except Exception as e:
+        print(f"Error saving tax suggestions: {e}")
+        logging.error(f"Error saving tax suggestions: {e}")
+        return f"Error saving tax suggestions: {e}"
+
+
+# Example usage
+# For testing purposes :
+
+# user_responses = [
+#   {
+#     "question": "What is your primary source of income?",
+#     "answer": "Buisness and Employment"
+#   },
+#   {
+#     "question": "What is your total annual taxable income?",
+#     "answer": "500000"
+#   },
+#   {
+#     "question": "Which state do you reside in?",
+#     "answer": "texas"
+#   },
+#   {
+#     "question": "Do you have any dependents?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "What tax deductions or exemptions are you eligible for?",
+#     "answer": "no idea"
+#   },
+#   {
+#     "question": "What is the approximate net capital value of all of your real estate properties?",
+#     "answer": "5000000"
+#   },
+#   {
+#     "question": "State the total investments that you have done",
+#     "answer": "30000"
+#   },
+#   {
+#     "question": "Do you have medical expenses exceeding a certain percentage of your income?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "Do you contribute to a charity or nonprofit organization?",
+#     "answer": "no"
+#   },
+#   {
+#     "question": "Have you made any large one-time purchases in the past year?",
+#     "answer": "no"
+#   }
+# ]
+
+# client_id = "DD3375"
+# tax_result = calculate_taxes(user_responses, client_id)
+# suggestions = generate_tax_suggestions(user_responses, client_id)
+
+# print("Tax Calculation Result:", tax_result)
+# print("Tax-Saving Suggestions:", suggestions)
+
+
+#################################################################################
+# New Version :
+
+tax_questions = [
+     "What is your Primary Source of Income?",
+     "What is your Total Annual Taxable Income?",
+     "Which state do you Reside In?",
+     "Do you have any Dependents?",
+     "What Tax Deductions or Exemptions are you Eligible for?",
+     "What is the Approximate Net Capital Value of All of your Real Estate Properties?",
+     "State the Total Investments that you have done",
+     "Do you have Medical Expenses exceeding a certain Percentage of your Income?",
+     "Do you contribute to a Charity or Nonprofit Organization?",
+     "Have you made any Large One-Time Purchases in the Past Year?",
+]
+
+# previous working system however it didnt saved sessions :
+
+@app.route('/api/start-tax-chatbot', methods=['POST'])
+def start_chatbot():
+    """
+    Starts the tax assessment chatbot by returning the first question.
+    """
+    try:
+        if not tax_questions:
+            return jsonify({"message": "No tax questions available"}), 500
+        
+        print("Starting tax assessment chatbot...")
+        print(tax_questions)
+        return jsonify({"message": "Tax Questions Passed successfully",
+                        "tax_questions": tax_questions}),200
+        # first_question = tax_questions["questions"][0]  # Access list inside dictionary
+        # return jsonify({"message": first_question, "question_index": 0}), 200
+
+    except Exception as e:
+        print(f"❌ Error in chatbot start: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# #generate tax suggestions :
+
+@app.route('/api/generate-tax-suggestions', methods=['POST']) 
+def generate_tax_suggestions():
+    try:
+        # 🔹 Extract the user's answer from the request
+        # data = request.json.get('data')
+        
+        # if not data:
+        #     return jsonify({"message": "Missing user responses field."}), 400
+        
+    
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
+        if not client_id:
+            return jsonify({"message": "Missing client_id field."}), 400
+        
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return {"error": f"No client data found for client ID: {client_id}"}
+
+            try:
+                with open(client_data_file_path, 'r') as f:
+                    client_data = json.load(f)
+            except Exception as e:
+                logging.error(f"Error loading local client data: {e}")
+                return {"error": f"Failed to load client data: {str(e)}"}
+
+        if not client_data:
+            return {"error": "Client data could not be retrieved."}
+        
+        data = client_data
+        
+        # print("User Responses :", user_responses)
+        print("User Responses :", data)
+        
+        save_user_responses(client_id, data)
+        # save_user_responses(client_id, user_responses)
+        
+        # Get Tax Rates :
+        TAX_RATES = get_latest_tax_rates()
+        print("Final Tax Rates:", TAX_RATES)
+        
+        # Calculate Tax Details :
+        # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+        tax_result = calculate_taxes(data, client_id,TAX_RATES)
+        print("Generating Tax Calculations :",tax_result)
+        
+        # Generate Tax Suggestions :
+        # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
+        tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
+        print("Generating Tax Suggestions",tax_advice)
+        
+        # revisit_assessment_count['client_id'] += 1
+
+        save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+        # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+        
+        return jsonify({
+            "message": "Assessment completed.",
+            # "revisit_assessment_count": revisit_assessment_count,
+            "TAX_RATES": TAX_RATES,
+            "tax_details": tax_result,
+            "suggestions": tax_advice
+        }), 200
+ 
+    except Exception as e:
+        print(f"❌ Error in chatbot: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+# New Version :
+
+@app.route('/api/get-tax-suggestions', methods=['POST'])
+def get_tax_suggestions():
+    """
+    Retrieves the tax suggestions for a given client_id.
+    If the client's last_modified_date is newer than the suggestions' stored date,
+    new tax suggestions are generated; otherwise, previous suggestions are returned.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
+        
+        if not client_id:
+            return jsonify({"message": "Client ID is required"}), 400
+
+        suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+        suggestions_exist = False
+        suggestions_data = None
+
+        # Try to load existing tax suggestions.
+        if USE_AWS:
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+                suggestions_data = json.loads(response['Body'].read().decode('utf-8'))
+                suggestions_exist = True
+                print("Retrieved existing tax suggestions data:", suggestions_data)
+            except Exception as e:
+                print(f"No tax suggestions found: {e}")
+                suggestions_exist = False
+        else:
+            file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}_tax_suggestions.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    suggestions_data = json.load(f)
+                suggestions_exist = True
+            else:
+                suggestions_exist = False
+
+        # Load client data to check last modification.
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return jsonify({"error": f"Error retrieving client data from AWS: {str(e)}"}), 500
+        else:
+            client_data_file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return jsonify({"error": f"No client data found for client ID: {client_id}"}), 404
+            with open(client_data_file_path, 'r') as f:
+                client_data = json.load(f)
+        
+        # Check if client data has been updated since last suggestions were generated.
+        client_last_modified = client_data.get("last_modified_date") or client_data.get("date") # incase client data do not have a "last_modified_date"
+        suggestions_last_modified = suggestions_data.get("client_last_modified_date") if suggestions_data else None
+
+        # Determine if new suggestions are needed:
+        generate_new = False
+        if not suggestions_exist:
+            generate_new = True
+            print("No previous suggestions found; generating new suggestions.")
+        elif not client_last_modified or client_last_modified != suggestions_last_modified:
+            generate_new = True
+            print("Client data has been updated; generating new suggestions.")
+        else:
+            print("Client data has not changed; using existing suggestions.")
+
+        if generate_new:
+            # Save user responses if needed
+            save_user_responses(client_id, client_data)
+            
+            # Get the latest tax rates
+            TAX_RATES = get_latest_tax_rates()
+            print("Final Tax Rates:", TAX_RATES)
+            
+            # Calculate Tax Details.
+            tax_result = calculate_taxes(client_data, client_id, TAX_RATES)
+            print("Generating Tax Calculations:", tax_result)
+            
+            # Generate Tax Suggestions.
+            tax_advice = generate_tax_suggestions_and_advice(client_data, client_id, TAX_RATES)
+            print("Generating Tax Suggestions:", tax_advice)
+            
+            # Create a suggestions object.
+            suggestions_data = {
+                "tax_details": tax_result,
+                "tax_suggestions": tax_advice,
+                "client_last_modified_date": client_last_modified  # store client's last modification date
+            }
+            
+            # Save the new suggestions.
+            save_tax_suggestions(client_id, tax_result, tax_advice,client_last_modified) #,revisit_assessment_count)
+            
+            # Save the new suggestions.
+            if USE_AWS:
+                s3.put_object(
+                    Bucket=S3_BUCKET_NAME,
+                    Key=suggestions_key,
+                    Body=json.dumps(suggestions_data, indent=4),
+                    ContentType="application/json"
+                )
+            else:
+                file_path = os.path.join(CLIENT_DATA_DIR, f"{client_id}_tax_suggestions.json")
+                with open(file_path, 'w') as f:
+                    json.dump(suggestions_data, f, indent=4)
+
+        # Finally, return the suggestions.
+        return jsonify(suggestions_data), 200
+
+    except Exception as e:
+        print(f"❌ Error in chatbot: {e}")
+        return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+
+     
+# previous version : retrive previous tax suggestions : now it also generates if not geenerated before
+
+# @app.route('/api/get-tax-suggestions', methods=['POST'])
+# def get_tax_suggestions():
+#     """
+#     Retrieves the tax suggestions for a given client_id.
+#     """
+#     try:
+#         client_id = request.json.get('client_id', None)
+#         print("Client ID:", client_id)
+    
+#         suggestions_key = f"{tax_assessment_folder}/{client_id}_tax_suggestions.json"
+    
+#         if USE_AWS:
+#             # Download from S3
+#             # s3 = boto3.client('s3')
+#             response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#             suggestions_json = response['Body'].read().decode('utf-8')
+#             print("Retrieved tax suggestions data:", suggestions_json)
+#             return jsonify(json.loads(suggestions_json)),200
+    
+#     except Exception as e:
+#         print(f"�� No tax suggestions found generating tax suggestions: {e}")
+#         try:
+#             if USE_AWS:
+#                 client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+#                 try:
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+#                     client_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 except Exception as e:
+#                     logging.error(f"Error retrieving client data from AWS: {e}")
+#                     return {"error": f"Error retrieving client data from AWS: {str(e)}"}
+#             else:
+#                 client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+#                 if not os.path.exists(client_data_file_path):
+#                     return {"error": f"No client data found for client ID: {client_id}"}
+
+#                 try:
+#                     with open(client_data_file_path, 'r') as f:
+#                         client_data = json.load(f)
+#                 except Exception as e:
+#                     logging.error(f"Error loading local client data: {e}")
+#                     return {"error": f"Failed to load client data: {str(e)}"}
+
+#             if not client_data:
+#                 return {"error": "Client data could not be retrieved."}
+            
+#             data = client_data
+            
+#             # print("User Responses :", user_responses)
+#             print("User Responses :", data)
+            
+#             save_user_responses(client_id, data)
+#             # save_user_responses(client_id, user_responses)
+            
+#             # Get Tax Rates :
+#             TAX_RATES = get_latest_tax_rates()
+#             print("Final Tax Rates:", TAX_RATES)
+            
+#             # Calculate Tax Details :
+#             # tax_result = calculate_taxes(answers, client_id,TAX_RATES)
+#             tax_result = calculate_taxes(data, client_id,TAX_RATES)
+#             print("Generating Tax Calculations :",tax_result)
+            
+#             # Generate Tax Suggestions :
+#             # tax_advice = generate_tax_suggestions_and_advice(answers,client_id,TAX_RATES)
+#             tax_advice = generate_tax_suggestions_and_advice(data,client_id,TAX_RATES)
+#             print("Generating Tax Suggestions",tax_advice)
+            
+#             # revisit_assessment_count['client_id'] += 1
+
+#             save_tax_suggestions(client_id, tax_result, tax_advice) #,revisit_assessment_count)
+#             # save_tax_suggestions(client_id, tax_result, tax_advicerevisit_assessment_count)
+            
+#             if USE_AWS:
+#                 # Download from S3
+#                 # s3 = boto3.client('s3')
+#                 response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=suggestions_key)
+#                 suggestions_json = response['Body'].read().decode('utf-8')
+#                 print("Retrieved tax suggestions data:", suggestions_json)
+#                 return jsonify(json.loads(suggestions_json)),200
+            
+#             # return jsonify({
+#             #     "message": "Assessment completed.",
+#             #     # "revisit_assessment_count": revisit_assessment_count,
+#             #     "TAX_RATES": TAX_RATES,
+#             #     "tax_details": tax_result,
+#             #     "suggestions": tax_advice
+#             # }), 200
+        
+#         except Exception as e:
+#             print(f"❌ Error in chatbot: {e}")
+#             return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+    
+#     except Exception as e:
+#         print(f"❌ Error in chatbot: {e}")
+#         return jsonify({"message": f"Internal server error: {str(e)}"}), 500
+#         # return jsonify({"message": f"No tax suggestions found: {str(e)}"}), 404
+    
+# Get Previous user responses :
+
+@app.route('/api/get-user-responses', methods=['POST'])
+def get_user_responses():
+    """
+    Retrieves the user responses for a given client_id.
+    """
+    try:
+        client_id = request.json.get('client_id', None)
+        print("Client ID:", client_id)
+        
+        responses_key = f"{tax_assessment_folder}/{client_id}_user_responses.json"
+        
+        if USE_AWS:
+            # Download from S3
+            # s3 = boto3.client('s3')
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=responses_key)
+            responses_json = response['Body'].read().decode('utf-8')
+            print("Retrieved responses data:", responses_json)
+            return jsonify(json.loads(responses_json)),200
+    
+    except Exception as e:
+        print(f"�� No user responses found: {e}")
+        return jsonify({"message": f"No user responses found: {str(e)}"}), 404
+    
+# new tax questions :
+# {
+#     "incomeSource": {
+#         "question": "What is your Primary Source of Income?",
+#         "answer": "salaried"
+#     },
+#     "sideIncome": {
+#         "question": "Do you have any side income?",
+#         "answer": "yes"
+#     },
+#     "taxableIncome": {
+#         "question": "What is your Total Annual Taxable Income? ",
+#         "answer": "4000"
+#     },
+#     "state": {
+#         "question": "Which state do you reside in?",
+#         "answer": "Hawaii"
+#     },
+#     "dependents": {
+#         "question": "Do you have any Dependents?",
+#         "answer": "yes"
+#     },
+#     "deductions": {
+#         "question": "What Tax Deductions or Exemptions are you Eligible for?",
+#         "answer": [
+#             "Medical Expenses",
+#             "Mortgage Interest Deduction",
+#             "Education-related deductions"
+#         ]
+#     },
+#     "realEstateValue": {
+#         "question": "What is the Approximate Net Capital Value of All of Your Real Estate Properties?",
+#         "answer": "quo"
+#     },
+#     "rentalIncome": {
+#         "question": "Do you own rental properties?",
+#         "answer": "yes"
+#     },
+#     "propertyTax": {
+#         "question": "What is annual Property Tax Expenses?",
+#         "answer": "100"
+#     },
+#     "maintenanceCost": "",
+#     "medicalExpenses": {
+#         "question": "Do you have Medical Expenses Exceeding a Certain Percentage of Your Income?",
+#         "answer": "yes"
+#     },
+#     "charity": {
+#         "question": "Do you contribute to a charity or nonprofit organization?",
+#         "answer": "yes"
+#     },
+#     "largePurchase": {
+#         "question": "Have you made any large one-time purchases in the past year?",
+#         "answer": "yes"
+#     },
+#     "investmentAmounts": {
+#         "question": "What is the total invested you have?",
+#         "answer": {
+#             "stocks": "1",
+#             "realEstate": "2",
+#             "fixedDeposits": "3",
+#             "mutualFunds": "4",
+#             "businessInvestments": "5",
+#             "retirementAccounts": "6"
+#         }
+#     },
+#     "largePurchaseType": {
+#         "question": "What type of large one-time purchase did you make?",
+#         "answer": "5"
+#     },
+#     "charityAmount": {
+#         "question": "How much have you contributed to a charity or nonprofit organization?",
+#         "answer": "2000"
+#     },
+#     "charityOrganization": {
+#         "question": "What is the name of your charity or nonprofit organization?",
+#         "answer": "ANc"
+#     },
+#     "medicalExpenseAmount": {
+#         "question": "What is the total amount of your medical expenses?",
+#         "answer": "100"
+#     },
+#     "annualRentalIncome": {
+#         "question": "What is annual Rental Income?",
+#         "answer": "4000"
+#     },
+#     "sideIncomeAmount": {
+#         "question": "What is side income amount?",
+#         "answer": "3000"
+#     },
+#     "dependentCount": {
+#         "question": "What is number of dependents?",
+#         "answer": "1"
+#     },
+#     "largePurchaseAmount": {
+#         "question": "What is the total amount of your large one-time purchase?",
+#         "answer": "2000"
+#     }
+# }
+
+###############################################################################################
+
+# testing purposes : 
+# {
+#   "data": [
+#     {
+#       "question": "What is your primary source of income?",
+#       "answer": "Business"
+#     },
+#     {
+#       "question": "What is your total annual taxable income?",
+#       "answer": "300000"
+#     },
+#     {
+#       "question": "Which state do you reside in?",
+#       "answer": "Texas"
+#     },
+#     {
+#       "question": "Do you have any dependents?",
+#       "answer": "yes"
+#     },
+#     {
+#       "question": "What tax deductions or exemptions are you eligible for?",
+#       "answer": "no"
+#     },
+#     {
+#       "question": "What is the approximate net capital value of all of your real estate properties?",
+#       "answer": "500000"
+#     },
+#     {
+#       "question": "State the total investments that you have done",
+#       "answer": "none"
+#     },
+#     {
+#       "question": "Do you have medical expenses exceeding a certain percentage of your income?",
+#       "answer": "no"
+#     },
+#     {
+#       "question": "Do you contribute to a charity or nonprofit organization?",
+#       "answer": "yes, 30,000 annually"
+#     },
+#     {
+#       "question": "Have you made any large one-time purchases in the past year?",
+#       "answer": "no"
+#     }
+#   ],
+#   "client_id": "SB6064",
+#   "question_index":9
+# }
+
+#######################################################################################################
+# Chatbot :
+
+from phi.agent import Agent, AgentMemory,RunResponse
+phi_agent = Agent()
+
+# ✅ Define Function Calls (Web Search & Stock Data)
+
+def search_web(query: str) -> str:
+    """
+    Searches the web using DuckDuckGo and returns the top 5 results in a Markdown table.
+    """
+    search_tool = DuckDuckGo()
+    # Use the correct method: "search" (not "run")
+    results = search_tool.search(query=query, max_results=5)
+    if results:
+        table = "| Title | URL | Snippet |\n| --- | --- | --- |\n"
+        for res in results:
+            title = res.get("title", "N/A")
+            url = res.get("href", "N/A")
+            snippet = res.get("body", "N/A")
+            table += f"| {title} | {url} | {snippet} |\n"
+        return table
+    else:
+        return "No relevant information found."
+
+# previous yfinance code :
+# def get_stock_info(symbol: str) -> str:
+#     """
+#     Fetches the current stock price using Yahoo Finance API and returns it in a Markdown table.
+#     """
+#     stock_tool = YFinanceTools(stock_price=True)
+#     stock_price = stock_tool.get_current_stock_price(symbol)
+#     if stock_price:
+#         table = "| Symbol | Current Price |\n| --- | --- |\n"
+#         table += f"| {symbol.upper()} | {stock_price} |\n"
+#         return table
+#     else:
+#         return "No stock data available."
+
+# backup alpha vantage mechanism and FinHub added :
+def get_stock_info(symbol):
+    print(f"\n🔎 Fetching data for: {symbol.upper()}")
+    
+    # --------- Method 1: Yahoo Finance (public endpoint) ----------
+    try:
+        print("🌐 Trying Yahoo Finance API...")
+        yahoo_url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}'
+        response = requests.get(yahoo_url)
+        response.raise_for_status()
+        data = response.json()
+        result = data["quoteResponse"]["result"]
+        if not result:
+            raise ValueError("No data found in Yahoo response.")
+
+        stock_data = result[0]
+        print("✅ Yahoo Finance success")
+        return {
+            "source": "Yahoo Finance",
+            "symbol": stock_data["symbol"],
+            "name": stock_data.get("shortName", "N/A"),
+            "price": stock_data["regularMarketPrice"],
+            "currency": stock_data.get("currency", "N/A"),
+            "exchange": stock_data.get("fullExchangeName", "N/A")
+        }
+
+    except Exception as e:
+        print(f"⚠️ Yahoo Finance failed: {e}")
+    
+    # --------- Method 2: Alpha Vantage fallback ----------
+    try:
+        print("🔄 Trying Alpha Vantage fallback...")
+        av_url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}'
+        response = requests.get(av_url)
+        response.raise_for_status()
+        data = response.json()
+
+        quote = data.get("Global Quote", {})
+        if not quote or not quote.get("05. price"):
+            raise ValueError("No data found in Alpha Vantage response.")
+
+        print("✅ Alpha Vantage success")
+        return {
+            "source": "Alpha Vantage",
+            "symbol": quote["01. symbol"],
+            "price": float(quote["05. price"]),
+            "currency": "USD",  # Alpha Vantage doesn't provide currency
+            "exchange": "Unknown"
+        }
+
+    except Exception as e:
+        print(f"❌ Alpha Vantage failed: {e}")
+    
+    return {"error": f"Unable to fetch data for symbol: {symbol}"}
+
+
+def get_company_info(symbol: str) -> str:
+    """
+    Fetches detailed company information using Yahoo Finance API and returns it in a Markdown table.
+    """
+    info_tool = YFinanceTools(company_info=True)
+    company_info = info_tool.get_company_info(symbol)
+    # Check if company_info is a dict (expected) or already a string.
+    if isinstance(company_info, dict):
+        table = "| Field | Value |\n| --- | --- |\n"
+        for key, value in company_info.items():
+            table += f"| {key} | {value} |\n"
+        return table
+    elif isinstance(company_info, str):
+        return company_info
+    else:
+        return "No company info available."
+
+def get_company_news(symbol: str) -> str:
+    """
+    Fetches recent company news using Yahoo Finance API and returns the results in a Markdown table.
+    """
+    news_tool = YFinanceTools(company_news=True)
+    news = news_tool.get_company_news(symbol)
+    if isinstance(news, list):
+        table = "| Date | Title | URL |\n| --- | --- | --- |\n"
+        for article in news:
+            if isinstance(article, dict):
+                date = article.get("date", "N/A")
+                title = article.get("title", "N/A")
+                url = article.get("url", "N/A")
+                table += f"| {date} | {title} | {url} |\n"
+            else:
+                table += f"| {article} |\n"
+        return table
+    elif isinstance(news, str):
+        return news
+    else:
+        return "No company news available."
+
+def get_analyst_recommendations(symbol: str) -> str:
+    """
+    Fetches analyst recommendations using Yahoo Finance API and returns them in a Markdown table.
+    """
+    rec_tool = YFinanceTools(analyst_recommendations=True)
+    recommendations = rec_tool.get_analyst_recommendations(symbol)
+    if isinstance(recommendations, list):
+        table = "| Analyst | Recommendation | Target Price |\n| --- | --- | --- |\n"
+        for rec in recommendations:
+            if isinstance(rec, dict):
+                analyst = rec.get("analyst", "N/A")
+                recommendation = rec.get("recommendation", "N/A")
+                target_price = rec.get("target_price", "N/A")
+                table += f"| {analyst} | {recommendation} | {target_price} |\n"
+            else:
+                table += f"| {rec} |\n"
+        return table
+    elif isinstance(recommendations, str):
+        return recommendations
+    else:
+        return "No analyst recommendations available."
+
+def calculate_math(query: str) -> str:
+    """
+    Extracts a mathematical expression from the query and evaluates it.
+    """
+    expression_matches = re.findall(r"([\d\.\+\-\*xX\/\s]+)", query)
+    if expression_matches:
+        expr = expression_matches[0].strip()
+        expr = expr.replace('x', '*').replace('X', '*')
+        if not re.match(r'^[\d\.\+\-\*\/\s]+$', expr):
+            return "Invalid characters in the mathematical expression."
+        try:
+            result = eval(expr)
+            return f"The result of `{expr}` is **{result}**."
+        except Exception as e:
+            return f"Error evaluating expression: {e}"
+    else:
+        return "No valid mathematical expression found."
+
+def handle_query(user_input: str) -> str:
+    """
+    Determines which function to use based on the user's query.
+    """
+    user_lower = user_input.lower()
+    if ("price" in user_lower or "current price" in user_lower) and "tsla" in user_lower:
+        return get_stock_info("TSLA")
+    elif ("company details" in user_lower or "about" in user_lower) and "tesla" in user_lower:
+        return get_company_info("TSLA")
+    elif "news" in user_lower and "tesla" in user_lower:
+        return get_company_news("TSLA")
+    elif ("analysis" in user_lower or "recommendations" in user_lower) and "tesla" in user_lower:
+        return get_analyst_recommendations("TSLA")
+    elif "what is" in user_lower and any(op in user_lower for op in ["+", "-", "x", "*", "/"]):
+        return calculate_math(user_input)
+    else:
+        return search_web(user_input)
+
+
+# ✅ Fix Memory Issue: Provide explicit storage
+chat_memory = AgentMemory(
+    create_user_memories=True,
+    create_session_summary=True,
+    storage="file"  # ✅ Stores memory in a local file
+)
+
+# ✅ Web Search Agent - Ensure it does not use OpenAI
+duckduckgo_search_agent = Agent(
+    name="Web Search Agent",
+    role="Search Web for any general queries or facts.",
+    model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    tools=[DuckDuckGo(),search_web],  # ✅ Ensure it does not fall back to OpenAI
+    instructions=["Always provide sources"],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+# Advanced Stock Analysis Function
+# -------------------------------
+def advanced_stock_analysis(symbol: str) -> str:
+    """
+    Perform advanced stock analysis for the given symbol by retrieving company info,
+    recent news, and analyst recommendations using YFinanceTools.
+    Returns a markdown-formatted response.
+    """
+    # Initialize a YFinanceTools instance with all desired options
+    yfinance_tool = YFinanceTools(
+        stock_price=True,
+        company_info=True,
+        company_news=True,
+        analyst_recommendations=True,
+        historical_prices=True,
+        key_financial_ratios=True
+    )
+    # Fetch company information
+    company_info = yfinance_tool.get_company_info(symbol)
+    if isinstance(company_info, dict):
+        info_table = "| Field | Value |\n| --- | --- |\n"
+        for key, value in company_info.items():
+            info_table += f"| {key} | {value} |\n"
+    else:
+        info_table = str(company_info)
+    
+    # Fetch recent company news
+    news = yfinance_tool.get_company_news(symbol)
+    if isinstance(news, list) and news:
+        news_table = "| Date | Title | URL |\n| --- | --- | --- |\n"
+        for article in news:
+            date = article.get("date", "N/A")
+            title = article.get("title", "N/A")
+            url = article.get("url", "N/A")
+            news_table += f"| {date} | {title} | {url} |\n"
+    else:
+        news_table = "No recent news available."
+
+    # Fetch analyst recommendations
+    rec = yfinance_tool.get_analyst_recommendations(symbol)
+    if isinstance(rec, list) and rec:
+        rec_table = "| Analyst | Recommendation | Target Price |\n| --- | --- | --- |\n"
+        for r in rec:
+            analyst = r.get("analyst", "N/A")
+            recommendation = r.get("recommendation", "N/A")
+            target_price = r.get("target_price", "N/A")
+            rec_table += f"| {analyst} | {recommendation} | {target_price} |\n"
+    else:
+        rec_table = "No analyst recommendations available."
+    
+    # Build the final markdown output
+    result = f"### Advanced Stock Analysis for {symbol.upper()}\n\n"
+    result += "**Company Information:**\n" + info_table + "\n\n"
+    result += "**Recent News:**\n" + news_table + "\n\n"
+    result += "**Analyst Recommendations:**\n" + rec_table + "\n"
+    return result
+
+#####################################################################################################
+
+# ✅ Finance Agent - Ensure it does not use OpenAI
+stocks_agent = Agent(
+    name="Stock Market Agent",
+    role="Provide stock/asset data, analysis, financial data, and suggestions.",
+    model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    tools=[
+        YFinanceTools(
+            stock_price=True, analyst_recommendations=True,
+            stock_fundamentals=True, company_news=True,
+            company_info=True, key_financial_ratios=True,
+            income_statements=True, technical_indicators=True,
+            historical_prices=True
+        ),
+        get_stock_info,
+        get_company_info,
+        get_analyst_recommendations,
+        advanced_stock_analysis
+    ],
+    description="Format your response using markdown and use tables for clarity.",
+    instructions=[
+        "Always provide sources",
+        "Format responses using markdown and use tables where applicable."
+    ],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+
+##################################################################################################
+
+# --- New Tax Analysis Tool Function ---
+def tax_analysis_tool(params: str) -> str:
+    """
+    A tool that accepts parameters 'tax_query' (mandatory) and optional 'client_id'.
+    It loads client financial data and portfolio data if client_id is provided and
+    constructs a prompt to generate tax-saving strategies and tax analysis.
+    Returns the AI-generated response in a dictionary under the key "result".
+    """
+    # If params is a string, treat it as the tax query.
+    if isinstance(params, str):
+        tax_query = params
+        client_id = None
+    elif isinstance(params, dict):
+        tax_query = params.get("tax_query", "")
+        client_id = params.get("client id", None)
+    else:
+        return {"result": "Invalid input format."}
+
+    # Get the latest tax rates
+    TAX_RATES = get_latest_tax_rates()
+
+    if client_id:
+        print("Client id : ",client_id)
+        # Load client financial data
+        client_data = None
+        if USE_AWS:
+            client_data_key = f"{client_summary_folder}client-data/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=client_data_key)
+                client_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error retrieving client data from AWS: {e}")
+                return {"result": f"Error retrieving client data: {str(e)}"}
+        else:
+            client_data_file_path = os.path.join("client_data", "client_data", f"{client_id}.json")
+            if not os.path.exists(client_data_file_path):
+                return {"result": f"No client data found for client ID: {client_id}"}
+            try:
+                with open(client_data_file_path, 'r') as f:
+                    client_data = json.load(f)
+            except Exception as e:
+                logging.error(f"Error loading local client data: {e}")
+                return {"result": f"Error loading client data: {str(e)}"}
+
+        # Load portfolio data
+        portfolio_data = None
+        if USE_AWS:
+            portfolio_key = f"{portfolio_list_folder}/{client_id}.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=portfolio_key)
+                portfolio_data = json.loads(response['Body'].read().decode('utf-8'))
+            except Exception:
+                logging.warning(f"Portfolio file not found for client ID: {client_id}")
+                portfolio_data = "No investments made"
+        else:
+            portfolio_file_path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+            if os.path.exists(portfolio_file_path):
+                with open(portfolio_file_path, 'r') as file:
+                    portfolio_data = json.load(file)
+            else:
+                logging.warning(f"Portfolio file not found for client ID: {client_id}")
+                portfolio_data = "No investments made"
+
+        prompt = f"""
+        Based on the following client financial data and portfolio information:
+
+        **Client Data:**
+        ```json
+        {json.dumps(client_data, indent=2)}
+        ```
+
+        **Portfolio Data:**
+        ```json
+        {json.dumps(portfolio_data, indent=2)}
+        ```
+
+        **Current Tax Rates:**
+        {TAX_RATES}
+
+        Answer the following tax-related query in detail:
+        {tax_query}
+
+        Provide detailed tax-saving strategies and actionable suggestions.
+        Format your response in markdown with tables where applicable.
+        Do not mention which tools you are using or which function you are using.
+        """
+    else:
+        prompt = f"""
+        Answer the following tax-related query generically, using the current tax rates {TAX_RATES}:
+        {tax_query}
+
+        Provide detailed tax-saving strategies and actionable suggestions.
+        Format your response in markdown with tables where applicable.
+        Do not mention which tools you are using or which function you are using.
+        """
+
+    return prompt
+
+
+# example prompt with client id : "What tax-saving strategies should I consider for client id : RD2447?"
+
+def process_chat_query(user_input: str, client_id: str = None) -> str:
+    """
+    Processes a user query using the multi_ai_chatbot.
+    If the query is tax related, it calls the tax analysis tool.
+    Otherwise, it processes it normally.
+    """
+    # A simple heuristic: if the query contains the word "tax", use the tax analysis tool.
+    if "tax" in user_input.lower():
+        params = {"tax_query": user_input}
+        if client_id:
+            params["client_id"] = client_id
+        result = tax_analysis_tool(params)
+        return result.get("result", "No result returned.")
+    else:
+        # Otherwise, simply pass the query to the multi_ai_chatbot.
+        response = multi_ai_chatbot.run(
+            message=user_input,
+            messages=[{"query": user_input}],
+            stream=False
+        )
+        if hasattr(response, "content"):
+            return response.content
+        else:
+            return str(response)
+
+# Example:
+# result = process_chat_query("What tax-saving strategies should a high-income individual consider?", client_id="VK3464")
+# print(result)
+
+#############################################################################################################
+
+# ✅ Multi-AI Chatbot - Ensuring Gemini Handles All Responses
+multi_ai_chatbot = Agent(
+    name="Multi-AI Chatbot",
+    role="A chatbot that can search the web, fetch stock data,answer general user queries and handle tax-related questions.",
+    model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    team=[duckduckgo_search_agent, stocks_agent],  # ✅ Use Gemini-based sub-agents
+    instructions=[
+        "Provide concise, accurate, and well-formatted responses.",
+        "Format your response in markdown with tables for clarity.",
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,advanced_stock_analysis,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "If a query is related to taxes, use the tax analysis tool tax_analysis_tool to provide detailed tax-saving strategies and calculations.",
+        "For general queries, use DuckDuckGo search for reliable information,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations.",
+        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations.",
+        "Do not mention which tools or functions you are using Only include relevant information in your answers."
+    ],
+    add_chat_history_to_messages=True,
+    tools = [search_web,
+             get_stock_info,get_company_info,get_analyst_recommendations,advanced_stock_analysis,
+             tax_analysis_tool,
+             calculate_math],
+    show_tools_calls=True,
+    markdown=True,
+    # reasoning=True,
+    # structured_outputs=True,
+    function_declarations=[
+        {
+            "name": "search_web",
+            "description": "Search the web for information and provide sources.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "get_stock_info",
+            "description": "Fetch current stock price data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_info",
+            "description": "Fetch detailed company information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_news",
+            "description": "Fetch recent company news.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_analyst_recommendations",
+            "description": "Fetch analyst recommendations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "advanced_stock_analysis",
+            "description": "Perform advanced stock analysis for a given symbol (includes company info, recent news, and analyst recommendations) and return a markdown formatted response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "tax_analysis_tool",
+            "description": "Analyze tax-related queries using client financial data, portfolio data, and current tax rates to generate actionable tax-saving suggestions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tax_query": {"type": "string"},
+                    "client_id": {"type": "string"}
+                },
+                "required": ["tax_query"]
+            }
+        },
+        {
+            "name": "calculate_math",
+            "description": "Evaluate a mathematical expression.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    ],
+    # function_declarations	= Optional[List[FunctionDeclaration]]
+)
+
+#####################################################################################################
+
+# Fail safe methods :
+# 1. using llama 3.3 70b miodel :
+
+# ✅ Web Search Agent - Ensure it does not use OpenAI
+duckduckgo_search_agent_llama = Agent(
+    name="Web Search Agent",
+    role="Search Web for any general queries or facts.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    tools=[DuckDuckGo(),search_web],  # ✅ Ensure it does not fall back to OpenAI
+    instructions=["Always provide sources"],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+# ✅ Finance Agent - Ensure it does not use OpenAI
+stocks_agent_llama = Agent(
+    name="Stock Market Agent",
+    role="Provide stock/asset data, analysis, financial data, and suggestions.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    tools=[
+        YFinanceTools(
+            stock_price=True, analyst_recommendations=True,
+            stock_fundamentals=True, company_news=True,
+            company_info=True, key_financial_ratios=True,
+            income_statements=True, technical_indicators=True,
+            historical_prices=True
+        ),
+        get_stock_info,
+        get_company_info,
+        get_analyst_recommendations,
+        advanced_stock_analysis
+    ],
+    description="Format your response using markdown and use tables for clarity.",
+    instructions=[
+        "Always provide sources",
+        "Format responses using markdown and use tables where applicable."
+    ],
+    show_tools_calls=True,
+    markdown=True,
+)
+
+# ✅ Multi-AI Chatbot - Ensuring Gemini Handles All Responses
+multi_ai_chatbot_llama = Agent(
+    name="Multi-AI Chatbot",
+    role="A chatbot that can search the web, fetch stock data, and answer general user queries.",
+    # model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+    model=Groq(id="llama-3.3-70b-versatile"),
+    team=[duckduckgo_search_agent_llama, stocks_agent_llama],  # ✅ Use LLAMA-based sub-agents
+    instructions=[
+        "Provide concise, accurate, and well-formatted responses.",
+        "Format your response in markdown with tables for clarity.",
+        "For financial queries, use YFinanceTools (e.g., get_stock_info, get_company_info, get_company_news, get_analyst_recommendations,advanced_stock_analysis,etc),output only the requested data in a table without extra commentary about data sources or API limitations..",
+        "If a query is related to taxes, use the tax analysis tool tax_analysis_tool to provide detailed tax-saving strategies and calculations.",
+        "For general queries, use DuckDuckGo search for reliable information,provide a clear, straightforward answer without internal details.",
+        "Ensure responses are clear, structured, and do not refer to internal AI agents or use first-person language,output only the requested data without extra commentary about data sources or API limitations.",
+        "Include advanced stock suggestions based on key financial indicators, recent news, and analyst recommendations.",
+        "Do not mention which tools or functions you are using Only include relevant information in your answers."
+    ],
+    add_chat_history_to_messages=True,
+    tools = [search_web,
+             get_stock_info,get_company_info,get_analyst_recommendations,advanced_stock_analysis,
+             tax_analysis_tool,
+             calculate_math],
+    show_tools_calls=True,
+    markdown=True,
+    # reasoning=True,
+    # structured_outputs=True,
+    function_declarations=[
+        {
+            "name": "search_web",
+            "description": "Search the web for information and provide sources.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "get_stock_info",
+            "description": "Fetch current stock price data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_info",
+            "description": "Fetch detailed company information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_company_news",
+            "description": "Fetch recent company news.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "get_analyst_recommendations",
+            "description": "Fetch analyst recommendations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "advanced_stock_analysis",
+            "description": "Perform advanced stock analysis for a given symbol (includes company info, recent news, and analyst recommendations) and return a markdown formatted response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"}
+                },
+                "required": ["symbol"]
+            }
+        },
+        {
+            "name": "tax_analysis_tool",
+            "description": "Analyze tax-related queries using client financial data, portfolio data, and current tax rates to generate actionable tax-saving suggestions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tax_query": {"type": "string"},
+                    "client_id": {"type": "string"}
+                },
+                "required": ["tax_query"]
+            }
+        },
+        {
+            "name": "calculate_math",
+            "description": "Evaluate a mathematical expression.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    ],
+    # function_declarations	= Optional[List[FunctionDeclaration]]
+)
+
+
+########################################################################################################################
+
+# example i/p for testing :
+# {
+#     "user_input": "Give me investment strategy for client id : SB6064 ?",
+#     "session_id": "stock_query_1"
+# }
+
+import uuid
+
+# 🔹 **API for Chatbot Conversation**
+@app.route('/api/chatbot', methods=['POST'])
+# @jwt_required()
+def chatbot():
+    try:
+        data = request.json
+        user_input = data.get("user_input", "")
+        session_id = data.get("session_id",None)
+        chat_title = data.get("chat_title",None)
+        user_id = data.get("user_email",None) 
+        print("user_id: ", user_id)
+        
+        if not user_input:
+            return jsonify({"error": "No user input provided"}), 400
+
+        print(f"📩 Received Query: {user_input}")
+        print(f"�� Session ID: {session_id}")
+        
+         # Retrieve the chat history from the JSON file.
+        history = []
+        chat_history = []
+        time_of_chat_creation = None
+
+        # for new chat : generate session_id and chat title :
+        if not session_id:
+            session_id = uuid.uuid4().hex  # Generate a unique session_id.
+            # Generate a chat title from the first query (truncated to 20 characters).
+            chat_title = generate_chat_title(user_input) #
+            time_of_chat_creation = datetime.now().isoformat()
+            # user_id = "id"
+            chats = {
+                    "user_id": user_id,
+                    "chat_title": chat_title,
+                    "session_id": session_id,
+                    "time_of_chat_creation": time_of_chat_creation,
+                    "last_saved_timestamp": datetime.now().isoformat()
+                }
+            
+            # save chats for one time :
+            save_chats(chats)
+            # save_chats(user_id,chats)
+            
+            # timestamp = datetime.now().isoformat()
+            # Store initial metadata as the first entry.
+            
+            # history.append({
+            #     "role": "system",
+                # "chat_title": chat_title,
+                # "time_of_chat_creation" : time_of_chat_creation,
+                # "timestamp": timestamp,
+            #     "message": "New chat session started."
+            # })
+            print(f"New session created: {session_id} with title: {chat_title}")
+        else:
+            # Load previous history.
+            history = load_chat_history_data(session_id)
+            
+            if not isinstance(history, list):
+                history = []
+            if history:
+                print(f"Chat History for Session ID {session_id}: {history}")
+            else:
+                print(f"No previous chat history available for session_id: {session_id}")
+        
+        # Save Time of Creation of Chat :
+        if not time_of_chat_creation:
+            first_entry = history[0]
+            time_of_chat_creation = first_entry.get("time_of_chat_creation", "timestamp")
+            print(f"Time of Chat Creation : {time_of_chat_creation}")
+            if not time_of_chat_creation:
+                time_of_chat_creation = datetime.now().isoformat()
+                print(f"Added Default Time of Chat Creation : {time_of_chat_creation}")
+                
+        # Extract chat title from history if not provided.
+        if not chat_title:
+            chat_title = ""
+            if isinstance(history, list) and len(history) > 0:
+                # Look for chat_title in the first system message.
+                first_entry = history[0]
+                chat_title = first_entry.get("chat_title", "")
+                print("Chat Title is : ",chat_title)
+
+        # #(Optional) Limit history to the last 5 entries.
+        if len(history) > 5:
+            chat_history = history[-5:]
+            
+        # Append the new user message with timestamp.
+        # history.append({
+        #     "role": "user",
+        #     "text": user_input,
+        #     "timestamp": datetime.now().isoformat()
+        # })
+        
+        chat_history.append({
+            "role": "user",
+            "text": user_input,
+            "timestamp": datetime.now().isoformat()
+        })
+            
+        # 🔹 **Generate AI Response**
+        try :
+            response = multi_ai_chatbot.run(
+                message=f"""Based on the user's query: "{user_input}"
+                    decide whether the query is finance-related,tax-related,stock related, a follow-up question to a previous question or a general question.
+                    Use the appropriate functions:
+                    - For finance-related or stock-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further.
+                    - Check if the query is a Follow Up question to a previous question refer to the chat history : {chat_history} and answer to the question correctly by using the provided tools.If history is none answer the question normally.
+                    - For general queries, use `search_web` to look up the information.
+                    Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+                    provide a clear, straightforward answer without internal details.
+                    Do not mention which tools or functions you are using here only include relevant information to the user based on their queries.
+                    Do not use first-person language or mention internal task delegation.""",
+                messages=[user_input,chat_history],
+                session_id=session_id,
+                stream=False
+            )
+            
+            # response = multi_ai_agent.print_response(
+            #     f"""Based on the user's query: "{json.dumps(user_input, indent=4)}"
+            #     decide whether the query is finance-related or general. Use the appropriate functions:
+            #     - For finance-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`, or `get_analyst_recommendations`.
+            #     - For general queries, use `search_web` to look up the information.
+            #     Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable.
+            #     Do not use first-person language or mention internal task delegation.""",
+            #     )
+            
+            # Extract response content safely
+            if isinstance(response, RunResponse) and hasattr(response, "content"):
+                response_text = response.content  # Extracting the actual response text
+            else:
+                response_text = str(response) # "Error: Unexpected AI response format."
+            
+            # Process the response from LLM
+            response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+            # response_text = markdown_to_text(html_suggestions) # format_suggestions
+            
+            print("ai_response", response_text)
+            
+            # Append the AI's response to the history.
+            history.append({
+                    "user_input": user_input,
+                    "ai_response": response_text,
+                    "chat_title": chat_title,
+                    "time_of_chat_creation" : time_of_chat_creation,
+                    "timestamp": datetime.now().isoformat()
+                })
+            # history.append({"role": "assistant", "text": response_text})
+            
+            save_chat_history(session_id, history)
+            
+        except Exception as e:
+            logging.error(f"Error in processing Gemini response: {e}")
+            # using llama as failsafe :
+            try :
+                response = multi_ai_chatbot_llama.run(
+                    message=f"""Based on the user's query: "{user_input}"
+                    decide whether the query is finance-related,tax-related,stock related, a follow-up question to a previous question or a general question.
+                    Use the appropriate functions:
+                    - For finance-related or stock-related queries, consider using `get_stock_info`, `get_company_info`, `get_company_news`,`get_analyst_recommendations` or 'advanced_stock_analysis'.
+                    - For Tax related Queries, use 'tax_analysis_tool' to get the tax queries response and then you might give the same response or enhance it further.
+                    - Check if the query is a Follow Up question to a previous question refer to the chat history : {history} and answer to the question correctly by using the provided tools.If history is none answer the question normally.
+                    - For general queries, use `search_web` to look up the information.
+                    Provide accurate, structured, and source-cited responses. Format your answer in markdown with tables where applicable,
+                    provide a clear, straightforward answer without internal details.
+                    Do not mention which tools or functions you are using here only include relevant information to the user based on their queries.
+                    Do not use first-person language or mention internal task delegation.""",
+                    messages=[user_input,history],
+                    session_id=session_id,
+                    stream=False
+                )
+                
+                # Extract response content safely
+                if isinstance(response, RunResponse) and hasattr(response, "content"):
+                    response_text = response.content  # Extracting the actual response text
+                else:
+                    response_text = str(response) # "Error: Unexpected AI response format."
+                
+                # Process the response from LLM
+                response_text = markdown.markdown(response_text, extensions=["extra"]) # html_suggestions
+                # response_text = markdown_to_text(html_suggestions) # format_suggestions
+                
+                print("ai_response", response_text)
+                
+                # Append the AI's response to the history.
+                # history.append({"role": "assistant", "text": response_text})
+                history.append({
+                    "role": "assistant",
+                    "text": response_text,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                chats = [
+                {
+                    "user_id": user_id,
+                    "chat_title": chat_title,
+                    "session_id": session_id,
+                    "time_of_chat_creation": time_of_chat_creation,
+                    "last_saved_timestamp": datetime.now().isoformat()
+                }
+                ]
+                # save chats 
+                save_chats(chats)
+                # save_chats(user_id,chats)
+                
+                
+                # 🔹 **Save Response History **
+                save_chat_history(session_id, history)
+                
+            except Exception as e:
+                logging.error(f"Error processing LLM response: {e}")
+                return jsonify({"error": f"Error processing LLAMA response: {str(e)}"}), 500
+
+        return jsonify({
+            "session_id": session_id,
+            "chat_title": chat_title, #history[0].get("chat_title") if history and "chat_title" in history[0] else "",
+            "timestamp": datetime.now().isoformat(),
+            "user_input": user_input,
+            "ai_response": response_text
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error in chatbot: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+############################################################################################################
+
+
+# Get all Chats :
+
+# 🔹 **Load Chats** (Ensure all stored chats are retrieved)
+def load_chats():
+    if USE_AWS:
+        chats_key = f"{chat_history_folder}/chats.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chats_key)
+            chats_json = json.loads(response['Body'].read().decode('utf-8'))
+            print("loaded chats :",chats_json)
+            return chats_json if isinstance(chats_json, list) else []  # Ensure it's a list
+        except s3.exceptions.NoSuchKey:
+            return []  # No chats found
+        except Exception as e:
+            logging.error(f"Error retrieving chats from AWS: {str(e)}")
+            return []
+    else:
+        file_path = os.path.join("chats", "chats.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                try:
+                    chats = json.load(file)
+                    return chats if isinstance(chats, list) else []  # Ensure it's a list
+                except json.JSONDecodeError:
+                    return []  # Return empty list if there's a decoding error
+        return []
+
+# 🔹 **Save Chats** (Ensure chats persist correctly)
+def save_chats(new_chat):
+    """
+    Appends a new chat to the existing chat history.
+    """
+    all_chats = load_chats()  # Load existing chats
+    
+    print("loaded chats :", all_chats)
+
+    # Ensure new_chat is a dictionary :
+    if not isinstance(new_chat, dict):
+        logging.error("New chat data is not in the expected dict format.")
+        return "Error: Invalid chat data format."
+    
+    # Ensure loaded chats are a list (avoid NoneType errors)
+    if not isinstance(all_chats, list):
+        all_chats = []
+
+    all_chats.append(new_chat)  # Append the new chat
+
+    if USE_AWS:
+        chats_key = f"{chat_history_folder}/chats.json"
+        chats_json = json.dumps(all_chats, indent=4)
+        try:
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=chats_key,
+                Body=chats_json,
+                ContentType='application/json'
+            )
+            logging.info("Saved chats in AWS S3.")
+            return "Saved chats in AWS S3."
+        except Exception as e:
+            logging.error(f"Error saving chats to AWS: {e}")
+            return "Error saving chats to AWS."
+    else:
+        file_path = os.path.join("chats", "chats.json")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        try:
+            with open(file_path, "w") as file:
+                json.dump(all_chats, file, indent=4)
+            return "Chats saved locally."
+        except Exception as e:
+            logging.error(f"Error saving chats locally: {e}")
+            return "Error saving chats locally."
+
+# 🔹 **API Endpoint to Fetch Chats**
+@app.route("/api/get-chats", methods=["GET"])
+@jwt_required()
+def get_chats_endpoint():
+    try:
+        user_email = get_jwt_identity()
+        print("user_email: ", user_email)
+        claims = get_jwt() or {}
+        print(claims)
+        user_role = claims.get("role", "user")
+        print("User role is : ",user_role)
+
+        # Load all chats (assuming each chat entry has a "user_email" field)
+        all_chats = load_chats()
+        print(f"Chats: {all_chats}")
+        
+        # For regular users, return only their own chats.
+        if user_role not in ["admin", "super_admin"]:
+            user_chats = [chat for chat in all_chats if chat.get("user_email") == user_email]
+            print(f"Returning user chats: {user_chats}")
+            return jsonify({"chats": user_chats}), 200
+
+        # Admin and Super Admin can see all chats.
+        print(f"Returning all chats for {user_role}: {all_chats}")
+        
+        return jsonify({"chats": all_chats}), 200  # Admins get all chats
+
+    except Exception as e:
+        logging.error(f"Error in get_chats: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+    
+
+###############################################################################################
+
+# Generate a unique title for the chat session based on the user's input.
+def generate_chat_title(user_input):
+    if not user_input:
+        print("No user input provided")
+        return None
+    
+    prompt = f"""Generate a concise and descriptive chat title for a session based solely on the user's input: \"{user_input}\". 
+                Use a concise and descriptive title that accurately describes the topic of the conversation.
+                Ensure the title is short, concise, and accurately describes the topic.
+                Output only one title as plain text with no additional commentary, bullet points, or formatting.
+            """
+    
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        # print(response)
+        title = markdown.markdown(response.text, extensions=["extra"])
+        print(f"Generated Title for Chat Session:\n {title}")
+            
+    except Exception as e:
+        logging.error(f"Error during Generating atitle : {e}")
+        title = f"Chat - {user_input[:20]}..." if len(user_input) > 20 else f"Chat - {user_input}"
+
+    return title
+
+
+chat_history_folder = os.getenv("chat_history_folder")
+
+# 🔹 **Save Chat History** (into local or AWS) :
+
+def save_chat_history(session_id, history):
+    # history is expected to be a list of chat entries.
+    if USE_AWS:
+        chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+        # (Optional) Limit history to the last 5 entries.
+        # if len(history) > 5:
+        #     history = history[-5:]
+        chat_history_json = json.dumps(history, indent=4)
+        print(f"Chat History json: {chat_history_json}\n")
+        
+        # Upload the updated history to S3.
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=chat_history_key,
+            Body=chat_history_json,
+            ContentType='application/json'
+        )
+        logging.info(f"Saved chat history for session_id: {session_id} in AWS S3.")
+        print(f"Saved chat history for session_id: {session_id} in AWS S3.")
+        return f"Saved chat history for session_id: {session_id} in AWS S3."
+    
+    else:
+        history_folder_local = "chat_history"
+        os.makedirs(history_folder_local, exist_ok=True)
+        file_path = os.path.join(history_folder_local, f"{session_id}.json")
+        
+        # (Optional) Limit history to the last 5 entries.
+        # if len(history) > 5:
+        #     history = history[-5:]
+        
+        with open(file_path, "w") as file:
+            json.dump(history, file, indent=4)
+        
+        print(f"💾 Chat history saved locally for session: {session_id}")
+        return f"Chat history saved locally for session: {session_id}"
+
+
+def load_chat_history_data(session_id: str) -> list:
+    
+    if USE_AWS:
+        chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chat_history_key)
+            chat_history_json = json.loads(response['Body'].read().decode('utf-8'))
+            return chat_history_json
+        except Exception as e:
+            error_msg = str(e)
+            logging.error(f"Error retrieving chat history from AWS: {error_msg}")
+            if "NoSuchKey" in error_msg:
+                return []  # No previous chat history available.
+            else:
+                return []  # On other errors, return empty history.
+    else:
+        file_path = os.path.join("chat_history", f"{session_id}.json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                chat_history = json.load(file)
+            return chat_history
+        else:
+            return []  # No history found.
+
+
+# 🔹 **API to Fetch Chat History**
+
+@app.route('/api/chat-history', methods=['POST'])
+def get_chat_history():
+    try:
+        session_id = request.json.get("session_id", "default")
+        if USE_AWS:
+            chat_history_key = f"{chat_history_folder}/{session_id}_chat_history.json"
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=chat_history_key)
+                chat_history_json = json.loads(response['Body'].read().decode('utf-8'))
+                print("Returned Chat History of Session ID : ",session_id)
+                return jsonify(chat_history_json), 200
+            except Exception as e:
+                error_msg = str(e)
+                logging.error(f"Error retrieving chat history from AWS: {error_msg}")
+                # Check if the error indicates that the file (key) does not exist.
+                if "NoSuchKey" in error_msg:
+                    return jsonify({"message": "No previous chat history available."}), 400
+                else:
+                    return jsonify({"result": f"Error retrieving chat history from AWS: {error_msg}"}), 500
+        else:
+            file_path = os.path.join("chat_history", f"{session_id}.json")
+            if os.path.exists(file_path):
+                with open(file_path, "r") as file:
+                    chat_history = json.load(file)
+                return jsonify(chat_history), 200
+            else:
+                return jsonify({"message": "No chat history found."}), 400
+    except Exception as e:
+        logging.error(f"Error retrieving chat history: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+#######################################################################################################
+
+# Calendar API :
+# Include tasks , Birthdays, Wedding Annieversary and Work Annieversary,child's birthdays and graduation's birthdays
+
+events_folder = os.getenv("events_folder")
+events_file = "events.json"
+reminders_folder = os.getenv("reminders_folder")
+reminders_file = "reminders.json"
+notes_folder = os.getenv("notes_folder")
+
+# For notes, we'll store locally.
+notes_file = "notes.json"
+
+# For parsing ISO8601 date strings
+from dateutil import parser as date_parser
+
+# For scheduling reminders
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta, timezone
+
+from botocore.exceptions import ClientError
+
+def load_events():
+    if USE_AWS:
+        try:
+            events_key = f"{events_folder}/{events_file}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=events_key)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                # Key doesn't exist, so return an empty list
+                return []
+            else:
+                logging.error(f"Error loading events from AWS: {e}")
+                return []
+    else:
+        if os.path.exists(events_file):
+            with open(events_file, "r") as f:
+                return json.load(f)
+        return []
+
+def save_events(events):
+    data = json.dumps(events, indent=4)
+    if USE_AWS:
+        try:
+            events_key = f"{events_folder}/{events_file}"
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=events_key, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving events to AWS: {e}")
+    else:
+        with open(events_file, "w") as f:
+            f.write(data)
+
+# check reminders :
+def load_reminders():
+    if USE_AWS:
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=reminders_file)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading reminders from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(reminders_file):
+            with open(reminders_file, "r") as f:
+                return json.load(f)
+        return []
+
+def save_reminders(reminders):
+    data = json.dumps(reminders, indent=4)
+    if USE_AWS:
+        try:
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=reminders_file, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving reminders to AWS: {e}")
+    else:
+        with open(reminders_file, "w") as f:
+            f.write(data)
+
+
+# notes :
+def load_notes():
+    if USE_AWS:
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=notes_file)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading notes from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(notes_file):
+            with open(notes_file, "r") as f:
+                return json.load(f)
+    return []
+
+def save_notes(notes):
+    data = json.dumps(notes, indent=4)
+    if USE_AWS:
+        try:
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=notes_file, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving notes to AWS: {e}")
+    else:
+        with open(notes_file, "w") as f:
+            f.write(data)
+            
+################################################################################################
+# Reminder Functions
+
+# Send reminders via email :
+# Updated :
+from dateutil import parser as date_parser
+from datetime import timezone
+
+def send_reminder_email(to_email, event):
+    """
+    Sends an email reminder for the event with a human-readable localized start time.
+    If a meeting link is provided, it is included in the email.
+    """
+    try:
+        # Validate email format
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+            logging.error(f"Invalid email address: {to_email}")
+            return False
+
+        # Parse the event start time (assumed to be in ISO8601) and ensure it's timezone-aware (default UTC).
+        event_start = date_parser.parse(event['start_time'])
+        if event_start.tzinfo is None:
+            event_start = event_start.replace(tzinfo=timezone.utc)
+
+        # Determine the user's (or event's) desired time zone.
+        # The event is expected to include a key "timezone" with a valid pytz time zone string.
+        user_timezone_str = event.get("timezone", "US/Pacific")
+        try:
+            user_tz = pytz.timezone(user_timezone_str)
+        except Exception as e:
+            logging.error(f"Error determining timezone from '{user_timezone_str}', defaulting to US/Pacific: {e}")
+            user_tz = pytz.timezone("US/Pacific")
+
+        # Convert the event start time into the user's local time zone.
+        event_local = event_start.astimezone(user_tz)
+        formatted_date_local = event_local.strftime("%B %d, %Y")
+        formatted_time_local = event_local.strftime("%I:%M %p %Z")
+
+        # Construct the message body using the localized date/time.
+        message_body = (
+            f"Dear User,\n\n"
+            f"This is a reminder that your event '{event['title']}' is scheduled on {formatted_date_local} "
+            f"at {formatted_time_local} and is going to start in 15 minutes.\n"
+        )
+        # Include the meeting link if provided
+        meeting_link = event.get("meeting_link", "").strip()
+        if meeting_link:
+            message_body += f"\nJoin the meeting using this link: {meeting_link}\n"
+        message_body += (
+            "\nPlease make the necessary preparations.\n\n"
+            "Thank you,\n"
+            "Your Support Team"
+        )
+
+        subject = "Event Reminder – Upcoming Event Notification"
+        
+        # Create the email message
+        msg = MIMEMultipart()
+        msg['From'] = support_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message_body, 'plain'))
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(support_email, support_password)
+            server.sendmail(support_email, to_email, msg.as_string())
+
+        logging.info(f"Reminder email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending reminder email: {e}")
+        return False
+
+# previous :
+# def send_reminder_email(to_email, event):
+#     """
+#     Sends an email reminder for the event with a human-readable start time.
+#     If a meeting link is provided, it is included in the email.
+#     """
+#     try:
+#         # Validate email format
+#         if not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+#             logging.error(f"Invalid email address: {to_email}")
+#             return False
+
+#         # Parse the event start time and format it nicely.
+#         event_start = date_parser.parse(event['start_time'])
+#         # Ensure time is timezone-aware; assume UTC if not provided.
+#         if event_start.tzinfo is None:
+#             event_start = event_start.replace(tzinfo=timezone.utc)
+#         formatted_date = event_start.strftime("%B %d, %Y")
+#         formatted_time = event_start.strftime("%I:%M %p %Z")
+
+#         # Construct the message body
+#         message_body = (
+#             f"Dear User,\n\n"
+#             f"This is a reminder that your event '{event['title']}' is scheduled on {formatted_date} "
+#             f"at {formatted_time} and is going to start in 15 minutes.\n"
+#         )
+#         # Include meeting link if provided and not empty
+#         meeting_link = event.get("meeting_link", "").strip()
+#         if meeting_link:
+#             message_body += f"\nJoin the meeting using this link: {meeting_link}\n"
+
+#         message_body += (
+#             "\nPlease make the necessary preparations.\n\n"
+#             "Thank you,\n"
+#             "Your Support Team"
+#         )
+
+#         subject = "Event Reminder – Upcoming Event Notification"
+        
+#         # Create a multipart email message
+#         msg = MIMEMultipart()
+#         msg['From'] = support_email
+#         msg['To'] = to_email
+#         msg['Subject'] = subject
+#         msg.attach(MIMEText(message_body, 'plain'))
+
+#         context = ssl.create_default_context()
+#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+#             server.ehlo()
+#             server.starttls(context=context)
+#             server.ehlo()
+#             server.login(support_email, support_password)
+#             server.sendmail(support_email, to_email, msg.as_string())
+
+#         logging.info(f"Reminder email sent successfully to {to_email}")
+#         return True
+#     except Exception as e:
+#         logging.error(f"Error sending reminder email: {e}")
+#         return False
+
+def check_reminders():
+    """
+    Checks for events starting in 15 minutes and sends reminder emails and desktop notifications.
+    """
+    try:
+        events = load_events()
+        now = datetime.now(timezone.utc)  # timezone-aware current time in UTC
+        # now_utc = datetime.now(timezone.utc)
+        # now_local = now_utc.astimezone()  # This converts to your system's local timezone
+
+        updated = False
+        print("Checking events starting in 15 minutes")
+        print("Current time (UTC):", now)
+        for event in events:
+            # Skip if reminder already sent.
+            if event.get("reminder_sent"):
+                continue
+
+            try:
+                event_start = date_parser.parse(event["start_time"])
+                # If event_start is naive, assume it's in UTC and make it aware
+                if event_start.tzinfo is None:
+                    event_start = event_start.replace(tzinfo=timezone.utc)
+                print("Event Start time:", event_start)
+            except Exception as e:
+                logging.error(f"Error parsing start_time for event {event.get('id')}: {e}")
+                continue
+
+            # Calculate the reminder time (15 minutes before event start)
+            reminder_time = event_start - timedelta(minutes=15)
+            print("Calculated reminder time:", reminder_time)
+
+            # Use a tolerant condition: if now is later than reminder_time and before event_start, send reminders.
+            # if now_local >= reminder_time and now_local < event_start:
+            if now >= reminder_time and now < event_start: 
+                print("Condition met: now is within the reminder window.")
+                email_sent = send_reminder_email(event["user_email"], event)
+                # notif_sent = send_reminder_notification(event)
+                if email_sent : # and notif_sent:
+                    event["reminder_sent"] = True
+                    updated = True
+            else:
+                print("Condition not met for event", event.get("id"),
+                      f"(now: {now}, reminder_time: {reminder_time}, event_start: {event_start})")
+                      
+                    #   f"(now: {now_local}, reminder_time: {reminder_time}, event_start: {event_start})")
+
+        if updated:
+            save_events(events)
+    except Exception as e:
+        logging.error(f"Error in check_reminders: {e}")
+
+def cleanup_completed_events():
+    """
+    Removes events that have already completed (i.e. events whose end_time is before the current time).
+    """
+    try:
+        events = load_events()
+        now = datetime.now(timezone.utc)
+        remaining_events = []
+        print("Cleaning up completed events...")
+        print("Current time (UTC):", now)
+        for event in events:
+            try:
+                event_end = date_parser.parse(event["end_time"])
+                # If event_end is naive, assume it's in UTC
+                if event_end.tzinfo is None:
+                    event_end = event_end.replace(tzinfo=timezone.utc)
+                print(f"Event {event.get('id')} end time:", event_end)
+            except Exception as e:
+                logging.error(f"Error parsing end_time for event {event.get('id')}: {e}")
+                # If we cannot parse, keep the event so we don't accidentally remove it.
+                remaining_events.append(event)
+                continue
+
+            # Keep events that haven't ended yet
+            if event_end > now:
+                remaining_events.append(event)
+            else:
+                print(f"Removing completed event {event.get('id')} (ended at {event_end})")
+                logging.info(f"Removing completed event {event.get('id')} with end_time {event['end_time']}")
+
+        # Only save if there was a change
+        if len(remaining_events) != len(events):
+            save_events(remaining_events)
+    except Exception as e:
+        logging.error(f"Error in cleanup_completed_events: {e}")
+
+
+import threading, time
+from plyer import notification
+
+# for linux :
+
+
+# updated :
+
+import webbrowser
+# from win10toast_click import ToastNotifier
+# import logging
+# logging.getLogger("win10toast_click").setLevel(logging.ERROR)
+
+# # updated :
+# # for windows : 
+# def send_reminder_notification(event):
+#     """
+#     Sends a desktop notification for the event using win10toast-click.
+#     The notification uses a long duration and always passes a callback that returns 0.
+#     If a meeting link is provided, clicking the notification opens the link.
+#     """
+#     try:
+#         # Set your icon path
+#         icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+#         meeting_link = event.get("meeting_link", "").strip()
+
+#         # Define a callback that opens the meeting link (if available) and returns 0.
+#         def open_link_callback():
+#             if meeting_link:
+#                 webbrowser.open(meeting_link)
+#             return 0  # Required integer return
+
+#         # If no meeting link is provided, use a dummy callback that does nothing but returns 0.
+#         def dummy_callback():
+#             return 0
+
+#         # Always assign a callback function, avoiding None.
+#         callback = open_link_callback if meeting_link else dummy_callback
+
+#         toaster = ToastNotifier()
+
+#         # Set a long duration (e.g., 3600 seconds). Note that Windows may auto-dismiss toasts,
+#         # unless your application is registered as a persistent app.
+#         toaster.show_toast(
+#             "Wealth Manager – Event Reminder",  # Custom title
+#             f"Your event '{event['title']}' starts at {event['start_time']} (in 15 minutes).",
+#             icon_path=icon_path,
+#             # duration=3600,  # Attempt to keep the toast visible for 1 hour
+#             duration=None,
+#             threaded=True,
+#             callback_on_click=callback
+#         )
+#         logging.info(f"Desktop notification sent for event '{event['title']}'")
+#         return True
+#     except Exception as e:
+#         logging.error(f"Error sending desktop notification: {e}")
+#         return False
+
+
+def delayed_notification(event):
+    time.sleep(5)  # Delay to ensure the server is up
+    send_reminder_notification(event)
+    # send_startup_notification()
+
+# Start the background scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_reminders, trigger="interval", minutes=1)
+scheduler.add_job(func=cleanup_completed_events, trigger="interval", minutes=5)
+scheduler.start()
+# threading.Thread(target=delayed_notification, daemon=True).start()
+
+
+# icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\alarm_alert_bell.ico"
+# icon_path = r"C:\Users\Harshal\OneDrive\Desktop\Wealth_Management_ChatBot\Telegram-ChatBot-using-Gemini\icon\calendar_alert_notification_date_appointment_icon_153130.ico"
+
+# ----------------Reminders Endpoints---------------- 
+
+@app.route('/api/reminder/<int:reminder_id>', methods=['GET'])
+@jwt_required()
+def get_specific_reminder(reminder_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        reminders = load_reminders()
+        reminder = next((r for r in reminders if r["id"] == reminder_id), None)
+        if not reminder:
+            return jsonify({"error": "Reminder not found"}), 404
+        if user_role not in ["admin", "super_admin"] and reminder.get("user_email") != user_email:
+            return jsonify({"error": "Unauthorized to view this reminder"}), 403
+        return jsonify({"reminder": reminder}), 200
+    except Exception as e:
+        logging.error(f"Error fetching reminder: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# Set Reminder API – authenticated users can set a reminder with event title, details, and reminder time.
+@app.route('/api/reminder', methods=['POST'])
+@jwt_required()
+def set_reminder():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        title = data.get("title")
+        details = data.get("details", "")
+        reminder_time = data.get("reminder_time")  # Expecting ISO8601 string
+
+        if not title or not reminder_time:
+            return jsonify({"error": "Missing required reminder details"}), 400
+
+        reminders = load_reminders()
+        new_id = len(reminders) + 1
+        reminder_entry = {
+            "id": new_id,
+            "user_email": user_email,
+            "title": title,
+            "details": details,
+            "reminder_time": reminder_time,
+            "notified": False  # Flag to track if reminder email has been sent
+        }
+        reminders.append(reminder_entry)
+        save_reminders(reminders)
+        return jsonify({"message": "Reminder set successfully", "reminder": reminder_entry}), 200
+    except Exception as e:
+        logging.error(f"Error setting reminder: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get Reminders – for authenticated users; non-admin users see only their reminders.
+@app.route('/api/reminders', methods=['GET'])
+@jwt_required()
+def get_reminders():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        reminders = load_reminders()
+        if user_role not in ["admin", "super_admin"]:
+            reminders = [r for r in reminders if r.get("user_email") == user_email]
+        return jsonify({"reminders": reminders}), 200
+    except Exception as e:
+        logging.error(f"Error fetching reminders: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+#################################################################################################################
+
+# Notes Endpoints :
+
+# Add a new note
+@app.route('/api/note', methods=['POST'])
+@jwt_required()
+def add_note():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        title = data.get("title")
+        content = data.get("content")
+        if not title or not content:
+            return jsonify({"error": "Missing required note details"}), 400
+        notes = load_notes()
+        new_id = len(notes) + 1
+        note_entry = {
+            "id": new_id,
+            "user_email": user_email,
+            "title": title,
+            "content": content,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        notes.append(note_entry)
+        save_notes(notes)
+        return jsonify({"message": "Note added successfully", "note": note_entry}), 200
+    except Exception as e:
+        logging.error(f"Error adding note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Update an existing note
+@app.route('/api/note/<int:note_id>', methods=['PUT'])
+@jwt_required()
+def update_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        # Only allow the note's owner (or admin) to update
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to update this note"}), 403
+        note.update({
+            "title": data.get("title", note["title"]),
+            "content": data.get("content", note["content"]),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        save_notes(notes)
+        return jsonify({"message": "Note updated successfully", "note": note}), 200
+    except Exception as e:
+        logging.error(f"Error updating note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Delete a note
+@app.route('/api/note/<int:note_id>', methods=['DELETE'])
+@jwt_required()
+def delete_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to delete this note"}), 403
+        notes = [n for n in notes if n["id"] != note_id]
+        save_notes(notes)
+        return jsonify({"message": "Note deleted successfully"}), 200
+    except Exception as e:
+        logging.error(f"Error deleting note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get all notes (regular users only get their own notes; admins get all)
+@app.route('/api/notes', methods=['GET'])
+@jwt_required()
+def get_notes():
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if user_role not in ["admin", "super_admin"]:
+            notes = [n for n in notes if n.get("user_email") == user_email]
+        return jsonify({"notes": notes}), 200
+    except Exception as e:
+        logging.error(f"Error fetching notes: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Get a specific note by note_id
+@app.route('/api/note/<int:note_id>', methods=['GET'])
+@jwt_required()
+def get_specific_note(note_id):
+    try:
+        user_email = get_jwt_identity()
+        notes = load_notes()
+        note = next((n for n in notes if n["id"] == note_id), None)
+        if not note:
+            return jsonify({"error": "Note not found"}), 404
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        if note.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to view this note"}), 403
+        return jsonify({"note": note}), 200
+    except Exception as e:
+        logging.error(f"Error fetching note: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+####################################################################################################################
+
+# ---------------- Event Endpoints ----------------
+
+# Get All Participants :
+
+# ------------------ Participants API ------------------
+
+@app.route('/api/participants', methods=['GET'])
+@jwt_required()
+def get_participants():
+    try:
+        # Get user details; assuming get_user_details() returns (email, role, organization)
+        email, role, organization = get_user_details()
+        all_clients = []
+
+        # Load client data from AWS or locally.
+        if USE_AWS:
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        file_data = file_response['Body'].read().decode('utf-8')
+                        data_json = json.loads(file_data)
+                        if 'isNewClient' not in data_json:
+                            data_json['isNewClient'] = True
+                        if role == "super_admin":
+                            all_clients.append(data_json)
+                        elif role == "admin" and data_json.get('organization') == organization:
+                            all_clients.append(data_json)
+                        elif role == "user" and data_json.get('submittedBy') == email:
+                            all_clients.append(data_json)
+                    except Exception as e:
+                        logging.error(f"Error reading file {obj['Key']}: {e}")
+                        continue
+        else:
+            for filename in os.listdir(CLIENT_DATA_DIR):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                    with open(file_path, 'r') as f:
+                        client_data = json.load(f)
+                        if role == "super_admin":
+                            all_clients.append(client_data)
+                        elif role == "admin" and client_data.get('organization') == organization:
+                            all_clients.append(client_data)
+                        elif role == "user" and client_data.get('submittedBy') == email:
+                            all_clients.append(client_data)
+
+        if not all_clients:
+            return jsonify({'message': 'No client data found for this user.'}), 404
+
+        # Load the archived (completed) to-dos once
+        completed_todos = load_completed_todos()
+
+        # Build the list of participants
+        participants = []
+        for client in all_clients:
+            participant = {
+                "clientName": client.get("clientDetail", {}).get("clientName"),
+                "clientEmail": client.get("clientDetail", {}).get("clientEmail","N/A"),
+                "clientContact": client.get("clientDetail", {}).get("clientContact","N/A"),
+                "uniqueId": client.get("uniqueId") or client.get("client_id", "Unknown"),
+                "investment_personality": client.get("investment_personality"),
+                "investmentAmount": client.get("investmentAmount", 0)
+            }
+            # Check if there's a completed to-do for this participant by matching uniqueId
+            related_tasks = [t for t in completed_todos if t.get("uniqueId") == participant["uniqueId"]]
+            if related_tasks:
+                most_recent_task = max(related_tasks, key=lambda t: parse_date(t.get("last_action_date", "1900-01-01")))
+                participant["last_action_type"] = most_recent_task.get("last_action_type", "N/A")
+                participant["last_call_summary"] = most_recent_task.get("last_call_summary", "N/A")
+            else:
+                participant["last_action_type"] = None
+                participant["last_call_summary"] = None
+
+            participants.append(participant)
+
+        return jsonify({"participants": participants}), 200
+
+    except Exception as e:
+        logging.error(f"Error occurred while retrieving participants: {e}")
+        return jsonify({'message': f"Error occurred while retrieving participants: {e}"}), 500
+
+
+# Add Event – only authenticated users can add an event.
+@app.route('/api/event', methods=['POST'])
+@jwt_required()
+def add_event():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        event_type = data.get("action")  # 'task' or 'meeting' # action
+        title = data.get("title")
+        start_time = data.get("start_time")
+        end_time = data.get("end_time")
+        participants = data.get("participants", [])
+        key_points = data.get("key_points", "")
+        meeting_link = data.get("meeting_link", "")
+
+        if not title or not start_time or not end_time:
+            return jsonify({"error": "Missing required event details"}), 400
+
+        events = load_events()
+        new_id = len(events) + 1
+        
+        # Extract first participant info
+        clientName = None
+        if participants and isinstance(participants, list):
+            client_name = participants[0].get('clientName')
+            clientEmail = participants[0].get('clientEmail')
+            clientContact = participants[0].get('clientContact')
+            uniqueId = participants[0].get('uniqueId')
+
+        # Get last interaction if client exists
+        last_date, last_action_type = get_last_interaction(clientName) if clientName else ("N/A", "N/A")
+        print("last_date :",last_date)
+        print("last_action_type :",last_action_type)
+        
+        event_entry = {
+            "id": new_id,
+            "clientEmail": clientEmail, # client's email id
+            "clientContact": clientContact, # client's contact number details
+            "uniqueId": uniqueId , # uniqueId of the client
+            "user_email": user_email,  # associate event with the creator
+            "type": event_type,
+            "title": title,
+            "start_time": start_time,
+            "end_time": end_time,
+            "participants": participants if event_type == "meeting" else None,
+            "key_points": key_points if event_type == "meeting" else None,
+            "meeting_link": meeting_link if event_type == "meeting" else None,
+            "reminder_sent": False  ,# Flag to prevent duplicate reminders
+            "last_action_date": last_date,
+            "last_action_type": last_action_type
+        }
+        events.append(event_entry)
+        save_events(events)
+        
+        # save it in to do list as well :
+        save_todo_item_from_event(event_entry)
+        
+        return jsonify({"message": "Event added successfully", "event": event_entry}), 200
+    except Exception as e:
+        logging.error(f"Error adding event: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Update Event – only the event creator (or admin/super_admin) can update an event.
+@app.route('/api/event/<int:event_id>', methods=['PUT'])
+@jwt_required()
+def update_event(event_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        events = load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+
+        if event.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to update this event"}), 403
+
+        data = request.get_json()
+        event.update({
+            "title": data.get("title", event["title"]),
+            "start_time": data.get("start_time", event["start_time"]),
+            "end_time": data.get("end_time", event["end_time"]),
+            "participants": data.get("participants", event.get("participants")),
+            "key_points": data.get("key_points", event.get("notes")),
+            "meeting_link": data.get("meeting_link", event.get("meeting_link")),
+            # Reset reminder flag if event time changes
+            "reminder_sent": False
+        })
+        save_events(events)
+        return jsonify({"message": "Event updated successfully", "event": event}), 200
+    except Exception as e:
+        logging.error(f"Error updating event: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# DELETE Event – Allow normal users to delete their own events; admins/super_admins can delete any event.
+@app.route('/api/event/<int:event_id>', methods=['DELETE'])
+@jwt_required()
+def delete_event(event_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        events = load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+
+        # Allow deletion if the event belongs to the user or if the user is an admin.
+        if event.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to delete this event"}), 403
+
+        events = [e for e in events if e["id"] != event_id]
+        save_events(events)
+        return jsonify({"message": "Event deleted successfully"}), 200
+    except Exception as e:
+        logging.error(f"Error deleting event: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# GET Specific Event – Normal users can view only their events; admins/super_admins can view any event.
+@app.route('/api/event/<int:event_id>', methods=['GET'])
+@jwt_required()
+def get_specific_event(event_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        events = load_events()
+        event = next((e for e in events if e["id"] == event_id), None)
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+
+        # If the user is not an admin, they can view only their own events.
+        if user_role not in ["admin", "super_admin"] and event.get("user_email") != user_email:
+            return jsonify({"error": "Unauthorized to view this event"}), 403
+
+        return jsonify({"event": event}), 200
+    except Exception as e:
+        logging.error(f"Error fetching event: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# Get Events – for regular users, return only their events; for admin/super_admin, return all events.
+
+@app.route('/api/events', methods=['GET'])
+@jwt_required()
+def get_events():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        events = load_events()
+
+        if user_role not in ["admin", "super_admin"]:
+            events = [e for e in events if e.get("user_email") == user_email]
+        return jsonify({"events": events}), 200
+    except Exception as e:
+        logging.error(f"Error fetching events: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    
+#########################################################################################################################
+
+# Birthday api :
+
+@app.route('/api/client_birthdays', methods=['GET'])
+@jwt_required()
+def get_client_birthdays():
+    try:
+        # Extract user details; get_user_details() should return (email, role, organization)
+        email, role, organization = get_user_details()
+        clients_birthdays = []
+
+        if USE_AWS:
+            response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    try:
+                        file_key = obj['Key']
+                        file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                        client_json = json.loads(file_response['Body'].read().decode('utf-8'))
+                        
+                        # Access control based on user role
+                        if role == "super_admin":
+                            pass
+                        elif role == "admin" and client_json.get("organization") != organization:
+                            continue
+                        elif role == "user" and client_json.get("submittedBy") != email:
+                            continue
+                        
+                        # Get client details
+                        client_detail = client_json.get("clientDetail", {})
+                        client_name = client_detail.get("clientName")
+                        client_dob = client_detail.get("clientDob")
+                        client_email = client_detail.get("clientEmail")
+                        client_contact = client_detail.get("clientContact")
+                        
+                        if not client_dob:
+                            continue
+                        
+                        # Parse the birth date (assuming YYYY-MM-DD) and compute age
+                        dob_date = datetime.strptime(client_dob, "%Y-%m-%d")
+                        today = datetime.today()
+                        age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+                        
+                        clients_birthdays.append({
+                            "clientName": client_name,
+                            "birthDate": client_dob,
+                            "age": age,
+                            "clientEmail": client_email,
+                            "clientContact": client_contact
+                        })
+                    except Exception as e:
+                        logging.error(f"Error reading client data from {obj.get('Key')}: {e}")
+                        continue
+        else:
+            # For local storage, loop through client JSON files in CLIENT_DATA_DIR.
+            for filename in os.listdir(CLIENT_DATA_DIR):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                    try:
+                        with open(file_path, "r") as f:
+                            client_json = json.load(f)
+                        if role == "super_admin":
+                            pass
+                        elif role == "admin" and client_json.get("organization") != organization:
+                            continue
+                        elif role == "user" and client_json.get("submittedBy") != email:
+                            continue
+                        
+                        client_detail = client_json.get("clientDetail", {})
+                        client_name = client_detail.get("clientName")
+                        client_dob = client_detail.get("clientDob")
+                        client_email = client_detail.get("clientEmail")
+                        client_contact = client_detail.get("clientContact")
+                        
+                        if not client_dob:
+                            continue
+                        
+                        dob_date = datetime.strptime(client_dob, "%Y-%m-%d")
+                        today = datetime.today()
+                        age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+                        
+                        clients_birthdays.append({
+                            "clientName": client_name,
+                            "birthDate": client_dob,
+                            "age": age,
+                            "clientEmail": client_email,
+                            "clientContact": client_contact
+                        })
+                    except Exception as e:
+                        logging.error(f"Error processing file {filename}: {e}")
+                        continue
+                    
+        print("All Client Birthdays :\n",clients_birthdays)
+        
+        if not clients_birthdays:
+            return jsonify({"message": "No client birthday data found."}), 404
+
+        return jsonify({
+            "message": "Client birthday data retrieved successfully.",
+            "data": clients_birthdays
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error occurred while retrieving client birthday data: {e}")
+        return jsonify({"message": f"Error occurred while retrieving client birthday data: {e}"}), 500
+
+
+# US Holdidays :
+import holidays
+
+@app.route('/api/us-holidays', methods=['GET'])
+def get_us_holidays():
+    try:
+        # Get the current year
+        current_year = datetime.now().year
+
+        # Create a US holidays object for the current year.
+        us_holidays = holidays.US(years=[current_year])
+
+        # Convert the holidays to a list of dictionaries with holiday name and date.
+        holidays_list = [
+            {"name": name, "date": date.strftime("%Y-%m-%d")}
+            for date, name in us_holidays.items()
+        ]
+
+        # Optionally, sort the holidays by date.
+        holidays_list.sort(key=lambda x: x["date"])
+        print("US Holidays :",holidays_list)
+
+        return jsonify({"year": current_year, "holidays": holidays_list}), 200
+    except Exception as e:
+        logging.error(f"Error fetching US holidays: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+###################################################################################################################
+
+# JSON file used to store to-do list items
+
+todos_folder = os.getenv("todos_folder")
+TODO_FILE = "todos_list.json"
+completed_todos_folder = os.getenv("completed_todos_folder")
+COMPLETED_TODO_FILE = "completed_todos.json"
+
+# Helper functions to load and save to-do list data
+
+def load_all_clients():
+    clients = []
+    if USE_AWS:
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=client_summary_folder)
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                try:
+                    file_key = obj['Key']
+                    file_response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+                    client_json = json.loads(file_response['Body'].read().decode('utf-8'))
+                    clients.append(client_json)
+                except Exception as e:
+                    logging.error(f"Error reading file {obj.get('Key')}: {e}")
+                    continue
+    else:
+        for filename in os.listdir(CLIENT_DATA_DIR):
+            if filename.endswith(".json"):
+                file_path = os.path.join(CLIENT_DATA_DIR, filename)
+                try:
+                    with open(file_path, "r") as f:
+                        client_json = json.load(f)
+                    clients.append(client_json)
+                except Exception as e:
+                    logging.error(f"Error processing file {filename}: {e}")
+                    continue
+    return clients
+
+def load_todos():
+    if USE_AWS:
+        try:
+            todos_key = f"{todos_folder}/{TODO_FILE}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=todos_key)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                # Key doesn't exist, so return an empty list
+                return []
+            else:
+                logging.error(f"Error loading events from AWS: {e}")
+                return []
+    else:
+        if os.path.exists(TODO_FILE):
+            with open(TODO_FILE, "r") as f:
+                return json.load(f)
+        return []
+
+# Save todos list:
+        
+def save_todos(notes):
+    data = json.dumps(notes, indent=4)
+    if USE_AWS:
+        try:
+            todos_key = f"{todos_folder}/{TODO_FILE}"
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=todos_key, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving to do list to AWS: {e}")
+    else:
+        with open(TODO_FILE, "w") as f:
+            f.write(data)
+
+
+def save_todo_item_from_event(event):
+    try:
+        todos = load_todos()
+
+        # Extract info
+        action = event.get("action") or event.get("type")
+        occasion = event.get("title", "N/A")
+        clientNames = event.get("participants", [])
+        start_time = event.get("start_time", "N/A")
+        investment_personality = "N/A"
+        
+        try:
+            formatted_date = datetime.fromisoformat(start_time.replace("Z", "+00:00")).strftime("%B %d, %Y")
+        except Exception:
+            formatted_date = start_time
+        
+        if clientNames and isinstance(clientNames, list):
+            participant = clientNames[0]
+            clientName = participant.get("clientName") or participant['clientName']
+            clientEmail=  participant.get("clientEmail","N/A"), # client's email id
+            clientContact = participant.get("clientContact","N/A"), # client's contact number details 
+            uniqueId  = participant.get("uniqueId") or participant['uniqueId'] # uniqueId of the client
+            investment_personality = participant.get("investment_personality") or participant.get("investor_personality")
+            aum = participant.get("investmentAmount") #or participant.get("available_funds") 
+            print(aum)
+            if not aum :
+                print("Taking Failsafe AUM ")
+                aum = participant.get("available_funds")  # failsafe
+                
+        else:
+            clientName = "N/A"
+            uniqueId = "N/A"
+            investment_personality = "N/A"
+            clientEmail = "N/A"
+            clientContact = "N/A"
+            
+        # Add the last action date and last action type (last action summary later ) :
+        
+        last_action_date, last_action_type = get_last_interaction(clientName) #, user_email)
+        
+        new_todo = {
+            "todo_id":len(load_todos()) + 1,
+            "action": action,
+            "clientName": clientName,
+            "uniqueId": uniqueId, # uniqueId of the client
+            "clientEmail": clientEmail, # client's email id
+            "clientContact": clientContact, # client's contact number details
+            "date": formatted_date,
+            "occasion": occasion,
+            "last_action_date": last_action_date,
+            "aum": aum,
+            "key_points": event.get("key_points") or event.get("notes","N/A") , # previous version we were using notes
+            "checked": False,
+            # Optional or future use case :
+            "investment_personality": investment_personality,
+            "last_action_type": last_action_type,
+            "last_call_summary": event.get("last_call_summary", "N/A")
+        }
+        print("New Todo tasks : ",new_todo)
+        todos.append(new_todo)
+        save_todos(todos)
+
+    except Exception as e:
+        logging.error(f"Error saving to-do item from event: {e}")
+        
+def load_completed_todos():
+    if USE_AWS:
+        try:
+            completed_key = f"{completed_todos_folder}/{COMPLETED_TODO_FILE}"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=completed_key)
+            data = response['Body'].read().decode('utf-8')
+            return json.loads(data)
+        except Exception as e:
+            logging.error(f"Error loading completed todos from AWS: {e}")
+            return []
+    else:
+        if os.path.exists(COMPLETED_TODO_FILE):
+            with open(COMPLETED_TODO_FILE, "r") as f:
+                return json.load(f)
+        return []
+
+def save_completed_todos(completed_todos):
+    data = json.dumps(completed_todos, indent=4)
+    if USE_AWS:
+        try:
+            completed_key = f"{completed_todos_folder}/{COMPLETED_TODO_FILE}"
+            s3.put_object(Bucket=S3_BUCKET_NAME, Key=completed_key, Body=data, ContentType='application/json')
+        except Exception as e:
+            logging.error(f"Error saving completed todos to AWS: {e}")
+    else:
+        with open(COMPLETED_TODO_FILE, "w") as f:
+            f.write(data)
+
+# ------------------------------ To-Do List Endpoints ------------------------------
+
+# POST /api/todo – Create a new to-do item.
+@app.route('/api/todo', methods=['POST'])
+@jwt_required()
+def create_todo():
+    try:
+        user_email = get_jwt_identity()
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ["action", "clientName", "date"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"'{field}' is required"}), 400
+
+        try:
+            # Expecting date in ISO or YYYY-MM-DD format; store as string in desired format.
+            dt = datetime.fromisoformat(data["date"])
+            formatted_date = dt.strftime("%B %d, %Y")
+        except Exception:
+            formatted_date = data["date"]
+
+        new_todo = {
+            "todo_id": len(load_todos()) + 1,
+            "user_email": user_email,
+            "action": data.get("action"),
+            "clientName": data.get("clientName"),
+            "uniqueId": data.get("uniqueId"),
+            "date": formatted_date,
+            "occasion": data.get("occasion", "N/A"),
+            "last_action_date": data.get("last_action_date", "N/A"),
+            "aum": data.get("aum", "N/A"),
+            "key_talking_points": data.get("key_talking_points", "N/A"),
+            "investment_personality": data.get("investment_personality") or data.get("investor_personality","N/A"),
+            "portfolio_summary": data.get("portfolio_summary", "N/A"),
+            "last_action_type": data.get("last_action_type", "N/A"),
+            "last_call_summary": data.get("last_call_summary", "N/A"),
+            "checked": False
+        }
+        todos = load_todos()
+        todos.append(new_todo)
+        save_todos(todos)
+        return jsonify({"message": "To-Do item created successfully", "todo": new_todo}), 201
+    except Exception as e:
+        logging.error(f"Error creating to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# PUT /api/todo/<int:todo_id> – Update a to-do item.
+@app.route('/api/todo/<int:todo_id>', methods=['PUT'])
+@jwt_required()
+def update_todo(todo_id):
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        todos = load_todos()
+        todo = next((t for t in todos if t["id"] == todo_id), None)
+        if not todo:
+            return jsonify({"error": "To-Do item not found"}), 404
+
+        # Only allow update if it belongs to the user or if user is admin.
+        if todo.get("user_email") != user_email and user_role not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to update this to-do"}), 403
+
+        data = request.get_json()
+        # Update fields if provided
+        todo["action"] = data.get("action", todo["action"])
+        todo["clientName"] = data.get("clientName", todo["clientName"])
+        todo["uniqueId"] = data.get("uniqueId",todo["uniqueId"])
+        
+        if data.get("date"):
+            try:
+                dt = datetime.fromisoformat(data["date"])
+                todo["date"] = dt.strftime("%B %d, %Y")
+            except Exception:
+                todo["date"] = data["date"]
+        todo["occasion"] = data.get("occasion", todo.get("occasion", "N/A"))
+        todo["last_action_date"] = data.get("last_action_date", todo.get("last_action_date", "N/A"))
+        todo["aum"] = data.get("aum", todo.get("aum", "N/A"))
+        todo["key_talking_points"] = data.get("key_talking_points", todo.get("key_talking_points", "N/A"))
+        todo["investment_personality"] = data.get("investment_personality", todo.get("investment_personality", "N/A"))
+        todo["portfolio_summary"] = data.get("portfolio_summary", todo.get("portfolio_summary", "N/A"))
+        todo["last_action_type"] = data.get("last_action_type", todo.get("last_action_type", "N/A"))
+        todo["last_call_summary"] = data.get("last_call_summary", todo.get("last_call_summary", "N/A"))
+        todo["checked"] = data.get("checked", todo.get("checked", False))
+        
+        save_todos(todos)
+        return jsonify({"message": "To-Do item updated successfully", "todo": todo}), 200
+    except Exception as e:
+        logging.error(f"Error updating to-do: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# POST /api/todo/delete – Delete (archive) completed tasks.
+
+@app.route('/api/todo/completed', methods=['POST'])
+@jwt_required()
+def delete_todos():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        data = request.get_json()
+        is_all = data.get("is_all", False)
+        todo_ids = data.get("todo_ids", [])  # list of IDs to delete if is_all is false
+
+        todos = load_todos()
+        completed = load_completed_todos()
+
+        # Filter todos based on user: non-admins can only delete their own tasks.
+        if user_role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
+
+        tasks_to_archive = []
+        if is_all:
+            tasks_to_archive = todos.copy()
+            todos = []  # Remove all
+        else:
+            for tid in todo_ids:
+                task = next((t for t in todos if t["todo_id"] == tid), None)
+                if task:
+                    tasks_to_archive.append(task)
+            # Remove tasks_to_archive from todos
+            todos = [t for t in todos if t["todo_id"] not in [task["todo_id"] for task in tasks_to_archive]]
+
+        # Before archiving, update each task's fields.
+        for task in tasks_to_archive:
+            # Mark as completed and update last_action_date as current date if not provided.
+            task["checked"] = True
+            task["last_action_date"] = task.get("date") or datetime.now().strftime("%B %d, %Y")
+
+            # if not task.get("last_action_date") or task["last_action_date"] == "N/A":
+            #     task["last_action_date"] = task.get("date", datetime.now().strftime("%B %d, %Y"))
+
+        # Save updated active todos and archive completed tasks.
+        save_todos(todos)
+        # Append to existing archived tasks.
+        completed.extend(tasks_to_archive)
+        save_completed_todos(completed)
+
+        return jsonify({"message": "Selected tasks archived successfully", "archived_tasks": tasks_to_archive}), 200
+
+    except Exception as e:
+        logging.error(f"Error archiving to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# GET /api/completed_todos – Retrieve archived (completed) to-dos.
+@app.route('/api/completed_todos', methods=['GET'])
+@jwt_required()
+def get_completed_todos():
+    try:
+        user_email = get_jwt_identity()
+        claims = get_jwt() or {}
+        user_role = claims.get("role", "user")
+        completed = load_completed_todos()
+        if user_role not in ["admin", "super_admin"]:
+            completed = [t for t in completed if t.get("user_email") == user_email]
+        return jsonify({"completed_todos": completed}), 200
+    except Exception as e:
+        logging.error(f"Error fetching completed to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# GET All To-Dos – For regular users, return only their to-dos; for admin/super_admin return all.
+
+# v-3 :
+def create_task(user_email, clientName, clientEmail, clientContact, uniqueId, event_date, occasion, last_date, last_action_type, key_points, client):
+    return {
+        "todo_id": random.randint(10000, 99999),
+        "user_email": user_email,
+        "action": "Call",
+        "clientName": clientName,
+        "clientEmail": clientEmail,
+        "clientContact": clientContact,
+        "uniqueId": uniqueId,
+        "date": event_date.strftime("%B %d, %Y"),
+        "occasion": occasion,
+        "last_action_date": last_date,
+        "aum": client.get("investmentAmount", 0),
+        "key_points": key_points,
+        "investor_personality": client.get("investment_personality", "N/A"),
+        "last_action_type": last_action_type,
+        "last_call_summary": None,
+        "auto_generated": True,
+        "checked": False,
+        "source": "event"
+    }
+
+def load_key_points(client_id):
+    try:
+        if USE_AWS:
+            key_file = f"{client_summary_folder}client-data/{client_id}_keypoints.json"
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key_file)
+            key_points_data = json.loads(response['Body'].read().decode('utf-8'))
+        else:
+            folder_path = os.path.join(CLIENT_DATA_DIR, "client-data")
+            key_file = os.path.join(folder_path, f"{client_id}_keypoints.json")
+            if not os.path.exists(key_file):
+                return None
+            with open(key_file, 'r') as f:
+                key_points_data = json.load(f)
+
+        return key_points_data.get("key_points")
+    except Exception as e:
+        logging.warning(f"Key points not found for {client_id}: {e}")
+        return None
+
+def is_duplicate_task(events, uniqueId, occasion, date):
+    return any(
+        t["uniqueId"] == uniqueId and t["occasion"] == occasion and t["date"] == date.strftime("%B %d, %Y")
+        for t in events
+    )
+
+
+@app.route('/api/todos', methods=['GET'])
+@jwt_required()
+def get_todos():
+    try:
+        user_email, role, organization = get_user_details()
+        todos = load_todos()
+
+        active_todos = [t for t in todos if not t.get("checked", False)]
+        if len(active_todos) < len(todos):
+            save_todos(active_todos)
+        todos = active_todos
+
+        if role not in ["admin", "super_admin"]:
+            todos = [t for t in todos if t.get("user_email") == user_email]
+
+        clients = load_all_clients()
+        upcoming_events = []
+        today = datetime.today().date()
+
+        for client in clients:
+            if role == "admin" and client.get("organization") != organization:
+                continue
+            if role == "user" and client.get("submittedBy") != user_email:
+                continue
+
+            client_detail = client.get("clientDetail", {})
+            clientName = client_detail.get("clientName", "N/A")
+            client_dob = client_detail.get("clientDob")
+            uniqueId = client.get("uniqueId", "N/A")
+            clientEmail = client_detail.get("clientEmail", "N/A")
+            clientContact = client_detail.get("clientContact", "N/A")
+
+            # Load personal data (anniversary/graduation)
+            personal_data  = load_personal_data(uniqueId) #{}
+            print(f"Found Personal Data of : {uniqueId} \n {personal_data}")
+
+            last_date, last_action_type = get_last_interaction(clientName)
+            
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Birthday", next_anniversary):
+            #     continue
+
+            # proceed with creating the birthday_task
+
+            # --- Birthday Handling ---
+            if client_dob:
+                try:
+                    dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+                    birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+                    next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+                    days_until_birthday = (next_birthday - today).days
+                    if days_until_birthday <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        birthday_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, next_birthday, "Birthday", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(birthday_task)
+                except Exception as e:
+                    logging.error(f"Error parsing DOB for {clientName}: {e}")
+
+            # --- Anniversary Handling ---
+            
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Wedding Anniversary", next_anniversary):
+            #     continue
+
+            # proceed with creating the anniversary_task
+
+            anniversary_date = personal_data.get("data", {}).get("anniversaryDate")
+            print(anniversary_date)
+            if anniversary_date:
+                try:
+                    anniv_date = datetime.strptime(anniversary_date, "%Y-%m-%d").date()
+                    anniversary_this_year = datetime(today.year, anniv_date.month, anniv_date.day).date()
+                    next_anniversary = anniversary_this_year if anniversary_this_year >= today else datetime(today.year + 1, anniv_date.month, anniv_date.day).date()
+                    days_until_anniversary = (next_anniversary - today).days
+                    if days_until_anniversary <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        anniversary_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, next_anniversary, "Wedding Anniversary", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(anniversary_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Anniversary for {clientName}: {e}")
+
+            # --- Graduation Client Handling ---
+            if not clientName or not clientEmail or not clientContact or not client.get("investmentAmount"):
+                continue  # skip incomplete clients
+
+            # # Avoid duplicate task
+            # if is_duplicate_task(upcoming_events, uniqueId, "Graduation-Client", next_anniversary):
+            #     continue
+
+            graduation_year = personal_data.get("data", {}).get("graduation")
+            print(graduation_year)
+            if graduation_year:
+                try:
+                    grad_year = int(graduation_year)
+                    graduation_date = datetime(grad_year, 6, 1).date()
+                    if graduation_date >= today and (graduation_date - today).days <= 7:
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        grad_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, graduation_date, "Graduation-Client", last_date, last_action_type, key_points, client)
+                        upcoming_events.append(grad_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Client Graduation for {clientName}: {e}")
+
+            # --- Graduation Child Handling ---
+            # children = personal_data.get("children", [])
+            children = personal_data.get("data", {}).get("children", [])
+            print(children)
+            for child in children:
+                if not child.get("graduation"):
+                    continue
+                try:
+                    child_grad_year = int(child["graduation"])
+                    child_grad_date = datetime(child_grad_year, 6, 1).date()
+                    if child_grad_date >= today and (child_grad_date - today).days <= 7:
+                        child_gender = child.get("gender", "").lower()
+                        occasion = "Graduation-Son" if child_gender == "male" else "Graduation-Daughter" if child_gender == "female" else "Graduation-Child"
+                        # Load pre-saved key points (no LLM call now)
+                        key_points = load_key_points(uniqueId)
+                        if not key_points:
+                            key_points = key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_date) #"No key points available."
+                        child_task = create_task(user_email, clientName, clientEmail, clientContact, uniqueId, child_grad_date, occasion, last_date, last_action_type, key_points, client)
+                        upcoming_events.append(child_task)
+                except Exception as e:
+                    logging.error(f"Error parsing Child Graduation for {clientName}: {e}")
+
+        combined_todos = todos + upcoming_events
+
+        def parse_todo_date(todo):
+            date_field = todo.get("date")
+            try:
+                return datetime.strptime(date_field, "%B %d, %Y")
+            except Exception as e:
+                logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
+                return datetime(1970, 1, 1)
+
+        combined_todos.sort(key=parse_todo_date)
+
+        return jsonify({"todos": combined_todos}), 200
+
+    except Exception as e:
+        logging.error(f"Error fetching to-dos: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+# v-2 : 
+# import time
+# import random
+
+# def safe_key_talking_points(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type, max_retries=3):
+#     retries = 0
+#     while retries < max_retries:
+#         try:
+#             return key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type)
+#         except Exception as e:
+#             error_message = str(e)
+#             if "429" in error_message:
+#                 wait_time = 2 ** retries + random.uniform(0, 1)
+#                 logging.warning(f"Rate limit hit. Retrying after {wait_time:.2f} seconds...")
+#                 time.sleep(wait_time)
+#                 retries += 1
+#             else:
+#                 logging.error(f"Unexpected error in AI generation: {e}")
+#                 return "No key points available"
+#     logging.error(f"Failed to generate key points for {clientName} after {max_retries} retries.")
+#     return "No key points available"
+
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()
+
+#         active_todos = [t for t in todos if not t.get("checked", False)]
+#         if len(active_todos) < len(todos):
+#             save_todos(active_todos)
+#         todos = active_todos
+
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         clients = load_all_clients()
+#         upcoming_events = []
+#         today = datetime.today().date()
+
+#         for index, client in enumerate(clients):
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             uniqueId = client.get("uniqueId", "N/A")
+#             clientEmail = client_detail.get("clientEmail", "N/A")
+#             clientContact = client_detail.get("clientContact", "N/A")
+
+#             # Load personal data
+#             personal_data = {}
+#             try:
+#                 filename = get_personal_data_filename(uniqueId)
+#                 if USE_AWS:
+#                     file_key = f"{client_summary_folder}{PERSONAL_DATA_FOLDER}/{filename}"
+#                     response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=file_key)
+#                     personal_data = json.loads(response['Body'].read().decode('utf-8'))
+#                 else:
+#                     file_path = os.path.join(PERSONAL_DATA_FOLDER, filename)
+#                     if os.path.exists(file_path):
+#                         with open(file_path, 'r') as f:
+#                             personal_data = json.load(f)
+#             except Exception as e:
+#                 logging.warning(f"No personal data found for {uniqueId}: {e}")
+
+#             # Last interaction
+#             last_date, last_action_type = get_last_interaction(clientName)
+
+#             # Safe LLM call
+#             key_points = safe_key_talking_points(uniqueId, clientName, clientEmail, clientContact, last_date, last_action_type)
+
+#             # Pause after every 5 clients to avoid rate limit
+#             if index % 5 == 0 and index != 0:
+#                 time.sleep(2)
+
+#             # Birthday
+#             if client_dob:
+#                 try:
+#                     dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#                     birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#                     next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#                     if (next_birthday - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": next_birthday.strftime("%B %d, %Y"),
+#                             "occasion": "Birthday",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "birthday"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing birthday for {clientName}: {e}")
+
+#             # Anniversary
+#             anniversary_date = personal_data.get("anniversaryDate")
+#             if anniversary_date:
+#                 try:
+#                     anniv_date = datetime.strptime(anniversary_date, "%Y-%m-%d").date()
+#                     next_anniversary = anniv_date.replace(year=today.year)
+#                     if next_anniversary < today:
+#                         next_anniversary = next_anniversary.replace(year=today.year + 1)
+#                     if (next_anniversary - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": next_anniversary.strftime("%B %d, %Y"),
+#                             "occasion": "Wedding Anniversary",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "anniversary"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing anniversary for {clientName}: {e}")
+
+#             # Client Graduation
+#             graduation_year = personal_data.get("graduation")
+#             if graduation_year:
+#                 try:
+#                     grad_year = int(graduation_year)
+#                     graduation_date = datetime(grad_year, 6, 1).date()
+#                     if graduation_date >= today and (graduation_date - today).days <= 7:
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": graduation_date.strftime("%B %d, %Y"),
+#                             "occasion": "Graduation-Client",
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "graduation"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing client graduation for {clientName}: {e}")
+
+#             # Children Graduation
+#             children = personal_data.get("children", [])
+#             for child in children:
+#                 if not child.get("graduation"):
+#                     continue
+#                 try:
+#                     child_grad_year = int(child["graduation"])
+#                     child_grad_date = datetime(child_grad_year, 6, 1).date()
+#                     if child_grad_date >= today and (child_grad_date - today).days <= 7:
+#                         gender = child.get("gender", "").lower()
+#                         if gender == "male":
+#                             occasion = "Graduation-Son"
+#                         elif gender == "female":
+#                             occasion = "Graduation-Daughter"
+#                         else:
+#                             occasion = "Graduation-Child"
+
+#                         upcoming_events.append({
+#                             "todo_id": len(todos) + len(upcoming_events) + 1,
+#                             "user_email": user_email,
+#                             "action": "Call",
+#                             "clientName": clientName,
+#                             "clientEmail": clientEmail,
+#                             "clientContact": clientContact,
+#                             "uniqueId": uniqueId,
+#                             "date": child_grad_date.strftime("%B %d, %Y"),
+#                             "occasion": occasion,
+#                             "last_action_date": last_date,
+#                             "aum": client.get("investmentAmount", 0),
+#                             "key_points": key_points,
+#                             "investor_personality": client.get("investment_personality", "N/A"),
+#                             "last_action_type": last_action_type,
+#                             "last_call_summary": None,
+#                             "auto_generated": True,
+#                             "checked": False,
+#                             "source": "graduation"
+#                         })
+#                 except Exception as e:
+#                     logging.error(f"Error parsing child graduation for {clientName}: {e}")
+
+#         combined_todos = todos + upcoming_events
+
+#         def parse_todo_date(todo):
+#             try:
+#                 return datetime.strptime(todo.get("date"), "%B %d, %Y")
+#             except Exception:
+#                 return datetime(1970, 1, 1)
+
+#         combined_todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# v-1 :
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         # Get current user's details.
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()  # load active todos
+
+#         # Remove any todos that are marked as completed.
+#         active_todos = [t for t in todos if not t.get("checked", False)]
+
+#         # If some tasks were checked (i.e. removed), save the updated active todos.
+#         if len(active_todos) < len(todos):
+#             save_todos(active_todos)
+#         todos = active_todos
+
+#         # For non-admin users, show only todos matching their email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+#         clients = load_all_clients()
+#         upcoming_birthday_todos = []
+#         today = datetime.today().date()
+
+#         for client in clients:
+#             # Role-based filtering for client data.
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday.
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             next_birthday = birthday_this_year if birthday_this_year >= today else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             days_until = (next_birthday - today).days
+
+#             if days_until <= 7:
+#                 # Retrieve last interaction details for this client.
+#                 last_date, last_action_type = get_last_interaction(clientName)
+#                 # Get additional client contact info.
+#                 clientEmail = client_detail.get("clientEmail", "N/A")
+#                 clientContact = client_detail.get("clientContact", "N/A")
+#                 uniqueId = client.get("uniqueId", "N/A")
+#                 key_points = key_talking_points_using_genai(uniqueId,clientName,clientEmail,clientContact,last_date,last_action_type)
+                
+#                 birthday_task = {
+#                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
+#                     "user_email": user_email,
+#                     "action": "Call",
+#                     "clientName": clientName,
+#                     "clientEmail": clientEmail,
+#                     "clientContact": clientContact,
+#                     "uniqueId": uniqueId,
+#                     "date": next_birthday.strftime("%B %d, %Y"),
+#                     "occasion": "Birthday",
+#                     "last_action_date": last_date,  # from get_last_interaction
+#                     "aum": client.get("investmentAmount", 0),
+#                     "key_points": key_points , #f"Wishing you a very happy birthday, {clientName}!",
+#                     "investor_personality": client.get("investment_personality", "N/A"),
+#                     "last_action_type": last_action_type,
+#                     "last_call_summary": None,
+#                     "auto_generated": True,
+#                     "checked": False,
+#                     "source": "birthday"
+#                 }
+#                 upcoming_birthday_todos.append(birthday_task)
+
+#         # Combine stored todos with auto-generated birthday todos.
+#         combined_todos = todos + upcoming_birthday_todos
+
+#         # Define a helper to safely parse the "date" field.
+#         def parse_todo_date(todo):
+#             date_field = todo.get("date")
+#             try:
+#                 return datetime.strptime(date_field, "%B %d, %Y")
+#             except Exception as e:
+#                 logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
+#                 return datetime(1970, 1, 1)
+
+#         combined_todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+def key_talking_points_using_genai(uniqueId, clientName, clientEmail, clientContact, last_action_type, last_action_date):
+    today = datetime.today().date()
+    try:
+        client_data = load_client_data(uniqueId)
+        portfolio_data = load_portfolio_data(uniqueId)
+    except Exception as e:
+        logging.warning(f"Data load failed for {clientName}: {e}")
+        return f"Wishing you a very happy birthday, {clientName}!"
+
+    if not client_data:
+        logging.warning(f"No client data found for {uniqueId}")
+        return f"Wishing you a very happy birthday, {clientName}!"
+    
+    prompt = f"""
+        Today is {today.strftime('%B %d, %Y')}.
+        Client: {clientName}
+        Contact: {clientContact}
+        Email: {clientEmail}
+        Last action: {last_action_type or 'N/A'} on {last_action_date or 'N/A'}
+        Portfolio Data: {portfolio_data}
+
+        Based on the above details, please generate concise 1-line bullet point insights ONLY for the wealth manager to prepare for a birthday financial check-in call.
+        Try to show positive points
+
+        ❌ Do NOT include greetings or HTML.
+        ✅ Only output 1-liner financial talking points Consisting of only 10-12 words.
+        ✅ Keep each point relevant, crisp, and based on the data.
+        ✅ Examples:
+        - Portfolio value has appreciated by 23% since last call.
+        - Gold holdings are up 15% and may be ripe for rebalancing.
+        - Real estate investments have outperformed by 30% YTD.
+        - Client has not invested yet. Induction call to be scheduled.
+        - Equity portfolio is concentrated in AAPL and TSLA – review diversification.
+        Create one key talking Point similar to one of the above examples and just describe one of the best key talking points not all.
+        Follow all the instructions properly.
+        """
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        if hasattr(response, "text") and response.text:
+            key_points = markdown.markdown(response.text, extensions=["extra"])
+        else:
+            raise Exception("Empty Gemini response")
+    except Exception as e:
+        logging.warning(f"AI generation failed for {clientName}: {e}")
+        key_points = f"Wishing you a very happy birthday, {clientName}!"
+
+    return key_points
+
+
+def load_client_data(client_id):
+    if USE_AWS:
+        key = f"{client_summary_folder}client-data/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+            return json.loads(response['Body'].read().decode('utf-8'))
+        except Exception as e:
+            logging.error(f"Client data not found in AWS: {e}")
+            return None
+    else:
+        path = os.path.join("client_data", "client_data", f"{client_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+        else:
+            logging.warning(f"Client file not found locally: {client_id}")
+            return None
+
+
+ # Load portfolio data :
+def load_portfolio_data(client_id):
+    if USE_AWS:
+        key = f"{portfolio_list_folder}/{client_id}.json"
+        try:
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+            return json.loads(response['Body'].read().decode('utf-8'))
+        except Exception:
+            return "No investments made"
+    else:
+        path = os.path.join("portfolio_data", f"portfolio_{client_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r') as file:
+                return json.load(file)
+        return "No investments made"
+
+
+# v-1 : working properly
+
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         # Get the current user's details
+#         user_email, role, organization = get_user_details()
+#         todos = load_todos()
+
+#         # For non-admin users, filter todos by their user_email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Auto-generate and persist birthday tasks for clients with upcoming birthdays (next 7 days)
+#         clients = load_all_clients()
+#         today = datetime.today().date()
+#         updated = False  # flag to track if we added any new birthday todos
+
+#         for client in clients:
+#             # Role-based filtering for client data
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName", "N/A")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             next_birthday = birthday_this_year if birthday_this_year >= today \
+#                             else datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             days_until = (next_birthday - today).days
+#             if days_until <= 7:
+#                 # Check if a birthday task for this client already exists (match by uniqueId, date, and source)
+#                 client_uniqueId = client.get("uniqueId", "N/A")
+#                 birthday_date_str = next_birthday.strftime("%B %d, %Y")
+#                 already_exists = any(
+#                     t.get("source") == "birthday" and 
+#                     t.get("uniqueId") == client_uniqueId and 
+#                     t.get("date") == birthday_date_str 
+#                     for t in todos
+#                 )
+#                 if not already_exists:
+#                     # Get the last interaction details (if any) for the client
+#                     last_date, last_action_type = get_last_interaction(clientName)
+                    
+#                     # Build the birthday task
+#                     birthday_task = {
+#                         "todo_id": len(todos) + 1,  # new id based on current todos length
+#                         "user_email": user_email,
+#                         "action": "Call",
+#                         "clientName": clientName,
+#                         "clientEmail": client_detail.get("clientEmail", "N/A"),
+#                         "clientContact": client_detail.get("clientContact", "N/A"),
+#                         "uniqueId": client_uniqueId,
+#                         "date": birthday_date_str,
+#                         "occasion": "Birthday",
+#                         "last_action_date": last_date,      # last interaction date from history
+#                         "aum": client.get("investmentAmount", 0),
+#                         "key_points": f"Wishing you a very happy birthday, {clientName}!",
+#                         "investor_personality": client.get("investment_personality", "N/A"),
+#                         "last_action_type": last_action_type,  # type from last interaction
+#                         "last_call_summary": None,
+#                         "auto_generated": True,
+#                         "checked": False,
+#                         "source": "birthday"  # marks it as auto-generated birthday task
+#                     }
+#                     todos.append(birthday_task)
+#                     updated = True
+
+#         # If we added any new birthday tasks, save the updated todos persistently.
+#         if updated:
+#             save_todos(todos)
+
+#         # Sort todos by the "date" field (assumes format like "April 08, 2025")
+#         def parse_todo_date(todo):
+#             date_field = todo.get("date")
+#             try:
+#                 return datetime.strptime(date_field, "%B %d, %Y")
+#             except Exception as e:
+#                 logging.warning(f"Error parsing date for todo {todo.get('todo_id')}: {e}")
+#                 return datetime(1970, 1, 1)  # Fallback date if parsing fails
+
+#         todos.sort(key=parse_todo_date)
+
+#         return jsonify({"todos": todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# working :
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         user_email, role, organization = get_user_details()
+#         claims = get_jwt() or {}
+#         todos = load_todos()
+#         # For non-admin users, filter todos by their email.
+#         if role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+
+#         # Now, auto-generate birthday tasks for clients with upcoming birthdays in the next 7 days.
+#         clients = load_all_clients()
+#         upcoming_birthday_todos = []
+#         today = datetime.today().date()
+#         for client in clients:
+#             # Apply role-based filtering for client data if needed.
+#             if role == "admin" and client.get("organization") != organization:
+#                 continue
+#             if role == "user" and client.get("submittedBy") != user_email:
+#                 continue
+
+#             client_detail = client.get("clientDetail", {})
+#             clientName = client_detail.get("clientName")
+#             client_dob = client_detail.get("clientDob")
+#             if not client_dob:
+#                 continue
+#             try:
+#                 dob_date = datetime.strptime(client_dob, "%Y-%m-%d").date()
+#             except Exception as e:
+#                 logging.error(f"Error parsing DOB for {clientName}: {e}")
+#                 continue
+
+#             # Compute next birthday:
+#             birthday_this_year = datetime(today.year, dob_date.month, dob_date.day).date()
+#             if birthday_this_year < today:
+#                 next_birthday = datetime(today.year + 1, dob_date.month, dob_date.day).date()
+#             else:
+#                 next_birthday = birthday_this_year
+#             days_until = (next_birthday - today).days
+#             if days_until <= 7:
+                
+#                 last_action_date, last_action_type = get_last_interaction(clientName)
+#                 print("last_action_date",last_action_date,"last_action_type",last_action_type)
+#                 # Build a birthday task
+#                 birthday_task = {
+#                     "todo_id": len(todos) + len(upcoming_birthday_todos) + 1,
+#                     "user_email": user_email,
+#                     "action": "Call",
+#                     "clientName": clientName,
+#                     "date": next_birthday.strftime("%B %d, %Y"),
+#                     "occasion": "Birthday",
+#                     "last_action_date": "N/A",
+#                     "aum": client.get("investmentAmount", 0),
+#                     "key_points": f"Wishing you a very happy birthday, {clientName}!",
+#                     "investor_personality": client.get("investment_personality", "N/A"),
+#                     "last_action_type": None,
+#                     "last_call_summary": None,
+#                     "auto_generated": True,
+#                     "checked": False,
+#                     "last_action_date":last_action_date,
+#                     "last_action_type":last_action_type,
+#                     "source": "birthday"  # to mark it comes from birthday auto-generation
+#                 }
+#                 upcoming_birthday_todos.append(birthday_task)
+
+#         combined_todos = todos + upcoming_birthday_todos
+#         # Sort wrt date
+#         try:
+#             # Define a helper to safely parse the "date" field.
+#             def parse_todo_date(todo):
+#                 date_field = todo.get("date")
+#                 if isinstance(date_field, str):
+#                     try:
+#                         # Assuming the date is stored in the format "Month Day, Year" (e.g., "April 08, 2025")
+#                         return datetime.strptime(date_field, "%B %d, %Y")
+#                     except Exception as e:
+#                         logging.warning(f"Error parsing date for todo {todo.get('id')}: {e}")
+#                         return datetime(1970, 1, 1)  # Fallback date if parsing fails
+#                 # If the date isn't a string, return a very old date
+#                 return datetime(1970, 1, 1)
+            
+#             # Sort todos by their parsed date.
+#             combined_todos.sort(key=parse_todo_date)
+            
+#         except Exception as sort_err:
+#             logging.error(f"Error sorting todos by date: {sort_err}")
+        
+#         return jsonify({"todos": combined_todos}), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+
+# @app.route('/api/todos', methods=['GET'])
+# @jwt_required()
+# def get_todos():
+#     try:
+#         user_email = get_jwt_identity()
+#         claims = get_jwt() or {}
+#         user_role = claims.get("role", "user")
+#         todos = load_todos()
+#         if user_role not in ["admin", "super_admin"]:
+#             todos = [t for t in todos if t.get("user_email") == user_email]
+#         return jsonify({"todos": todos}), 200
+#     except Exception as e:
+#         logging.error(f"Error fetching to-dos: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+####################################################################################################################
+    
+# Completed tasks and last action date, last action type and last meeting summary :
+
+from datetime import datetime
+
+def get_last_interaction(client_name: str):
+    client_name = client_name.strip().lower()
+    all_todos = load_todos() + load_completed_todos()
+
+    interactions = [
+        todo for todo in all_todos
+        if todo.get("clientName", "").strip().lower() == client_name
+        and todo.get("checked") == True
+    ]
+
+    def parse_date(todo):
+        date_str = todo.get("last_action_date") or todo.get("date")
+        formats = ["%B %d, %Y", "%m/%d/%Y, %H:%M:%S", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except (ValueError, TypeError):
+                continue
+
+        logging.error(f"Unrecognized date format: {date_str}")
+        return datetime.min
+
+    interactions.sort(key=parse_date, reverse=True)
+
+    if interactions:
+        latest = interactions[0]
+        return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
+    return "N/A", "N/A"
+
+
+# previous : had issues 
+# def get_last_interaction(client_name: str):
+#     """
+#     Returns the most recent last_action_date and type for the given client_name.
+#     """
+#     client_name = client_name.strip().lower()  # Normalize
+#     all_todos = load_todos() + load_completed_todos()
+    
+#     interactions = [
+#         todo for todo in all_todos
+#         if todo.get("clientName", "").strip().lower() == client_name
+#         and todo.get("checked") == True
+#     ]
+
+#     # Sort by last_action_date if present, fallback to "date"
+#     def parse_date(todo):
+#         date_str = todo.get("last_action_date") or todo.get("date")
+#         try:
+#             return datetime.strptime(date_str, "%B %d, %Y")
+#         except:
+#             return datetime.min
+
+#     interactions.sort(key=parse_date, reverse=True)
+
+#     if interactions:
+#         latest = interactions[0]
+#         return latest.get("last_action_date", "N/A"), latest.get("action", "N/A")
+#     return "N/A", "N/A"
+
+
+
+####################################################################################################################
+
+# # --- Schedule Meeting/Call Endpoint ---
+# @app.route('/api/schedule-meeting', methods=['POST'])
+# def schedule_meeting():
+#     try:
+#         data = request.json
+#         meeting_title = data.get("title")
+#         meeting_time = data.get("time")
+#         participants = data.get("participants")
+#         meeting_type = data.get("meeting_type", "team")  # e.g., "team" or "client"
+#         today_tasks = requests.json.get('tasks') # to see any tasks dont coincide with a previous task
+        
+#         if not meeting_title or not meeting_time or not participants:
+#             return jsonify({"error": "Missing required meeting details"}), 400
+
+#         meeting_entry = {
+#             "title": meeting_title,
+#             "time": meeting_time,
+#             "participants": participants,
+#             "type": meeting_type
+#         }
+#         meetings_file = "meetings.json"
+#         if os.path.exists(meetings_file):
+#             with open(meetings_file, "r") as f:
+#                 meetings = json.load(f)
+#         else:
+#             meetings = []
+#         meetings.append(meeting_entry)
+#         with open(meetings_file, "w") as f:
+#             json.dump(meetings, f, indent=4)
+#         return jsonify({"message": "Meeting scheduled successfully", "meeting": meeting_entry}), 200
+#     except Exception as e:
+#         logging.error(f"Error scheduling meeting: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
+    
+# from phi.tools.calcom import CalCom 
+
+# calcom_agent = Agent(
+#     name="Calendar Assistant",
+#     instructions=[
+#         f"You're a scheduling assistant. Today is {datetime.now()}.",
+#         "You can help users by:",
+#         "- Finding available time slots",
+#         "- Creating new bookings using the Cal.com API",
+#         "- Managing existing bookings (view, reschedule, cancel)",
+#         "- Always confirm important details before scheduling a meeting."
+#     ],
+#     # model=OpenAIChat(id="gpt-4", api_key="YOUR_GOOGLE_API_KEY"),
+#     model=Gemini(id="gemini-1.5-flash", api_key=GOOGLE_API_KEY),
+#     tools=[CalCom(user_timezone="America/New_York")],
+#     show_tool_calls=True,
+#     markdown=True,
+# )
+
+
+# # --- Actionable Insights Endpoint ---
+# @app.route('/api/insights', methods=['POST'])
+# def get_insights():
+#     try:
+#         # Get today's date :
+#         today = datetime.date.today().strftime("%Y-%m-%d")
+        
+#         # Get todays tasks from the calendar:
+#         today_tasks = requests.json.get('tasks')
+        
+#         # Use the multi-AI agent to generate actionable insights/tasks for today.
+#         prompt = f"""Generate actionable insights and tasks for today {today}, including suggested meetings, follow-ups, and priorities.
+#                     Give user a Plan of action for the day from todays tasks : {today_tasks}.Give user priority for the day from todays tasks.
+#                     Give users how much time each tasks can take to complete approximately. 
+#                     Also Give user which client meetings should be taken first and how to approach the client based on the last meeting.
+#                 """
+                
+#         response = calcom_agent.run(message=prompt,
+#                                     session_id="insights_session",
+#                                     messages = [today,today_tasks],
+#                                     stream=False)
+        
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content
+#         else:
+#             response_text = str(response)
+#         return jsonify({"insights": response_text}), 200
+#     except Exception as e:
+#         logging.error(f"Error generating insights: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# # --- Schedule Meeting Endpoint Using Cal.com Agent ---
+# @app.route('/api/ai-schedule-meeting', methods=['POST'])
+# def ai_schedule_meeting():
+#     try:
+#         data = request.json
+#         meeting_title = data.get("title")
+#         meeting_time = data.get("time")  # Expect ISO8601 formatted datetime string
+#         meeting_type = data.get("meeting_type", "team")  # e.g., "team" or "client"
+#         participants = data.get("participants")  # List or string of participant emails
+#         today_tasks = requests.json.get('tasks') # to see any tasks dont coincide with a previous task
+#         additional_details = data.get("details", "")
+
+#         # Validate required fields
+#         if not meeting_title or not meeting_time or not participants:
+#             return jsonify({"error": "Missing required meeting details"}), 400
+
+#         # Build a prompt for the Cal.com agent that includes the meeting details.
+#         prompt = (
+#             f"Please create a new meeting booking with the following details:\n"
+#             f"- Title: {meeting_title}\n"
+#             f"- Time: {meeting_time}\n"
+#             f"- Participants: {participants}\n"
+#             f"- Meeting Type: {meeting_type}\n"
+#             f"- Existing Tasks: {today_tasks}\n"
+#             f"- Additional details: {additional_details}\n\n"
+#             "Ensure that the booking is created using the Cal.com API and return the booking confirmation details."
+#             "Make sure that there are no existing tasks conflicting with the new tasks."
+#         )
+
+#         # Call the Cal.com agent to schedule the meeting.
+#         response = calcom_agent.run(
+#             message=prompt,
+#             session_id=f"calcom_schedule_{time}",
+#             stream=False
+#         )
+
+#         if isinstance(response, RunResponse) and hasattr(response, "content"):
+#             response_text = response.content
+#         else:
+#             response_text = str(response)
+
+#         print("📅 Scheduled Meeting Response:", response_text)
+#         return jsonify({
+#             "message": "Meeting scheduled successfully via Cal.com agent.",
+#             "booking_details": response_text
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error scheduling meeting: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+# # --- Retrieve Scheduled Meetings Endpoint ---
+# @app.route('/api/meetings', methods=['GET'])
+# def get_meetings():
+#     try:
+#         meetings_file = "meetings.json"
+#         if os.path.exists(meetings_file):
+#             with open(meetings_file, "r") as f:
+#                 meetings = json.load(f)
+#             return jsonify(meetings), 200
+#         else:
+#             return jsonify({"message": "No meetings scheduled"}), 404
+#     except Exception as e:
+#         logging.error(f"Error retrieving meetings: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# Notes from last meetings :
+
+###############################################################################################################################
+# ###Home Page :
+# #Market movers :
+
+import os
+import time
+import pickle
+import logging
+import pandas as pd
+import yfinance as yf
+import pandas_ta as ta
+from datetime import datetime, timedelta
+from flask import request, jsonify
+from alpha_vantage.timeseries import TimeSeries
+
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY1')
+CACHE_DIR = "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Mapping for indexes not supported by Alpha Vantage
+SYMBOL_MAP = {
+    "^IXIC": "QQQ",
+    "^GSPC": "SPY",
+    "^DJI": "DIA"
+}
+
+# Retry-safe yfinance wrapper
+def safe_yf_download(ticker, start, end, interval, retries=3):
+    for attempt in range(retries):
+        try:
+            data = yf.download(ticker, start=start, end=end, interval=interval,
+                               auto_adjust=False, progress=False)
+            if not data.empty:
+                return data
+            raise ValueError("Empty data returned")
+        except Exception as e:
+            logging.warning(f"[yfinance Retry {attempt + 1}] for {ticker}: {e}")
+            time.sleep(10)
+    return None
+
+# Alpha Vantage fallback
+def fetch_alpha_vantage(ticker):
+    try:
+        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+        data, _ = ts.get_daily(symbol=ticker, outputsize='full')
+        data.rename(columns={
+            '1. open': 'Open', '2. high': 'High', '3. low': 'Low',
+            '4. close': 'Close', '5. volume': 'Volume'
+        }, inplace=True)
+        data.index = pd.to_datetime(data.index)
+        return data.sort_index()
+    except Exception as e:
+        logging.error(f"Alpha Vantage error: {e}")
+        return None
+
+# Master fetcher
+def fetch_market_data(ticker, interval='1d'):
+    end_date = datetime.now()
+    if interval in ['1m', '5m']:
+        start_date = end_date - timedelta(days=7)
+    elif interval in ['15m', '60m']:
+        start_date = end_date - timedelta(days=60)
+    else:
+        start_date = end_date - timedelta(days=365)
+
+    # First try yfinance
+    data = safe_yf_download(ticker, start=start_date, end=end_date, interval=interval)
+    if data is not None and not data.empty:
+        logging.info(f"Fetched data for {ticker} from yfinance.")
+        # Cache it
+        filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+        pickle.dump(data, open(filename, "wb"))
+        return data
+
+    # Then try Alpha Vantage
+    alt_ticker = SYMBOL_MAP.get(ticker, ticker)
+    data = fetch_alpha_vantage(alt_ticker)
+    if data is not None and not data.empty:
+        logging.info(f"Fetched data for {ticker} from Alpha Vantage.")
+        filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+        pickle.dump(data, open(filename, "wb"))
+        return data
+
+    # Finally, try cache
+    filename = os.path.join(CACHE_DIR, f"{ticker.replace('^','')}_{interval}.pkl")
+    if os.path.exists(filename):
+        logging.warning(f"Falling back to cached data for {ticker}")
+        return pickle.load(open(filename, "rb"))
+
+    logging.error(f"No valid data source found for {ticker}")
+    return pd.DataFrame()
+
+# Main API
+@app.route('/api/market-movers', methods=['POST'])
+def get_chart_data():
+    try:
+        ticker = request.json.get('ticker', '^IXIC')
+        interval = request.json.get('interval', '1d')
+        ema_period = max(1, min(int(request.json.get('ema_period', 14)), 50))
+        rsi_period = max(1, min(int(request.json.get('rsi_period', 14)), 50))
+
+        df = fetch_market_data(ticker, interval)
+        if df is None or df.empty or 'Close' not in df.columns:
+            return jsonify(error="No market data available."), 500
+
+        df = df.copy()
+        df['EMA'] = ta.ema(df['Close'], length=ema_period)
+        df['RSI'] = ta.rsi(df['Close'], length=rsi_period)
+        df = df.dropna()
+
+        # Chart data
+        candlestick = [{
+            'time': int(idx.timestamp()),
+            'open': float(row['Open']), 'high': float(row['High']),
+            'low': float(row['Low']), 'close': float(row['Close'])
+        } for idx, row in df.iterrows()]
+
+        ema = [{
+            'time': int(idx.timestamp()), 'value': float(val)
+        } for idx, val in df['EMA'].items() if not pd.isna(val)]
+
+        rsi = [{
+            'time': int(idx.timestamp()), 'value': float(val if not pd.isna(val) else 0)
+        } for idx, val in df['RSI'].items()]
+
+        # Overview
+        overview = {
+            '52_week_low': round(df['Low'].min(), 2),
+            '52_week_high': round(df['High'].max(), 2),
+            'current_price': round(df['Close'].iloc[-1], 2) if not df['Close'].empty else None,
+            'latest_volume': int(df['Volume'].iloc[-1]) if not df['Volume'].empty else None,
+            'average_volume_30d': int(df['Volume'].tail(30).mean()) if not df['Volume'].empty else None
+        }
+
+        today = datetime.now()
+        last_year = today.year - 1
+        year_close = df[df.index.year == last_year]['Close']
+        if not year_close.empty:
+            overview['last_year_close'] = round(year_close.iloc[-1], 2)
+
+        first_of_year = df[df.index >= datetime(today.year, 1, 1)]
+        if not first_of_year.empty and not df['Close'].empty:
+            try:
+                ytd_return = ((df['Close'].iloc[-1] / first_of_year['Close'].iloc[0]) - 1) * 100
+                overview['ytd_return_percent'] = round(ytd_return, 2)
+            except Exception as e:
+                logging.warning(f"YTD calc error: {e}")
+
+        if len(df) > 1:
+            try:
+                one_year_return = ((df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1) * 100
+                overview['1yr_return_percent'] = round(one_year_return, 2)
+            except Exception as e:
+                logging.warning(f"1Yr Return calc error: {e}")
+
+        return jsonify({
+            'message': "Fetched Data Successfully",
+            'candlestick': candlestick,
+            'ema': ema,
+            'rsi': rsi,
+            'overview': overview
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error in get_chart_data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+
+#####################################################################################################
+
+# previous :
+# def fetch_yahoo_data(ticker, interval, ema_period=20, rsi_period=14):
+#     end_date = datetime.now()
+#     if interval in ['1m', '5m']:
+#         start_date = end_date - timedelta(days=7)
+#     elif interval in ['15m', '60m']:
+#         start_date = end_date - timedelta(days=60)
+#     elif interval == '1d':
+#         start_date = end_date - timedelta(days=365*5)
+#     elif interval == '1wk':
+#         start_date = end_date - timedelta(weeks=365*5)
+#     elif interval == '1mo':
+#         start_date = end_date - timedelta(days=365*5)
+
+#     # Force auto_adjust=False to get original column names.
+#     data = yf.download(ticker, start=start_date, end=end_date, interval=interval, auto_adjust=False)
+    
+#     # Flatten MultiIndex columns if present
+#     if isinstance(data.columns, pd.MultiIndex):
+#         data.columns = data.columns.get_level_values(0)
+    
+#     # For debugging, print out the column names
+#     print("Downloaded data columns:", data.columns)
+    
+#     # Calculate EMA and RSI using the 'Close' column.
+#     data['EMA'] = ta.ema(data['Close'], length=ema_period)
+#     data['RSI'] = ta.rsi(data['Close'], length=rsi_period)
+
+#     candlestick_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'open': row.Open,
+#             'high': row.High,
+#             'low': row.Low,
+#             'close': row.Close
+#         }
+#         for row in data.itertuples()
+#     ]
+
+#     ema_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'value': row.EMA
+#         }
+#         for row in data.itertuples() if not pd.isna(row.EMA)
+#     ]
+
+#     rsi_data = [
+#         {
+#             'time': int(row.Index.timestamp()),
+#             'value': row.RSI if not pd.isna(row.RSI) else 0
+#         }
+#         for row in data.itertuples()
+#     ]
+#     # print("Candlestick Data for", ticker, "is:", candlestick_data)
+#     # print("EMA Data for", ticker, "is:", ema_data)
+#     # print("RSI Data for", ticker, "is:", rsi_data)
+    
+#     return candlestick_data, ema_data, rsi_data
+
+# #new v-2 : added more overview : previous :
+# from flask import request, jsonify
+# from datetime import datetime, timedelta
+# import yfinance as yf
+# import logging
+
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         ema_period = max(1, min(int(request.json.get('ema_period', 14)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 14)), 50))
+
+#         df = fetch_market_data(ticker, interval)
+#         if df is None or df.empty or 'Close' not in df.columns:
+#             return jsonify(error="No market data available."), 500
+
+#         df = df.copy()
+#         df['EMA'] = ta.ema(df['Close'], length=ema_period)
+#         df['RSI'] = ta.rsi(df['Close'], length=rsi_period)
+
+#         df = df.dropna()
+
+#         candlestick = [{
+#             'time': int(idx.timestamp() if hasattr(idx, 'timestamp') else time.mktime(idx.timetuple())),
+#             'open': float(row['Open']), 'high': float(row['High']),
+#             'low': float(row['Low']), 'close': float(row['Close'])
+#         } for idx, row in df.iterrows()]
+
+#         ema = [{
+#             'time': int(idx.timestamp()),
+#             'value': float(val)
+#         } for idx, val in df['EMA'].items() if not pd.isna(val)]
+
+#         rsi = [{
+#             'time': int(idx.timestamp()),
+#             'value': float(val) if not pd.isna(val) else 0
+#         } for idx, val in df['RSI'].items()]
+
+#         overview = {
+#             '52_week_low': round(df['Low'].min(), 2),
+#             '52_week_high': round(df['High'].max(), 2),
+#             'current_price': round(df['Close'].iloc[-1], 2),
+#             'latest_volume': int(df['Volume'].iloc[-1]),
+#             'average_volume_30d': int(df['Volume'].tail(30).mean())
+#         }
+
+#         today = datetime.now()
+#         last_year = today.year - 1
+#         year_close = df[df.index.year == last_year]['Close']
+#         if not year_close.empty:
+#             overview['last_year_close'] = round(year_close.iloc[-1], 2)
+
+#         first_of_year = df[df.index >= datetime(today.year, 1, 1)]
+#         if not first_of_year.empty:
+#             ytd_return = ((df['Close'].iloc[-1] / first_of_year['Close'].iloc[0]) - 1) * 100
+#             overview['ytd_return_percent'] = round(ytd_return, 2)
+
+#         if len(df) > 1:
+#             one_year_return = ((df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1) * 100
+#             overview['1yr_return_percent'] = round(one_year_return, 2)
+
+#         return jsonify({
+#             'message': "Fetched Data Successfully",
+#             'candlestick': candlestick,
+#             'ema': ema,
+#             'rsi': rsi,
+#             'overview': overview
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in get_chart_data: {e}")
+#         return jsonify({'error': str(e)}), 500
+
+# previous with lesser data
+# from flask import request, jsonify
+# from datetime import datetime, timedelta
+# import yfinance as yf
+# import logging
+
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
+#             return jsonify(error="Invalid interval"), 400
+
+#         ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+
+#         candlestick, ema, rsi = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+
+#         today = datetime.now().date()
+#         one_year_ago = today - timedelta(days=365)
+#         hist = yf.download(
+#             ticker,
+#             start=one_year_ago,
+#             end=today + timedelta(days=1),
+#             interval='1d',
+#             progress=False,
+#             auto_adjust=True  # to suppress warning
+#         )
+
+#         overview = {
+#             '52_week_low': None,
+#             '52_week_high': None,
+#             'last_year_close': None,
+#             'current_price': None,
+#             'ytd_return_percent': None,
+#             'latest_volume': None,
+#             'average_volume_30d': None,
+#             '1yr_return_percent': None
+#         }
+
+#         if not hist.empty:
+#             lows = hist['Low']
+#             highs = hist['High']
+#             closes = hist['Close']
+#             volumes = hist['Volume']
+
+#             overview['52_week_low'] = round(float(lows.min()), 2)
+#             overview['52_week_high'] = round(float(highs.max()), 2)
+
+#             last_year = today.year - 1
+#             ly = hist[hist.index.year == last_year]
+#             if not ly.empty:
+#                 overview['last_year_close'] = round(float(ly['Close'].iloc[-1]), 2)
+
+#             latest_close = float(closes.iloc[-1])
+#             overview['current_price'] = round(latest_close, 2)
+
+#             first_of_year = hist[hist.index >= datetime(today.year, 1, 1)]
+#             if not first_of_year.empty:
+#                 first_close = float(first_of_year['Close'].iloc[0])
+#                 ytd_return = ((latest_close / first_close) - 1) * 100
+#                 overview['ytd_return_percent'] = round(ytd_return, 2)
+
+#             latest_volume_val = volumes.iloc[-1]
+#             overview['latest_volume'] = int(latest_volume_val.item() if hasattr(latest_volume_val, 'item') else latest_volume_val)
+
+#             avg_volume_30d = volumes.tail(30).mean()
+#             overview['average_volume_30d'] = int(avg_volume_30d.item() if hasattr(avg_volume_30d, 'item') else avg_volume_30d)
+
+#             one_year_close = float(closes.iloc[0])
+#             one_year_return = ((latest_close / one_year_close) - 1) * 100
+#             overview['1yr_return_percent'] = round(one_year_return, 2)
+
+#         return jsonify(
+#             message="Fetched Data Successfully",
+#             candlestick=candlestick,
+#             ema=ema,
+#             rsi=rsi,
+#             overview=overview
+#         ), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify(error=f"Internal server error: {str(e)}"), 500
+
+
+# new : added overview : basics : v-1 
+# @app.route('/api/market-movers', methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker   = request.json.get('ticker', '^IXIC')
+#         interval = request.json.get('interval', '1d')
+#         if interval not in ['1m','5m','15m','60m','1d','1wk','1mo']:
+#             return jsonify(error="Invalid interval"), 400
+
+#         ema_period = max(1, min(int(request.json.get('ema_period', 1)), 50))
+#         rsi_period = max(1, min(int(request.json.get('rsi_period', 1)), 50))
+
+#         # main chart data
+#         candlestick, ema, rsi = fetch_yahoo_data(
+#             ticker, interval, ema_period, rsi_period
+#         )
+
+#         # overview metrics
+#         today = datetime.now().date()
+#         one_year_ago = today - timedelta(days=365)
+#         hist = yf.download(
+#             ticker,
+#             start=one_year_ago,
+#             end=today + timedelta(days=1),
+#             interval='1d',
+#             progress=False
+#         )
+
+#         overview = {
+#             '52_week_low': None,
+#             '52_week_high': None,
+#             'last_year_close': None
+#         }
+
+#         if not hist.empty:
+#             lows  = hist['Low'].astype(float)
+#             highs = hist['High'].astype(float)
+#             overview['52_week_low']  = round(float(lows.min()), 2)
+#             overview['52_week_high'] = round(float(highs.max()), 2)
+
+#             last_year = today.year - 1
+#             # filter index by year string => returns DataFrame slice
+#             ly = hist.loc[hist.index.year == last_year]
+#             if not ly.empty:
+#                 # take the last available close price of that year
+#                 overview['last_year_close'] = round(
+#                     float(ly.iloc[-1]['Close']), 2
+#                 )
+
+#         return jsonify(
+#             message="Fetched Data Successfully",
+#             candlestick=candlestick,
+#             ema=ema,
+#             rsi=rsi,
+#             overview=overview
+#         ), 200
+
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify(error=f"Internal server error: {e}"), 500
+
+# previous
+# @app.route('/api/market-movers',methods=['POST'])
+# def get_chart_data():
+#     try:
+#         ticker = request.json.get('ticker','^IXIC') # By default show NASDAQ Data
+#         interval = request.json.get('interval','1d') # Default interval is 1 day
+#         # Check if the provided interval is valid
+#         if interval not in ['1m', '5m', '15m', '60m', '1d', '1wk', '1mo']:
+#             return jsonify({"error": "Invalid interval"}), 400
+        
+#         ema_period = int(request.json.get('ema_period',None))
+#         # Check if the provided ema_period is valid:
+#         if not ema_period:
+#             ema_period = 1 # Default 1d ema period
+            
+#         # Check if the provided rsi_period is valid :    
+#         rsi_period = int(request.json.get('rsi_period',None))
+#         if not rsi_period:
+#             rsi_period = 1 # Default 1d rsi period
+            
+#         ema_period = max(1, min(ema_period, 50))  # Limit EMA period to 50
+#         rsi_period = max(1, min(rsi_period, 50))  # Limit RSI period to 50
+#         # Fetch Candlestick Data for the Given Ticker,Interval and RSI Period and EMA Period
+#         candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+#         print("Fetched Data Succesfully")
+#         return jsonify({'message':"Fetched Data Succesfully",
+#                         'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data}),200
+#     except Exception as e:
+#         logging.error(f"Error fetching market movers data: {e}")
+#         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# basic :
+
+# @app.route('/api/data/<ticker>/<interval>/<int:ema_period>/<int:rsi_period>')
+# def get_data(ticker, interval, ema_period, rsi_period):
+#     candlestick_data, ema_data, rsi_data = fetch_yahoo_data(ticker, interval, ema_period, rsi_period)
+#     return jsonify({'candlestick': candlestick_data, 'ema': ema_data, 'rsi': rsi_data})\
+    
+    
+###############################################################################################################################
+
+### Bull vs Bear Markets :
+
+# get bull and bear markets :
+
+# from flask import request, jsonify
+# import yfinance as yf
+# from datetime import datetime, timedelta
+# from dateutil.relativedelta import relativedelta
+# import logging
+
+from flask import request, jsonify
+import yfinance as yf
+import pandas as pd
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+import logging
+
+# v-2 : plots the chart as well :
+
+@app.route('/api/market-cycles', methods=['POST'])
+def get_market_cycles():
+    try:
+        ticker = request.json.get('ticker', '^GSPC')
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * 40)
+
+        df = yf.download(ticker, start=start_date, end=end_date, interval='1d', auto_adjust=False, progress=False)
+
+        # If columns are MultiIndex, flatten them
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        # Ensure 'Close' column exists
+        if 'Close' not in df.columns:
+            logging.error(f"'Close' column not found in data for {ticker}. Columns returned: {df.columns}")
+            return jsonify({'error': "'Close' column not found in data"}), 400
+
+        df = df.dropna(subset=['Close'])
+        data = df['Close']
+        data.index = pd.to_datetime(data.index)
+
+        prices = data.values
+        dates = data.index
+
+        cycles = []
+        plot_points = []
+
+        in_bear = False
+        in_bull = False
+
+        peak = prices[0]
+        peak_date = dates[0]
+        trough = prices[0]
+        trough_date = dates[0]
+
+        # Full chart data for frontend plotting
+        full_chart = [
+            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+            for dt, p in zip(dates, prices)
+        ]
+
+        for i in range(1, len(prices)):
+            price = prices[i]
+            date = dates[i]
+
+            if not in_bear and not in_bull:
+                drawdown = (price - peak) / peak
+                if drawdown <= -0.2:
+                    in_bear = True
+                    bear_start = peak_date
+                    trough = price
+                    trough_date = date
+                elif price > peak:
+                    peak = price
+                    peak_date = date
+                else:
+                    gain = (price - trough) / trough
+                    if gain >= 0.2:
+                        in_bull = True
+                        bull_start = trough_date
+                        peak = price
+                        peak_date = date
+
+            elif in_bear:
+                if price < trough:
+                    trough = price
+                    trough_date = date
+                gain = (price - trough) / trough
+                if gain >= 0.2:
+                    in_bear = False
+                    duration = relativedelta(trough_date, bear_start)
+                    months = duration.years * 12 + duration.months
+                    total_return = ((trough - peak) / peak) * 100
+                    annualized = ((trough / peak) ** (12 / max(1, months)) - 1) * 100
+
+                    segment_df = data[bear_start:trough_date]
+                    plot_points.append({
+                        "start_date": bear_start.strftime('%Y-%m-%d'),
+                        "end_date": trough_date.strftime('%Y-%m-%d'),
+                        "type": "Bear",
+                        "prices": [
+                            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+                            for dt, p in segment_df.items()
+                        ]
+                    })
+
+                    cycles.append({
+                        "type": "Bear",
+                        "start_date": bear_start.strftime('%Y-%m-%d'),
+                        "end_date": trough_date.strftime('%Y-%m-%d'),
+                        "duration_months": months,
+                        "total_return_percent": round(total_return, 2),
+                        "annualized_return_percent": round(annualized, 2)
+                    })
+
+                    in_bull = True
+                    bull_start = trough_date
+                    peak = price
+                    peak_date = date
+
+            elif in_bull:
+                if price > peak:
+                    peak = price
+                    peak_date = date
+                drawdown = (price - peak) / peak
+                if drawdown <= -0.2:
+                    in_bull = False
+                    duration = relativedelta(peak_date, bull_start)
+                    months = duration.years * 12 + duration.months
+                    total_return = ((peak - trough) / trough) * 100
+                    annualized = ((peak / trough) ** (12 / max(1, months)) - 1) * 100
+
+                    segment_df = data[bull_start:peak_date]
+                    plot_points.append({
+                        "start_date": bull_start.strftime('%Y-%m-%d'),
+                        "end_date": peak_date.strftime('%Y-%m-%d'),
+                        "type": "Bull",
+                        "prices": [
+                            {"date": dt.strftime('%Y-%m-%d'), "price": round(float(p), 2)}
+                            for dt, p in segment_df.items()
+                        ]
+                    })
+
+                    cycles.append({
+                        "type": "Bull",
+                        "start_date": bull_start.strftime('%Y-%m-%d'),
+                        "end_date": peak_date.strftime('%Y-%m-%d'),
+                        "duration_months": months,
+                        "total_return_percent": round(total_return, 2),
+                        "annualized_return_percent": round(annualized, 2)
+                    })
+
+                    trough = price
+                    trough_date = date
+
+        return jsonify({
+            "message": f"Bull/Bear market cycles detected for {ticker}",
+            "cycles": cycles,
+            "plot_data": plot_points,
+            "full_chart": full_chart
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error in market cycles endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# v-1 : shows the cycle of bear and bull markets duration gain and loss during that time :
+
+# @app.route('/api/market-cycles', methods=['POST'])
+# def get_market_cycles():
+#     try:
+#         ticker = request.json.get('ticker', '^GSPC')
+#         end_date = datetime.now()
+#         start_date = end_date - timedelta(days=365 * 40)
+
+#         df = yf.download(ticker, start=start_date, end=end_date, interval='1d', progress=False)
+#         if df.empty or 'Close' not in df.columns:
+#             return jsonify({'error': "No data found or 'Close' column missing"}), 400
+
+#         data = df['Close'].dropna()
+#         prices = data.values
+#         dates = data.index
+
+#         cycles = []
+#         in_bear = False
+#         in_bull = False
+#         peak = prices[0]
+#         peak_date = dates[0]
+#         trough = prices[0]
+#         trough_date = dates[0]
+
+#         for i in range(1, len(prices)):
+#             price = prices[i]
+#             date = dates[i]
+
+#             if not in_bear:
+#                 drawdown = (price - peak) / peak
+#                 if drawdown <= -0.2:
+#                     in_bear = True
+#                     bear_start = peak_date
+#                     trough = price
+#                     trough_date = date
+#                 elif price > peak:
+#                     peak = price
+#                     peak_date = date
+#             else:
+#                 if price < trough:
+#                     trough = price
+#                     trough_date = date
+#                 gain = (price - trough) / trough
+#                 if gain >= 0.2:
+#                     in_bear = False
+#                     duration = relativedelta(trough_date, bear_start)
+#                     months = duration.years * 12 + duration.months
+#                     total_return = ((trough - peak) / peak) * 100
+#                     annualized = ((trough / peak) ** (12 / max(1, months)) - 1) * 100
+
+#                     cycles.append({
+#                         "type": "Bear",
+#                         "start_date": bear_start.strftime('%Y-%m-%d'),
+#                         "end_date": trough_date.strftime('%Y-%m-%d'),
+#                         "duration_months": months,
+#                         "total_return_percent": round(float(total_return), 2),
+#                         "annualized_return_percent": round(float(annualized), 2)
+#                     })
+
+#                     # Start of potential bull
+#                     peak = price
+#                     peak_date = date
+
+#         return jsonify({
+#             "message": f"Bull/Bear market cycles detected for {ticker}",
+#             "cycles": cycles
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error in market cycles endpoint: {e}")
+#         return jsonify({'error': str(e)}), 500
+
+#################################################################################################################################
+# ########Create Meeting And Transcribe Audio and Process it :
+
+#########################################################################################################################
+####### Create Meetings via Zoom : 
+
+# #zoom new version : with refresh tokens storing :
+import os
+import json
+import base64
+import requests
+from flask import Flask, redirect, request, jsonify
+from urllib.parse import urlencode
+from datetime import datetime, timedelta
+
+# === ENVIRONMENT ===
+ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID") # os.getenv("ZOOM_CLIENT_ID_PROD") #production 
+ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET") # os.getenv("ZOOM_CLIENT_ID_PROD") # production 
+ZOOM_REDIRECT_URI = "http://localhost:5000/api/zoom/callback"
+ZOOM_OAUTH_AUTHORIZE_URL = "https://zoom.us/oauth/authorize"
+ZOOM_OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
+ZOOM_API_BASE_URL = "https://api.zoom.us/v2"
+
+# # # Authorization URL
+# # # Use the generated authorization URL to share the app within your account :
+# https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+# previous :
+# # https://zoom.us/oauth/authorize?response_type=code&client_id=VWtU_BFRbmZJ5nOVZXWEA&redirect_uri=http://localhost:5000/api/zoom/callback
+
+# Authorization URL
+# Use the generated authorization URL to share the app.
+# # https://zoom.us/oauth/authorize?response_type=code&client_id=TO4oxDDKSFqgkwoR8Pul6A&redirect_uri=https://wealth-management.mresult.net/api/zoom/callback
+
+# === STEP 1: Redirect user to Zoom OAuth ===
+@app.route('/api/zoom/auth')
+def zoom_auth():
+    query_params = urlencode({
+        "response_type": "code",
+        "client_id": ZOOM_CLIENT_ID,
+        "redirect_uri": ZOOM_REDIRECT_URI
+    })
+    return redirect(f"{ZOOM_OAUTH_AUTHORIZE_URL}?{query_params}")
+
+from datetime import datetime, timedelta
+# === STEP 2: Zoom redirects here with code ===
+
+@app.route('/api/zoom/callback')
+def zoom_callback():
+    code = request.args.get("code")
+    if not code:
+        return jsonify({"error": "No code provided by Zoom"}), 400
+
+    token_response = requests.post(
+        ZOOM_OAUTH_TOKEN_URL,
+        headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": ZOOM_REDIRECT_URI
+        }
+    )
+
+    if token_response.status_code != 200:
+        return jsonify({"error": "Token request failed", "details": token_response.json()}), 400
+
+    tokens = token_response.json()
+    access_token = tokens['access_token']
+    refresh_token = tokens.get('refresh_token')
+    expires_in = tokens.get('expires_in', 3600)
+
+    # Save tokens
+    user_id = "harshal"  # Replace this later with dynamic user info
+    token_data = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_at": (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+    }
+
+    save_tokens_to_file(user_id, token_data)
+
+    # ✅ ADD THIS RETURN TO AVOID 500 ERROR
+    return redirect("http://localhost:5000/calendar")  
+
+    # return redirect(meeting_info["join_url"])
+    # return redirect("http://localhost:5000/calendar") 
+
+# === API to create meeting ===
+CALL_LOGS_FOLDER = os.getenv("CALL_LOGS_FOLDER", "call_logs")
+
+# previous :
+# @app.route('/api/create-zoom-meeting', methods=['POST'])
+# def create_meeting():
+#     try:
+#         user_id = request.json.get("user_id", "harshal")
+#         tokens = load_tokens_from_file(user_id)
+#         if not tokens:
+#             return jsonify({"error": "No Zoom tokens found"}), 401
+
+#         # Refresh if needed
+#         tokens = refresh_token_if_expired(user_id, tokens)
+#         access_token = tokens["access_token"]
+
+#         topic = request.json.get("topic", "Client Wealth Meeting")
+#         duration = int(request.json.get("duration", 30))
+#         client_name = request.json.get("client_name", "Unknown")
+#         date = request.json.get("date",datetime.utcnow().strftime("%Y-%m-%d"))
+
+#         meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+#         # Save call metadata in S3
+#         if meeting_info.get("meeting_id"):
+#             metadata = {
+#                 "meeting_id": meeting_info["meeting_id"],
+#                 "client_name": client_name,
+#                 "call_duration": f"{duration} mins",
+#                 "date": date,
+#                 "created_at": meeting_info["created_at"],
+#                 "user_email": user_id
+#             }
+
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+#                 Body=json.dumps(metadata),
+#                 ContentType="application/json"
+#             )
+
+#         return jsonify({
+#             "message": "Meeting created successfully",
+#             **meeting_info
+#         }), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+# #Properly Working and saving correctly in Call History :
+
+@app.route('/api/create-zoom-meeting', methods=['POST'])
+@jwt_required()
+def create_meeting():
+    try:
+        user_email = get_jwt_identity()
+        #  Hard Coded for Development Purpose
+        user_id = 'harshal'
+        tokens = load_tokens_from_file(user_id)
+        # tokens = load_tokens_from_file(user_email)
+        if not tokens:
+            return jsonify({"error": "No Zoom tokens found"}), 401
+
+        # Refresh if needed
+        #  Hard Coded for Development Purpose
+        tokens = refresh_token_if_expired(user_id, tokens) 
+        # tokens = refresh_token_if_expired(user_email, tokens)
+        access_token = tokens["access_token"]
+
+        topic = request.json.get("topic", "Client Wealth Meeting")
+        duration = int(request.json.get("duration", 30))
+        client_name = request.json.get("client_name", "Unknown")
+        date = request.json.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
+        if date == "":
+            date = datetime.utcnow().strftime("%Y-%m-%d")
+            print(date)
+
+        meeting_info = create_zoom_meeting(access_token, topic=topic, duration=duration)
+
+        # Save call metadata in S3
+        if meeting_info.get("meeting_id"):
+            mid_str = str(meeting_info["meeting_id"])  # ensure string format
+
+            metadata = {
+                "meeting_id": mid_str,
+                "client_name": client_name,
+                "call_duration": f"{duration} mins",
+                "date": date,
+                "created_at": meeting_info["created_at"],
+                "user_email": user_email
+            }
+
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=f"{CALL_LOGS_FOLDER}/{mid_str}/metadata.json",
+                Body=json.dumps(metadata),
+                ContentType="application/json"
+            )
+
+        # if meeting_info.get("meeting_id"):
+        #     metadata = {
+        #         "meeting_id": meeting_info["meeting_id"],
+        #         "client_name": client_name,
+        #         "call_duration": f"{duration} mins",
+        #         "date": date,
+        #         "created_at": meeting_info["created_at"],
+        #         "user_email": user_email  # use consistent email
+        #     }
+        #     print("Metadata : ",metadata)
+        #     s3.put_object(
+        #         Bucket=S3_BUCKET_NAME,
+        #         Key=f"{CALL_LOGS_FOLDER}/{meeting_info['meeting_id']}/metadata.json",
+        #         Body=json.dumps(metadata),
+        #         ContentType="application/json"
+        #     )
+
+        return jsonify({
+            "message": "Meeting created successfully",
+            **meeting_info
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+# === Refresh token if expired ===
+def refresh_token_if_expired(user_id, tokens):
+    expires_at = datetime.fromisoformat(tokens["expires_at"])
+    if datetime.utcnow() < expires_at:
+        return tokens  # Not expired
+
+    # Refresh the token
+    refresh_token = tokens["refresh_token"]
+    response = requests.post(
+        ZOOM_OAUTH_TOKEN_URL,
+        headers={"Authorization": f"Basic {get_basic_auth_token()}"},
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+    )
+
+    if response.status_code != 200:
+        raise Exception("Failed to refresh Zoom token")
+
+    new_tokens = response.json()
+    new_access_token = new_tokens['access_token']
+    new_refresh_token = new_tokens.get('refresh_token')
+    expires_in = new_tokens.get('expires_in', 3600)
+
+    updated = {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "expires_at": (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+    }
+
+    save_tokens_to_file(user_id, updated)
+    return updated
+
+# === Zoom API helpers ===
+def get_basic_auth_token():
+    creds = f"{ZOOM_CLIENT_ID}:{ZOOM_CLIENT_SECRET}"
+    return base64.b64encode(creds.encode()).decode()
+
+def create_zoom_meeting(access_token, topic, duration):
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "topic": topic,
+        "type": 1,
+        "duration": duration,
+        "settings": {
+            "host_video": True,
+            "participant_video": True
+        }
+    }
+    response = requests.post(f"{ZOOM_API_BASE_URL}/users/me/meetings", json=payload, headers=headers)
+    if response.status_code == 201:
+        meeting = response.json()
+        return {
+            "meeting_id": meeting["id"],
+            "join_url": meeting["join_url"],
+            "start_url": meeting["start_url"],
+            "topic": meeting["topic"],
+            "status": meeting["status"],
+            "created_at": meeting["created_at"]
+        }
+    return {"error": "Failed to create meeting", "details": response.json()}
+
+# === File Storage Helpers ===
+def save_tokens_to_file(user_id, tokens):
+    with open(f"zoom_tokens_{user_id}.json", "w") as f:
+        json.dump(tokens, f)
+
+def load_tokens_from_file(user_id):
+    try:
+        with open(f"zoom_tokens_{user_id}.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+######################################################################################################################
+# Call Logs :
+
+@app.route('/api/call-history', methods=['GET'])
+@jwt_required()
+def get_call_history():
+    try:
+        user_email = get_jwt_identity()
+
+        # For development override (optional)
+        dev_override_user_id = request.args.get("dev_user_id")
+        if dev_override_user_id:
+            user_email = dev_override_user_id
+
+        prefix = CALL_LOGS_FOLDER if not CALL_LOGS_FOLDER.endswith("/") else CALL_LOGS_FOLDER[:-1]
+
+        response = s3.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=prefix)
+        objects = response.get("Contents", [])
+
+        meeting_ids = set()
+        for obj in objects:
+            key = obj["Key"]
+            if key.count("/") >= 2 and key.endswith("metadata.json"):
+                parts = key.split("/")
+                meeting_id = parts[1] if len(parts) > 2 else None
+                if meeting_id:
+                    meeting_ids.add(meeting_id)
+
+        call_logs = []
+        for mid in meeting_ids:
+            try:
+                key = f"{CALL_LOGS_FOLDER}/{mid}/metadata.json"
+                obj = s3.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+                metadata = json.loads(obj["Body"].read())
+
+                if metadata.get("user_email") == user_email:
+                    client_info = metadata.get("client_name", {})
+                    client_display_name = client_info.get("clientName", "Unknown") if isinstance(client_info, dict) else client_info
+
+                    call_logs.append({
+                        "client_name": client_display_name,
+                        "meeting_id": metadata.get("meeting_id"),
+                        "call_duration": metadata.get("call_duration", "N/A"),
+                        "date": metadata.get("date", "N/A")
+                    })
+            except Exception as e:
+                logging.warning(f"Error reading metadata for {mid}: {e}")
+                continue
+
+        call_logs.sort(key=lambda x: x['date'], reverse=True)
+        print(call_logs)
+        return jsonify({"call_history": call_logs}), 200
+
+    except Exception as e:
+        logging.error(f"Failed to fetch call history: {e}")
+        return jsonify({"error": "Failed to fetch call history"}), 500
+
+
+
+#########################################################################################################################
+# ########################## Trasncribe the Audio and Process it :
+# # AI Notes Taker :
+
+# transcribe the uploaded audio :
+
+# ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')  
+import os
+import assemblyai as aai
+from flask import Flask, request, jsonify
+import tempfile
+
+# Set your API key
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+TRANSCRIPTS_FOLDER = os.getenv("TRANSCRIPTS_FOLDER") #"meeting_transcripts"
+
+# # Combined Transcribe Audio and Analysis :
+# @app.route('/api/transcribe-audio', methods=['POST'])
+# def transcribe_audio():
+#     try:
+#         if 'audio' not in request.files:
+#             return jsonify({"error": "No audio file uploaded"}), 400
+
+#         audio_file = request.files['audio']
+#         if not audio_file.filename:
+#             return jsonify({"error": "Empty filename"}), 400
+
+#         meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+#         client_name = request.form.get('client_name', 'Unknown')
+#         call_duration = request.form.get('call_duration', '30 mins')
+
+#         transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+#         metadata_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json"
+#         analysis_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/analysis.json"
+
+#         transcript_exists = False
+#         analysis_exists = False
+
+#         try:
+#             s3.head_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
+#             transcript_exists = True
+#         except ClientError:
+#             pass
+
+#         try:
+#             s3.head_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)
+#             analysis_exists = True
+#         except ClientError:
+#             pass
+
+#         if transcript_exists:
+#             transcript_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
+#             transcript_json = json.loads(transcript_data)
+#         else:
+#             # Transcribe audio
+#             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+#                 audio_file.save(tmp.name)
+#                 local_path = tmp.name
+
+#             config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+#             transcriber = aai.Transcriber(config=config)
+#             transcript = transcriber.transcribe(local_path)
+
+#             if transcript.status == "error":
+#                 return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+#             transcript_json = {
+#                 "meeting_id": meeting_id,
+#                 "timestamp": datetime.utcnow().isoformat(),
+#                 "transcript": transcript.text
+#             }
+
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=transcript_key,
+#                 Body=json.dumps(transcript_json),
+#                 ContentType='application/json'
+#             )
+
+#             # Store metadata
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=metadata_key,
+#                 Body=json.dumps({
+#                     "client_name": client_name,
+#                     "meeting_id": meeting_id,
+#                     "call_duration": call_duration,
+#                     "date": datetime.utcnow().strftime('%Y-%m-%d')
+#                 }),
+#                 ContentType='application/json'
+#             )
+
+#         if analysis_exists:
+#             analysis_data = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
+#             analysis_json = json.loads(analysis_data)
+#         else:
+#             analysis_json = analyze_meeting_transcript(transcript_json["transcript"])
+#             s3.put_object(
+#                 Bucket=S3_BUCKET_NAME,
+#                 Key=analysis_key,
+#                 Body=json.dumps(analysis_json, indent=4),
+#                 ContentType='application/json'
+#             )
+
+#         return jsonify({
+#             "message": "Audio processed successfully",
+#             "meeting_id": meeting_id,
+#             "transcript": transcript_json,
+#             "analysis": analysis_json,
+#             "from_cache": {
+#                 "transcript": transcript_exists,
+#                 "analysis": analysis_exists
+#             }
+#         }), 200
+
+#     except Exception as e:
+#         logging.error(f"Error processing audio: {e}")
+#         return jsonify({"error": str(e)}), 500
+
+
+# # Transcribe Audio :
+@app.route('/api/transcribe-audio', methods=['POST'])
+def transcribe_audio():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file uploaded"}), 400
+
+    audio_file = request.files['audio']
+    if not audio_file.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    try:
+        # Save audio to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            audio_file.save(tmp.name)
+            local_path = tmp.name
+
+        # Transcribe using AssemblyAI
+        config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
+        transcriber = aai.Transcriber(config=config)
+        transcript = transcriber.transcribe(local_path)
+
+        if transcript.status == "error":
+            return jsonify({"error": f"Transcription failed: {transcript.error}"}), 500
+
+        meeting_id = request.form.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        print("Meeting Id for the Uploaded Audio File : ",meeting_id)
+        
+        meeting_metadata = {
+            "client_name": request.form.get('client_name', 'Unknown'),
+            "meeting_id": meeting_id,
+            "call_duration": request.form.get('call_duration', '30 mins'),  # fallback
+            "date": datetime.utcnow().strftime('%Y-%m-%d')
+        }
+        
+        # Save to S3 all the meta data :
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=f"{TRANSCRIPTS_FOLDER}/{meeting_id}/metadata.json",
+            Body=json.dumps(meeting_metadata),
+            ContentType='application/json'
+        )
+        
+        # Save to S3 the transcrpits :
+        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=transcript_key,
+            Body=json.dumps({
+                "meeting_id": meeting_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "transcript": transcript.text
+            }),
+            ContentType='application/json'
+        )
+
+        return jsonify({
+            "message": "Transcription completed successfully",
+            "meeting_id": meeting_id,
+            "transcript": transcript.text
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    
+@app.route('/api/get-transcript/<meeting_id>', methods=['GET'])
+def get_transcript(meeting_id):
+    try:
+        transcript_key = f"{TRANSCRIPTS_FOLDER}/{meeting_id}/transcript.json"
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)
+        data = response['Body'].read().decode('utf-8')
+        return jsonify(json.loads(data)), 200
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            return jsonify({"error": "Transcript not found"}), 404
+        return jsonify({"error": str(e)}), 500
+    
+
+
+##############################################################################################################################   
+ 
+# Sentiment Analysis of Client, Summary of Meeting , Key Points and next Actionable Steps : 
+  
+# Configure Gemini
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+def analyze_meeting_transcript(transcript: str):
+    
+    prompt = f"""
+            You are an AI assistant designed to analyze wealth management client meetings.
+            You are exceptionally very good to analyse Client Meeting for a wealth manager
+
+            Meeting Transcript:
+            {transcript}
+
+            Perform the following tasks:
+            1. Analyze and return the **overall sentiment** of the client in the meeting. Use one of: Positive, Neutral, Negative.
+            2. Briefly explain **why** you selected this sentiment.
+            3. Generate a concise and professional **summary** of the meeting suitable for internal advisor notes.
+            4. Extract the **top 5 key talking points** discussed in the meeting.
+            5. Extract any **client concerns** mentioned (risk, uncertainty, product confusion, etc).
+            6. Suggest 2-3 **action items** for the wealth manager based on this call.
+            7. Estimate a **confidence score** (0-100%) in your sentiment classification.
+
+            Return your answer strictly in JSON with the following format:
+
+            {{
+            "sentiment": "<Positive | Neutral | Negative>",
+            "sentiment_reason": "<reason>",
+            "confidence_score": <float>,
+            "summary": "<summary>",
+            "key_points": ["point1", "point2", "point3", "point4", "point5"],
+            "client_concerns": ["concern1", "concern2"],
+            "action_items": ["action1", "action2"]
+            }}
+            """
+
+
+    response = model.generate_content(prompt)
+    print("Response of the Analayisis :",response.text)
+    try:
+        json_start = response.text.find('{')
+        cleaned_json = response.text[json_start:].strip('`\n ')
+        sentiment_analysis = json.loads(cleaned_json)
+        return sentiment_analysis
+    except Exception as e:
+        print("Error parsing LLM response:", e)
+        return {"error": "Failed to parse AI response."}
+    
+    # print("Text O/P :",response.text)
+    # sentiment_analysis = response.text
+    # # Process the response from LLM
+    # sentiment_analysis = markdown_to_text_new(response.text)
+    # sentiment_analysis = markdown.markdown(sentiment_analysis, extensions=["extra"]) 
+
+    # return sentiment_analysis
+    
+    
+TRANSCRIPTS_FOLDER = os.getenv('TRANSCRIPTS_FOLDER', 'meeting_transcripts')
+
+# === Save to AWS S3 ===
+def save_transcript_data(meeting_id, data, transcript):
+    folder = f"{TRANSCRIPTS_FOLDER}{meeting_id}"
+    transcript_key = f"{folder}/transcript.txt"
+    analysis_key = f"{folder}/analysis.json"
+
+    try:
+        s3.put_object(Bucket=S3_BUCKET_NAME, Key=transcript_key, Body=transcript)
+        s3.put_object(Bucket=S3_BUCKET_NAME, Key=analysis_key, Body=json.dumps(data, indent=4))
+    except Exception as e:
+        logging.error(f"Error saving transcript to S3: {e}")
+
+
+# === Get from AWS S3 ===
+def get_transcript_data(meeting_id):
+    folder = f"{TRANSCRIPTS_FOLDER}{meeting_id}"
+    transcript_key = f"{folder}/transcript.txt"
+    analysis_key = f"{folder}/analysis.json"
+    try:
+        transcript = s3.get_object(Bucket=S3_BUCKET_NAME, Key=transcript_key)["Body"].read().decode("utf-8")
+        analysis = s3.get_object(Bucket=S3_BUCKET_NAME, Key=analysis_key)["Body"].read().decode("utf-8")
+        return transcript, json.loads(analysis)
+    except ClientError as e:
+        logging.error(f"Error retrieving data from S3: {e}")
+        return None, None
+
+# api :
+@app.route('/api/process-transcript', methods=['POST'])
+def process_transcript():
+    data = request.get_json()
+    transcript = data.get('transcript')
+    meeting_id = data.get('meeting_id', f"meeting_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+
+    if not transcript:
+        return jsonify({"error": "Transcript not provided"}), 400
+
+    # summary = summarizer(transcript, max_length=150, min_length=40, do_sample=False)[0]['summary_text']
+    # sentiment = sentiment_analyzer(transcript)[0]
+    
+    analysis = analyze_meeting_transcript(transcript)
+    
+    # Save to AWS
+    if USE_AWS:
+        save_transcript_data(meeting_id, analysis, transcript)
+
+    return jsonify({
+        "analysis": analysis,
+        "message" : "Sentiment Analysis and Meeting Summary completed !"
+    }), 200
+
+# === GET Endpoint ===
+@app.route('/api/get-transcript-summary/<meeting_id>', methods=['GET'])
+def get_transcript_summary(meeting_id):
+    if not meeting_id:
+        return jsonify({"error": "Meeting ID required"}), 400
+
+    transcript, analysis = get_transcript_data(meeting_id)
+    if transcript is None:
+        return jsonify({"error": "Transcript or analysis not found for this meeting ID"}), 404
+
+    return jsonify({
+        "meeting_id": meeting_id,
+        "transcript": transcript,
+        "analysis": analysis
+    }), 200
+    
+    
+# Onboarding Call :
+
+transcript_text = """
+Client: Hi, thanks for taking the time to meet today. I’ve been thinking about starting to invest but I’m a bit overwhelmed.
+
+Advisor: Absolutely, I’m glad you reached out. It’s perfectly normal to feel that way when starting. My goal is to simplify things for you and create a plan aligned with your goals.
+
+Client: That sounds good. I just don’t know where to start. I’ve mostly kept my savings in a bank account.
+
+Advisor: That’s common, and a great first step is setting some financial goals. Are you looking at short-term returns, retirement, saving for a house, or something else?
+
+Client: I’d say my main goal is long-term wealth building. Retirement is top of mind, but I’d also like to invest in a way that’s relatively safe.
+
+Advisor: Perfect. Based on that, we can look into diversified portfolios—some stocks for growth, some bonds for stability, maybe even tax-efficient instruments like index funds.
+
+Client: Sounds interesting. But how risky is it? I’m not comfortable losing a lot of money.
+
+Advisor: Completely understandable. We’ll start by assessing your risk tolerance. Based on your responses, we’ll recommend a moderate or conservative strategy. Your investments will be diversified to reduce exposure to any single asset.
+
+Client: Okay, and how often would we review the investments?
+
+Advisor: We recommend quarterly reviews and rebalancing annually, but you can always reach out if the market changes or your situation does.
+
+Client: And how do I track all of this?
+
+Advisor: You’ll have access to a personal dashboard where you can see your portfolio, performance, and recommendations updated in real-time. We also send monthly summaries.
+
+Client: That’s helpful. What’s the next step?
+
+Advisor: We’ll start by creating your investor profile—gather some financial details and preferences. Once that’s done, I’ll generate your personalized investment plan. Sound good?
+
+Client: Yes, let’s do it. I feel more confident after this conversation.
+
+Advisor: I’m glad to hear that! I’ll send you a link to get started right away.
+"""
+
+
+# performance call :
+# transcript_text = """
+# Client: Hi, I'm worried about my investment performance lately. The market seems so unstable.
+# Advisor: Yes, there's been some volatility, but we’re still aligned with your long-term plan.
+# Client: Should we move some money into safer assets like bonds?
+# Advisor: That’s an option. Let’s evaluate your risk tolerance again and diversify accordingly.
+# Client: I appreciate the guidance. I just don’t want another quarter like the last one.
+# """
+
+# result = analyze_meeting_transcript(transcript_text)
+# print(json.dumps(result, indent=2))
+# print(result)
+
+
+######################################################################################################################
+
+
 
 
 #################################################################################################################################
 
 # Run the Flask application
-if __name__ == '__main__':
-    # app.run(host='0.0.0.0', port=5000, debug=True) # working 
-    app.run(host='0.0.0.0', port=80, debug=True) # working 
-    # app.run(host='0.0.0.0', port=0, debug=True)
+# if __name__ == '__main__':
+#     # app.run(host='0.0.0.0', port=5000, debug=True) # working 
+#     app.run(host='0.0.0.0', port=80, debug=True) # working 
+#     # app.run(host='0.0.0.0', port=0, debug=True)
     
+
+from waitress import serve
+
+if __name__ == "__main__":
+    # Get the port dynamically from the environment variable, default to 5000
+    port = int(os.getenv("PORT", 5000))
+    print(f"Port : {port}")
+    serve(app, host="0.0.0.0", port=5000) # Working Code 
+    
+    # notification.notify(
+    #     title="Server is running",
+    #     message="Server is up and running on port " + str(port),
+    #     app_icon=None,
+    #     timeout=10,
+    #     on_click= None,
+    #     on_close=None,
+    #     callback=None,
+    #     default_icon=None,
+    #     replaces_notification=None,
+    #     ticker=None,
+    #     duration=None,
+    #     silent=False,
+    #     close_on_click=True,
+    #     actions=None,
+    #     resizable=False,
+    #     callback_data=None,
+        
+    #     # timeout = 10,
+    #     timeout_seconds=10,
+    #     category=None,
+    #     urgency=None,
+    #     hint=None,
+    #     expire_after=None,
+    #     group=None,
+    #     progress=None,
+    #     hints=None,
+    #     replaces_id=None,
+    #     conflict_id=None,
+    #     notification_id=None,
+    #     with_screen=False,
+    #     priority=0,
+    # )
+    
+
+
 
 # from waitress import serve
 
@@ -11762,9 +22503,5 @@ if __name__ == '__main__':
 #     # Get the port dynamically from the environment variable, default to 5000
 #     port = int(os.getenv("PORT", 5000))
 #     print(f"Port : {port}")
-#     serve(app, host="0.0.0.0", port=port)
+#     serve(app, host="0.0.0.0", port=80)
 
-
-
-# if __name__ == "__main__":
-#     app.run(debug=app_config.DEBUG)
